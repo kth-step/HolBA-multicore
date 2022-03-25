@@ -912,7 +912,8 @@ val core1_prog =
  [<|bb_label := BL_Label "start";
     bb_mc_tags := NONE;
     bb_statements :=
-    [BStmt_Assign (BVar "MEM" (BType_Mem Bit64 Bit8))
+    [BStmt_Assign (BVar "x2" (BType_Imm Bit64)) (BExp_Const (Imm64 1w));
+    BStmt_Assign (BVar "MEM" (BType_Mem Bit64 Bit8))
      (BExp_Store (BExp_Den (BVar "MEM" (BType_Mem Bit64 Bit8)))
       (BExp_Den (BVar "x2" (BType_Imm Bit64))) BEnd_LittleEndian
       (BExp_Const (Imm64 1w)));

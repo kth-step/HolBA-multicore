@@ -22,25 +22,6 @@ open Listsort
 	 
 exception ParseException of string
 
-fun padd_regs (init_regs, prog_regs) =
-    let
-	val defaults = map (fn (x,_) => (x, "0")) prog_regs
-	fun eq_tid_reg ((x,_),(y,_)) = x = y
-    in
-	(* Merge regs and default_regs, keep the first tuple only *)
-	nubBy eq_tid_reg (init_regs @ defaults)
-    end
-
-fun find_reg_size r prog_regs = 
-    case List.find (fn x => fst x = r) prog_regs
-     of SOME (r, sz) => sz
-      | NONE => 64
-		      
-fun split_eq rv = 
-    case String.tokens (fn c => c = #"=") rv 
-     of [r, v] => (r, v)
-      | _ => raise (ParseException $ "Could not parse register assignment "^rv);
-
 fun norm_reg r =
     let 
 	val translate = [("x1","ra"), ("x2","sp"), ("x3","gp"), ("x4","tp"), ("x5","t0"), 
@@ -56,6 +37,27 @@ fun norm_reg r =
 	 | NONE => r
     end
 
+fun padd_regs (init_regs, prog_regs) =
+    let
+	val defaults = map (fn (x,_) => (x, "0")) prog_regs
+	val normalized = map (fn (x,y) => (norm_reg x, y)) init_regs
+	fun eq_tid_reg ((x,_),(y,_)) = x = y
+    in
+	(* Merge regs and default_regs, keep the first tuple only *)
+	nubBy eq_tid_reg (normalized @ defaults)
+    end
+
+fun find_reg_size r prog_regs = 
+    case List.find (fn x => fst x = r) prog_regs
+     of SOME (r, sz) => sz
+      | NONE => 64
+		      
+fun split_eq rv = 
+    case String.tokens (fn c => c = #"=") rv 
+     of [r, v] => (r, v)
+      | _ => raise (ParseException $ "Could not parse register assignment "^rv)
+
+
 (* Make BIR environment for a thread *)
 (* regs is a list of assignments (string * string), where the first string is the register name and the second is its initial value *)
 (* prog_regs is a list register sizes (string * int), first string is the register name and the second is the size of the value,e.g., 64-bit *)
@@ -66,9 +68,7 @@ fun mk_thd_env (regs, prog_regs) =
 	    let 
 		val sz = find_reg_size r prog_regs
 	    in gen_mk_Imm $ word_of_string v sz end
-	fun str2term (r, v) =
-	    let val r' = norm_reg r 
-	    in (fromMLstring r', mk_some (mk_BVal_Imm(mk_imm r' v))) end
+	fun str2term (r, v) = (fromMLstring r, mk_some (mk_BVal_Imm(mk_imm r v)))
 	val list_mk_update = foldl (fn(r,e) => mk_comb(mk_update r, e))
 	val empty = “(K NONE) : string -> bir_val_t option”
 	val regs_hol = map str2term regs
