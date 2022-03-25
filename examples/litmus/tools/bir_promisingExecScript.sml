@@ -800,6 +800,8 @@ val eval_fpstepsO1_def = Define‘
                    | NONE => eval_fpstepsO1 fuel t prog cid st' M prom)
   | BST_Halted _ =>
       if NULL st.bst_prom then prom else []
+  | BST_JumpOutside _ =>
+      if NULL st.bst_prom then prom else []
   | _ => []
   )
 ’;

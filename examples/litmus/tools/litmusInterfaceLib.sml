@@ -38,8 +38,7 @@ fun save_litmus (filename, l:litmus) =
 	val json = OBJECT [
 		("arch", STRING (#arch l)),
 		("name", STRING (#name l)),
-		("info", ARRAY (map STRING (#info l))),
-		("inits", ARRAY (map (STRING o term_to_string) (#inits l))),
+		("regs", ARRAY (map (STRING o term_to_string) (#regs l))),
 		("progs", ARRAY (map (STRING o term_to_string) (#progs l))),
 		("final", (STRING o term_to_string) (#final l))]
 	val _ = Globals.linewidth := tmp
@@ -49,7 +48,7 @@ fun save_litmus (filename, l:litmus) =
     end
 	
 local
-    fun init_of_string s = Term [QUOTE s, 
+    fun regs_of_string s = Term [QUOTE s, 
 				 QUOTE ":string -> bir_val_t option"];
     fun prog_of_string s = Term [QUOTE s, QUOTE ":string bir_program_t"];
     val final_type = 
@@ -65,16 +64,14 @@ fun load_litmus (filename: string) =
 	val lookup = lookupField json
 	val arch = asString (lookup "arch")
 	val name = asString (lookup "name")
-	val info = arrayMap asString (lookup "info")
-	val inits = arrayMap (init_of_string o asString) (lookup "inits")
+	val regs = arrayMap (regs_of_string o asString) (lookup "regs")
 	val progs = arrayMap (prog_of_string o asString) (lookup "progs")
 	val final = (final_of_string o asString) (lookup "final")
     in
 	{
 	  arch=arch,
 	  name=name,
-	  info=info,
-	  inits=inits,
+	  regs=regs,
 	  progs=progs,
 	  final=final
 	} : litmus

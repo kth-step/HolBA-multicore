@@ -83,7 +83,7 @@ fun run_litmus fuel (litmus:litmus) =
        (* Fuel used for promise and non-promise execution *)
        val fuelTerm = term_of_int fuel;
        (* Set default state *)
-       val cores = mk_cores (#progs litmus) (#inits litmus);
+       val cores = mk_cores (#progs litmus) (#regs litmus);
        val coresAndEmptyMemory = mk_pair(cores,mk_list([],“:exec_mem_msg_t”));
        (* Make promise only run *)
        val coresAndPromises = promiseRun fuelTerm coresAndEmptyMemory;
@@ -111,10 +111,11 @@ fun getStatesAndMemory coresAndMemory =
 	val states = “MAP (\t. case t of (Core cid p s) => s) ^cores”
      in (states, memory)
 
-val filename = "./tests/BASIC_2_THREAD/LB+fence.rw.rws.json";		(* Expected No *)
-val filename = "./tests/ATOMICS/CO/2+2W+fence.rw.rws+pospx.json"; 	(* Expected No *)
+val filename = "./tests/BASIC_2_THREAD/LB.json";			(* Expected No *)
+val filename = "./tests/ATOMICS/CO/2+2W+fence.rw.rws+pospx.litmus"; 	(* Expected No *)
 val filename = "./tests/CO/R+poss.json";				(* Expected No *)
 val filename = "./tests/ATOMICS/CO/CoWR0+fence.rw.rwsxx.json";		(* Expected No *)
+val filename = "./tests/HAND/ISA-Rel-Acq.litmus";
 val litmus = get_litmus filename
 val fuel = 64;
 val res = run_litmus fuel litmus
@@ -129,3 +130,4 @@ fun main () =
     in 
 	print $ filename ^ "\t" ^ result ^ "\n" 
     end;
+

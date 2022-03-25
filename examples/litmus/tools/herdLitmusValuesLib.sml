@@ -14,6 +14,7 @@ local
         fun mk_addr_constraint var = [
           (* alignment *)
           “^var && 3w = 0w”,
+          “^var && 7w = 0w”,
           (* range *)
           “(if ^var ≤₊ 0xFFFFFFFFFFFFFFFBw then (1w:word1)
           else 0w) &&
@@ -22,11 +23,18 @@ local
           ((if ^var <₊ 0w then 1w else 0w) ‖
           if 1000w ≤₊ ^var then 1w else 0w) 
           = 1w”,
+          “(if ^var ≤₊ 0xFFFFFFFFFFFFFFFBw then (1w:word1)
+          else 0w) &&
+          ((if 0w <₊ ^var then 1w else 0w) ‖
+            if 8w + ^var ≤₊ 0w then 1w else 0w) &&
+          ((if ^var <₊ 0w then 1w else 0w) ‖
+          if 1000w ≤₊ ^var then 1w else 0w) 
+          = 1w”,
 	  (* arith *)
 	  “^var + 0w = ^var”];
         val terms = mk_distinct vars @ List.concat (map mk_addr_constraint vars);
         val final_term = list_mk_exists (vars, list_mk_conj terms);
-        fun mk_exists i = EXISTS_TAC (mk_wordii(1000+4*i, 64));
+        fun mk_exists i = EXISTS_TAC (mk_wordii(1000+8*i, 64));
         val word_ss = bool_ss ++ WORD_ss
         val tactics = List.foldl (op>>)
                           (simp_tac word_ss [])
@@ -39,7 +47,7 @@ local
       new_specification(name, l, mk_constant_aux_thm (List.length l))
 
 in
-val LITMUS_CONSTANT_THM = mk_constants_thm "LitmusConstants" ["x", "y", "z"]
+val LITMUS_CONSTANT_THM = mk_constants_thm "LitmusConstants" ["x", "y", "z", "u", "t", "a", "b", "c", "d", "ok", "lock", "v", "p", "q", "A", "B", "C"]
 
 fun word_of_string s sz =
     case Int.fromString s
