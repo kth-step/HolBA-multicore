@@ -17,21 +17,22 @@ val _ = add_words_compset true the_compset;
 val term_EVAL = rhs o concl o EVAL
 
 (* Make cores *)
-fun mk_cores programs environs =
+fun mk_cores programs environs t =
     let
 	fun loop n [] = []
 	  | loop n ((p,e)::l) = 
 	    let val cid = term_of_int n;
-		val s = “bir_state_init ^p with <| bst_environ := BEnv ^e |>”;
+		val s = “bir_state_init ^p with <| bst_environ := BEnv ^e;
+						   bst_coh := \x. ^t|>”;
 		val core = term_EVAL “ExecCore ^cid ^p ^s T”
 	    in core::loop (n+1) l end;
 	val cores = loop 0 (zip programs environs)
     in mk_list (cores, “:exec_core_t”) end;
 
 (* Promise mode execution *)
-fun promiseRun fuel coresAndMemory =
+fun promiseRun fuelTerm coresAndInitMemory =
     let
-	val newCoresAndMemory = term_EVAL “eval_pmstepsO1 ^fuel (^fuel * 8) ^coresAndMemory”;
+	val newCoresAndMemory = term_EVAL “eval_pmstepsO1 ^fuelTerm (^fuelTerm * 8) ^coresAndInitMemory”;
 	val (l, ty) = dest_list newCoresAndMemory;
     in l end;
 
@@ -51,6 +52,8 @@ local
 in
 fun nonPromiseRun fuel coresAndMemory =
     (* Non-promise mode execution *)
+
+
     let
 	val (cores, memory) = dest_pair coresAndMemory;
 	val (cores', core_ty) = dest_list cores;
@@ -68,6 +71,8 @@ fun getRegistersAndMemory coresAndMemory =
 	val memory' = “FOLDL (\t m. t (|m.loc |-> SOME m.val|)) (K ^default_mem) ^memory_filtered”;
     in term_EVAL $ mk_pair (memory', regs) end;
 
+fun to_exec_mem_msg_t mem =
+    “MAP (\m. <| val:=m.val; cid:=1024; loc:=m.loc; succ:=T; n:=0 |>)^mem”
 exception LoadLitmusError;
 exception ExecLitmusError;
     
@@ -82,11 +87,12 @@ fun run_litmus fuel (litmus:litmus) =
    let 
        (* Fuel used for promise and non-promise execution *)
        val fuelTerm = term_of_int fuel;
+       (* Get the initial memory *)
+       val initMemory = to_exec_mem_msg_t (#mem litmus);
        (* Set default state *)
-       val cores = mk_cores (#progs litmus) (#regs litmus);
-       val coresAndEmptyMemory = mk_pair(cores,mk_list([],“:exec_mem_msg_t”));
+       val cores = mk_cores (#progs litmus) (#regs litmus) (“LENGTH ^initMemory”);
        (* Make promise only run *)
-       val coresAndPromises = promiseRun fuelTerm coresAndEmptyMemory;
+       val coresAndPromises = promiseRun fuelTerm (mk_pair(cores,initMemory));
        (* Make non-promising runs *)
        val coresAndPromisesFinal = List.concat (map (nonPromiseRun fuelTerm) coresAndPromises);
        (* Get the final states of registers and memory *)
@@ -116,6 +122,11 @@ val filename = "./tests/ATOMICS/CO/2+2W+fence.rw.rws+pospx.litmus"; 	(* Expected
 val filename = "./tests/CO/R+poss.json";				(* Expected No *)
 val filename = "./tests/ATOMICS/CO/CoWR0+fence.rw.rwsxx.json";		(* Expected No *)
 val filename = "./tests/HAND/ISA-Rel-Acq.litmus";
+val filename = "./tests/HAND/C-Will02+HEAD.litmus";
+val filename = "./tests/HAND/ISA01.litmus";
+val filename = "./tests/HAND/ISA13.litmus";
+val filename = "./tests/HAND/ISA-DEP-CTRL.litmus";
+
 val litmus = get_litmus filename
 val fuel = 64;
 val res = run_litmus fuel litmus

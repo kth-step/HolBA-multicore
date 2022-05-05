@@ -5,8 +5,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m'
 
-LITMUS=${1}.litmus
-JSON=${1}.json
+BASENAME=$(dirname $1)/$(basename -s .litmus $1)
+JSON=$BASENAME.json
+LITMUS=$BASENAME.litmus
 
 if [ -f $JSON ]; then
         echo -e "${1}: ${YELLOW}Skipping.${NC}"
@@ -21,7 +22,7 @@ fi
 ./lift_test $LITMUS $JSON >/dev/null 2>&1
 
 if [ -f $JSON ]; then
-        echo -e "${1}: ${GREEN}Lifted.${NC}"
+        echo -e "${1}: ${GREEN}Lift succeeded.${NC}"
 else
         echo -e "${1}: ${RED}Lift failed.${NC}"
         exit 3

@@ -4,30 +4,36 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-LITMUS=${1}.litmus
-JSON=${1}.json
+TESTFILE=$(echo $1 | awk '{ print $1 }')
+EXPECTED=$(echo $1 | awk '{ print $2 }')
 
-if [ -z "$1" ]; then
-        echo -e "Missing argument"
+if [ -z "$TESTFILE" ]; then
+        echo -e "${RED}Missing argument 1, json file.${NC}"
         exit 1
-elif [ ! -f $JSON ]; then
-        echo -e "$1: ${RED}Missing .json file.${NC}"
+elif [ -z "$EXPECTED" ]; then
+        echo -e "${RED}Missing argument 2, expected results (Ok/No).${NC}"
         exit 2
-elif [ ! -f $LITMUS ]; then
-        echo -e "$1: ${RED}Missing .litmus file.${NC}"
-        exit 3
-elif [ -z "$(command -v herd7)" ]; then
-        echo -e "$1: ${RED}Command herd7 missing.${NC}"
-        exit 4
 fi
 
-ACTUAL=$(./run_test $JSON | grep -oE "(Ok|No)")
-EXPECTED=$(herd7 $LITMUS | grep -oE "(Ok|No)")
+case $TESTFILE in
+        *.json) 
+                ;;
+        *)
+                TESTFILE=$TESTFILE.json
+                ;;
+esac
+
+if [ ! -f "$TESTFILE" ]; then
+        echo -e "$TESTFILE: ${RED}Could not find .json file.${NC}"
+        exit 3
+fi
+
+ACTUAL=$(./run_test $TESTFILE | grep -oE "(Ok|No)")
 
 if [ -z "$ACTUAL" ] ; then
-        echo -e "$1: ${RED}ERROR${NC}"
+        echo -e "$TESTFILE: ${RED}ERROR${NC}"
 elif [ "$EXPECTED" = "$ACTUAL" ]; then
-        echo -e "$1: ${GREEN}PASSED${NC} (expected $EXPECTED, found $ACTUAL)"
+        echo -e "$TESTFILE: ${GREEN}PASSED${NC} (expected $EXPECTED, found $ACTUAL)"
 else
-        echo -e "$1: ${RED}FAILED${NC} (expected $EXPECTED, found $ACTUAL)"
+        echo -e "$TESTFILE: ${RED}FAILED${NC} (expected $EXPECTED, found $ACTUAL)"
 fi
