@@ -125,12 +125,13 @@ def process_mem(init):
     for m_ptr in mem_ptr:
         m = re.search("(?P<type>\w+) \*(?P<pvar>\w+)=&(?P<vvar>\w+)", m_ptr)
         decl.append(f"{m.group('type')} {m.group('vvar')}")
-        decl.append(f"64w {m.group('pvar')}")
+        decl.append(f"64 {m.group('pvar')}")
         mem.append(f"{m.group('pvar')}={m.group('vvar')}")
     decl = ";".join(decl)
-    decl = re.sub("uint64_t", "64w", decl)
-    decl = re.sub("int", "32w", decl)
-    return decl, ";".join(mem)
+    decl = re.sub("uint64_t", "64", decl)
+    decl = re.sub("int", "32", decl)
+    return [d for d in decl.split(";") if d] , mem
+
 
 if __name__ == "__main__":
 
@@ -149,7 +150,7 @@ if __name__ == "__main__":
     # Initial value of registers per thread
     d['regs'] = process_regs(d['init'], d['n'])
     # Initial value of memory
-    d['mem'] = process_mem(d['init'])
+    (d['decl'], d['mem']) = process_mem(d['init'])
     # Final condition / Postcondition
     d['final'] = process_final(d['final'], d['filter'])
     # Delete redundant fields

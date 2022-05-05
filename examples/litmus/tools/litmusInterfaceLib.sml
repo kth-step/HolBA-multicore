@@ -39,6 +39,7 @@ fun save_litmus (filename, l:litmus) =
 		("arch", STRING (#arch l)),
 		("name", STRING (#name l)),
 		("regs", ARRAY (map (STRING o term_to_string) (#regs l))),
+		("mem", (STRING o term_to_string) (#mem l)),
 		("progs", ARRAY (map (STRING o term_to_string) (#progs l))),
 		("final", (STRING o term_to_string) (#final l))]
 	val _ = Globals.linewidth := tmp
@@ -55,6 +56,7 @@ local
 	":((bir_val_t -> bir_val_t option) " 
 	^ "# ((string -> bir_val_t option) list)) list -> bool";
     fun final_of_string s = Term [QUOTE s, QUOTE final_type]
+    fun mem_of_string s = Term [QUOTE s, QUOTE ":mem_msg_t list"]
 in
 fun load_litmus (filename: string) =
     let
@@ -66,12 +68,15 @@ fun load_litmus (filename: string) =
 	val name = asString (lookup "name")
 	val regs = arrayMap (regs_of_string o asString) (lookup "regs")
 	val progs = arrayMap (prog_of_string o asString) (lookup "progs")
+	val mem = (mem_of_string o asString) (lookup "mem")
+		  handle _ => mem_of_string "[]"
 	val final = (final_of_string o asString) (lookup "final")
     in
 	{
 	  arch=arch,
 	  name=name,
 	  regs=regs,
+	  mem=mem,
 	  progs=progs,
 	  final=final
 	} : litmus
@@ -81,7 +86,7 @@ end
 
 (*
 open litmusInterfaceLib
-val x = lift_herd_litmus "example.litmus"
+val x = lift_herd_litmus "../tests/HAND/ISA12.litmus"
 val a = load_litmus "../tests/BASIC_2_THREAD/S.json"
 #inits a
 *) 

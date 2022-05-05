@@ -23,7 +23,7 @@ local
           ((if ^var <₊ 0w then 1w else 0w) ‖
           if 1000w ≤₊ ^var then 1w else 0w) 
           = 1w”,
-          “(if ^var ≤₊ 0xFFFFFFFFFFFFFFFBw then (1w:word1)
+          “(if ^var ≤₊ 0xFFFFFFFFFFFFFFF7w then (1w:word1)
           else 0w) &&
           ((if 0w <₊ ^var then 1w else 0w) ‖
             if 8w + ^var ≤₊ 0w then 1w else 0w) &&

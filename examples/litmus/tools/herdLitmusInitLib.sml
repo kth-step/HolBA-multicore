@@ -3,7 +3,8 @@ sig
     include Abbrev
     (* Arguments: Init section, registers used by each program
        Returns: BIR environments for memory and threads *)
-    val parse_init : string list -> (string * int) list list -> term list
+    val parse_regs : string list -> (string * int) list list -> term list
+    val parse_mem : string list -> string list -> term
 end
 
 
@@ -52,10 +53,10 @@ fun find_reg_size r prog_regs =
      of SOME (r, sz) => sz
       | NONE => 64
 		      
-fun split_eq rv = 
-    case String.tokens (fn c => c = #"=") rv 
+fun split p rv = 
+    case String.tokens p rv 
      of [r, v] => (r, v)
-      | _ => raise (ParseException $ "Could not parse register assignment "^rv)
+      | _ => raise (ParseException $ "Could not split "^rv)
 
 
 (* Make BIR environment for a thread *)
@@ -74,24 +75,51 @@ fun mk_thd_env (regs, prog_regs) =
 	val regs_hol = map str2term regs
 	val env = list_mk_update empty regs_hol
     in env end
+
+
+fun find_var_size decl =
+    let
+	fun f d = split (fn c => #" " = c) d
+	fun find_size d var = 
+	    (case List.find (fn (s,v) => v = var) d of
+		SOME (s,v) => valOf (Int.fromString s)
+	      | NONE => 32)
+    in find_size (map f decl) end
 	
-fun parse_init init_regs prog_regs =
+fun mk_mem_env mem var_size =
+    let
+	fun mk_mem_msg (addr, value) = 
+	    let
+		fun f v n = mk_BVal_Imm $ gen_mk_Imm $ word_of_string v n
+		val haddr = f addr 64
+		val hvalue = f value (var_size addr)
+	    in “<| loc := ^haddr; val := ^hvalue |> : mem_msg_t” end
+    in mk_list(map mk_mem_msg mem, “:mem_msg_t”) end
+    
+fun parse_regs init_regs prog_regs =
     let
 	(* Give register from program default values, 0 *)
 	val default_regs = map (map (fn (r,sz) => (r, "0"))) prog_regs
 	(* Split the init_regs on ";" *)
 	val init_regs' = map (String.tokens (fn c => c = #";")) init_regs
 	(* Split on = *)
-	val init_regs'' = map (map split_eq) init_regs'
+	val init_regs'' = map (map (split (fn c => c = #"="))) init_regs'
 	(* Merge default values and initial values *)
 	val init_regs''' = map padd_regs (zip init_regs'' default_regs)
 	(* Make BIR environ *)
 	val thd_envs = map mk_thd_env (zip init_regs''' prog_regs)
     in thd_envs end
 	
+fun parse_mem mem decl =
+    let
+	val var_size = find_var_size decl
+	val mem' = map (split (fn c => c = #"=")) mem
+    in mk_mem_env mem' var_size end
+	
 (*
 val init_regs = ["a1=x;a2=y;a3=z;a4=t;a0=lock", "a1=x;a2=y;a3=z;a4=t;a0=lock;a5=a"]
 val prog_regs = [[("a0",64),("a1",64),("a2",64),("a3",64),("a4",64),("a5",32)],[("a0",64),("a1",64),("a2",64),("a3",64),("a4",64),("a5",64)]]
-val v = parse_init init_regs prog_regs
+val v = parse_reg init_regs prog_regs
+val v = parse_mem ["x=32"] ["64 x"]
 *)
 end

@@ -3,7 +3,7 @@ sig
     include Abbrev
     (* Argument: Final/Constraint section
        Returns: Predicate on bir_environments *)
-    val parse_final : string -> term
+    val parse_final : string  (string list) -> term
 end
 
 structure herdLitmusFinalLib : herdLitmusFinalLib =
@@ -19,13 +19,38 @@ open UtilLib herdLitmusValuesLib;
 (* The tokenizer and parser is based on the functional parser
    from 'ML for the Working Programmer, Chapter 9'. *)
 
+datatype parse_tree = AND of parse_tree * parse_tree
+		    | OR of parse_tree * parse_tree
+		    | NOT of parse_tree
+		    | FORALL of parse_tree
+		    | EXISTS of parse_tree
+		    | REG of int * (string * string)
+		    | MEM of string * string
+		    | TRUE
+		    | FALSE
+
 (* TOKENIZER *)
 datatype token = SYM of string | ID of string | NUM of int | ERR
 
-val symbols = [#"?", #"!", #"~", #"&", #"|", #"(", #")", #":", #"="]
+val alphas = ["T", "F"]
+val symbols = ["?", "!", "~", "&", "|", "(", ")", ":", "="]
 
 (* Make numeric token *)
 val numTok = NUM o valOf o Int.fromString
+
+(* Make an alphanumeric token *)
+fun alphaTok a =
+    if member (a, alphas)
+    then SYM a
+    else ID a
+
+fun symbolic (sy, ss) =
+    case Substring.getc ss
+     of NONE => (SYM sy, ss)
+      | SOME(c, ss1) =>
+	if member (sy, symbols) orelse not (Char.isPunct c)
+	then (SYM sy, ss)
+	else symbolic (sy ^ String.str c, ss1)
 
 (* Scan substring and making token list *)
 fun scanning (toks, ss) =
@@ -41,20 +66,18 @@ fun scanning (toks, ss) =
 	else if Char.isAlphaNum c
 	then (* identifier *)
 	    let val (id, ss2) = Substring.splitl Char.isAlphaNum ss
-		val tok = ID (Substring.string id)
+		val tok = alphaTok (Substring.string id)
 	    in scanning (tok::toks, ss2)
 	    end
 	else if Char.isPunct c
 	then (* special symbol *)
-	    let val tok = if member(c,symbols) then SYM (Char.toString(c)) else ERR
-	    in scanning (tok::toks, ss1)
+	    let val (tok, ss2) = symbolic (String.str c, ss1)
+	    in scanning (tok::toks, ss2)
 	    end
 	else (* non-printable characters *)
 	    scanning (toks, Substring.dropl (not o Char.isGraph) ss)
 
 fun scan a = scanning([], Substring.full a)
-		     
-val res = scan "?(1:x5=1&1:x9=1&1:x11=0)"
 
 (* PARSER *)
 exception SyntaxErr of string
@@ -105,29 +128,6 @@ fun reader ph a =
      of (x, []) => x
       | (_, l) => raise SyntaxErr "Extra characters in phrase"
 
-(* Make terms *)
-val mk_AND = mk_conj
-
-val mk_OR = mk_disj
-		
-fun mk_FORALL x = 
-	“EVERY  (\ (M:bir_val_t -> bir_val_t option, 
-		    TS:(string -> bir_val_t option) list). ^x)”
-
-fun mk_EXISTS x = 
-	“EXISTS (\ (M:bir_val_t -> bir_val_t option, 
-	            TS:(string -> bir_val_t option) list). ^x)”
-
-fun mk_MEM (a, v) =
-    let
-	(* vars are word type by default, memory has num type *)
-	fun f v n = mk_BVal_Imm $ gen_mk_Imm $ word_of_string v n
-	val ha = f a 64
-	val hv = f v 32
-    in
-	“M ^ha = SOME ^hv”
-    end
-
 fun norm_reg r =
     let 
 	val translate = [("x1","ra"), ("x2","sp"), ("x3","gp"), ("x4","tp"), ("x5","t0"), 
@@ -143,44 +143,97 @@ fun norm_reg r =
 	 | NONE => r
     end
 
-fun mk_REG (t,(r,v)) =
-    let val ht = term_of_int t
-	val hr = fromMLstring (norm_reg r)
-	val hv = mk_Imm64 (word_of_string v 64)
-    in
-	“(EL ^ht TS) ^hr = SOME (BVal_Imm ^hv)”
-    end
-
 (* FORALL || EXISTS *)
-fun quant xs = ("!" $-- expr >> mk_FORALL || 
-                "?" $-- expr >> mk_EXISTS) xs
+fun quant xs = ("!" $-- expr >> FORALL || 
+                "?" $-- expr >> EXISTS) xs
 
 (* OR *)
-and expr xs = (term -- ("|" $-- expr || empty “F”) >> mk_OR) xs
+and expr xs = (term -- ("|" $-- expr || empty FALSE) >> OR) xs
 
 (* AND *)
-and term xs = (factor -- ("&" $-- term || empty “T”) >> mk_AND) xs
+and term xs = (factor -- ("&" $-- term || empty TRUE) >> AND) xs
 							
 (* NOT || () *)
 and factor xs = ("(" $-- expr -- (sym ")") >> fst
-		     || "~" $-- expr >> mk_neg
+		     || "~" $-- expr >> NOT
 		     || atom) xs
 
 (* MEM || REG *)
-and atom xs = ((id -- "=" $-- var >> mk_MEM)
-		   || num -- ":" $-- id -- "=" $-- var >> mk_REG) xs
+and atom xs = ((id -- "=" $-- var >> MEM)
+		   || num -- ":" $-- id -- "=" $-- var >> REG 
+		   || "T" $-- empty TRUE
+		   || "F" $-- empty FALSE) xs
 
 (* Variable (will become word type) *)
 and var xs = (id || num >> Int.toString) xs
+					 
+fun parse_tree_to_term TRUE _ = “T”
+  | parse_tree_to_term FALSE _ = “F”
+  | parse_tree_to_term (EXISTS pt) var_size = 
+    let 
+	val t = parse_tree_to_term pt var_size
+    in 
+	“EXISTS (\(M:bir_val_t -> bir_val_t option,TS:(string -> bir_val_t option) list). ^t)” 
+    end
+  | parse_tree_to_term (FORALL pt) var_size = 
+    let 
+	val t = parse_tree_to_term pt var_size
+    in 
+	“EVERY (\(M:bir_val_t -> bir_val_t option,TS:(string -> bir_val_t option) list). ^t)” 
+    end
+  | parse_tree_to_term (AND(pt,pt')) var_size = 
+    let val t = parse_tree_to_term pt var_size
+    val t' = parse_tree_to_term pt' var_size
+    in “^t /\ ^t'” end
+  | parse_tree_to_term (OR(pt,pt')) var_size = 
+    let val t = parse_tree_to_term pt var_size
+    val t' = parse_tree_to_term pt' var_size
+    in “^t \/ ^t'” end
+  | parse_tree_to_term (NOT(pt)) var_size = 
+    let val t = parse_tree_to_term pt var_size
+    in “~(^t)” end
+  | parse_tree_to_term (REG(tid,(reg,value))) _ = 
+    let
+	val htid = term_of_int tid
+	val hreg = fromMLstring (norm_reg reg)
+	val hvalue = mk_Imm64 (word_of_string value 64)
+    in
+	“(EL ^htid TS) ^hreg = SOME (BVal_Imm ^hvalue)”
+    end
+  | parse_tree_to_term (MEM(addr,value)) var_size = 
+    let
+	fun f v n = mk_BVal_Imm $ gen_mk_Imm $ word_of_string v n
+	val haddr = f addr 64
+	val hvalue = f value (var_size addr)
+    in
+	“M ^haddr = SOME ^hvalue”
+    end
+	
+fun find_var_size decl =
+    let
+	fun f d =
+	    (case String.tokens (fn c => c = #" ") d of
+		 [size, var] => (case Int.fromString size of
+				     SOME isize => (var,isize)
+				   | NONE =>  raise (SyntaxErr ("Declaration "^ d ^ "could not be parsed")))
+	       | _ => raise (SyntaxErr ("Declaration "^ d ^ "could not be parsed")))
+	fun find_size d var = 
+	    (case List.find (fn (v,s) => v = var) d of
+		SOME (v,s) => s
+	      | NONE => 32)
+    in find_size (map f decl) end
+	
+			      
 
 (* Parse the final expression *)
-fun parse_final final_sec =
+fun parse_final final_sec decl =
     let val t = reader quant final_sec
-    in (rhs o concl o EVAL) t end
+        val var_size = find_var_size decl
+    in (rhs o concl o EVAL) (parse_tree_to_term t var_size) end
 end
 
 (*
-val x = "?((0:t0=0&1:t0=0))&((0:t2=0&1:t2=0)&(0:t4=0&1:t4=0))"
+val x = "?((0:t0=0&1:t0=0|x=32&y=54))&((0:t2=0&1:t2=0)&(0:t4=0&1:t4=0))"
 
-val t = parse_final x
+val t = parse_final x ["64 x", "32 y"]
 *)

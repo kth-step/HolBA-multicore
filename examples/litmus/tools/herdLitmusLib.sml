@@ -4,6 +4,7 @@ sig
     type litmus = {arch:string,
 		   name:string,
 		   regs: term list,
+		   mem: term,
 		   progs: term list,
 		   final: term}
 
@@ -28,7 +29,7 @@ open JsonUtil;
 type litmus = {arch:string,
 	       name:string,
 	       regs: term list,
-(*	       mem: term list, *)
+	       mem: term,
 	       progs: term list,
 	       final: term}
 		  
@@ -61,10 +62,11 @@ fun get_json_data (Json.OK json) =
 	val arch = asString $ lookupField json "arch"  
 	val name = asString $ lookupField json "name"  
 	val regs = map asString (asArray $ lookupField json "regs")
+	val decl = map asString (asArray $ lookupField json "decl")
 	val mem = map asString (asArray $ lookupField json "mem")
 	val progs = map asString (asArray $ lookupField json "prog")
 	val final = asString $ lookupField json "final"
-    in (arch, name, regs, mem, progs, final) end
+    in (arch, name, regs, decl, mem, progs, final) end
   | get_json_data (Json.ERROR _) = raise CouldNotParseJsonFile
 		  
 fun regs_of_prog prog =
@@ -78,22 +80,24 @@ fun regs_of_prog prog =
 fun parse text =
     let
 	val jsontext = parse_litmus text
+	val _ = print jsontext
 	(* Split text into sections *)
 	val json = Json.parse jsontext
-	val (arch, name, regs, mem, progs, final) = get_json_data json
+	val (arch, name, regs, decl, mem, progs, final) = get_json_data json
 	(* Parse the program section, create one bir_program per processes *)
 	val progs = parse_prog progs 
 	(* Get registers used by each program *)
 	val progs_regs = map regs_of_prog progs
 	(* Parse init section, get initial bir memory and thread environments *)
-	val regs = parse_init regs progs_regs
+	val regs = parse_regs regs progs_regs
 	(* Parse the constraint, returns a predicate for a set of bir states *)
-	val final = parse_final final
+	val final = parse_final final decl
+	val mem = parse_mem mem decl
     in
 	{arch=arch,
 	 name=name,
 	 regs=regs,
-(*	 mem=[], *)
+	 mem=mem,
 	 progs=progs,
 	 final=final}
     end
