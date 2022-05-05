@@ -1,5 +1,7 @@
 open HolKernel Parse boolLib bossLib;
-open bir_promisingTheory;
+open bir_promisingTheory bir_programTheory;
+open listTheory arithmeticTheory;
+open bir_expTheory;
 
 val _ = new_theory "bir_promisingExec";
 
@@ -47,6 +49,441 @@ val emem_default_def = Define‘
   emem_default l = <| loc := l ; val := BVal_Imm (Imm64 0w) ; succ := T ; n := 0 |>
 ’;
 
+val mem_get_def = Define‘
+  (mem_get M l 0 = SOME $ mem_default l)
+  ∧
+  (mem_get M l (SUC t) =
+   case oEL t M of
+   | SOME m => if m.loc = l then SOME m else NONE
+   | NONE => NONE)
+’;
+
+val ifView_def = Define‘
+  ifView p (v:num) = if p then v else 0
+’;
+
+val MAXL_def = Define‘
+  MAXL [] = 0
+  ∧
+  MAXL (x::xs) = MAX x (MAXL xs)
+’;
+
+val mem_readable_def = Define‘
+  mem_readable M l v_max =
+  FILTER (λ(m,t). mem_every (λ(m',t'). t < t' ∧ t' ≤ v_max ⇒ m'.loc ≠ l) M)
+         ((mem_default l,0)::mem_filter (λ(m,t). m.loc = l) M)
+’;
+
+val MAP_PARTIAL_def = Define‘
+  MAP_PARTIAL f [] = []
+  ∧
+  MAP_PARTIAL f (x::xs) =
+  case f x of
+  | SOME y => y::MAP_PARTIAL f xs
+  | NONE => MAP_PARTIAL f xs
+’;
+
+Theorem MAP_PARTIAL_rwr:
+  ∀f xs.
+  MAP_PARTIAL f xs = MAP THE (FILTER IS_SOME (MAP f xs))
+Proof
+  Induct_on ‘xs’ >|
+  [
+    simp [MAP_PARTIAL_def]
+    ,
+    simp [MAP_PARTIAL_def] >>
+    rpt gen_tac >> CASE_TAC >>
+    (simp [])
+  ]
+QED
+
+Theorem MEM_MAP_PARTIAL:
+  ∀x f xs.
+  MEM x (MAP_PARTIAL f xs) = MEM (SOME x) (MAP f xs)
+Proof
+  simp [MAP_PARTIAL_rwr] >>
+  Induct_on ‘xs’ >|
+  [
+    simp []
+    ,
+    simp [] >>
+    rpt gen_tac >> CASE_TAC >|
+    [
+      rename1 ‘IS_SOME (f h)’ >> Cases_on ‘f h’ >>
+      (fs [])
+      ,
+      fs []
+    ]
+  ]
+QED
+
+(* Core-local execution *)
+val eval_clstep_read_def = Define‘
+  eval_clstep_read s M var a_e xcl acq rel =
+  case bir_eval_exp_view a_e s.bst_environ s.bst_viewenv of
+  | (SOME l, v_addr) =>
+      let
+        v_pre = MAXL [ v_addr
+                       ; s.bst_v_rNew
+                       ; ifView (acq /\ rel) s.bst_v_Rel
+                       ; ifView (acq /\ rel) (MAX s.bst_v_rOld s.bst_v_wOld)
+                     ];
+        msgs  = mem_readable M l (MAX v_pre (s.bst_coh l)) 
+      in
+        MAP_PARTIAL (λ(msg,t).
+                       let
+                         v_post = MAX v_pre (mem_read_view (s.bst_fwdb(l)) t)
+                       in
+                         OPTION_BIND (env_update_cast64 (bir_var_name var) msg.val (bir_var_type var) (s.bst_environ))
+                                     (λnew_env.
+                                        SOME (s with <| bst_environ := new_env;
+                                                        bst_viewenv updated_by (λenv. FUPDATE env (var, v_post));
+                                                        bst_coh     updated_by (l =+ MAX (s.bst_coh l) v_post);
+                                                        bst_v_rOld  updated_by (MAX v_post);
+                                                        bst_v_rNew  updated_by (MAX $ ifView acq v_post);
+                                                        bst_v_wNew  updated_by (MAX $ ifView acq v_post);
+                                                        bst_v_Rel   updated_by (MAX $ ifView (rel /\ acq) v_post);
+                                                        bst_v_CAP   updated_by (MAX v_addr);
+                                                        bst_pc      updated_by if xcl
+                                                                               then (bir_pc_next o bir_pc_next)
+                                                                               else bir_pc_next;
+                                                        bst_xclb    := if xcl
+                                                                       then SOME <| xclb_time := t; xclb_view := v_post |>
+                                                                       else s.bst_xclb |>))) msgs
+        | _ => []
+’;
+
+val eval_clstep_fulfil_def = Define‘
+  eval_clstep_fulfil p cid s M a_e v_e xcl acq rel =
+    let
+      (l_opt, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv;
+      (v_opt, v_data) = bir_eval_exp_view v_e s.bst_environ s.bst_viewenv
+    in
+      case (l_opt,v_opt) of
+      | (SOME l, SOME v) =>
+          (let
+             v_pre = MAXL [ v_addr
+                          ; v_data
+                          ; s.bst_v_wNew
+                          ; s.bst_v_CAP
+                          ; ifView rel (MAX s.bst_v_rOld s.bst_v_wOld)
+                          ; ifView (xcl /\ acq /\ rel) s.bst_v_Rel
+                          ; ifView xcl (get_xclb_view s.bst_xclb)
+                          ];
+             msg = <| loc := l; val := v; cid := cid |>;
+             ts = FILTER (\t. (mem_get M l t = SOME msg)
+                              /\ (MAX v_pre (s.bst_coh l) < t)
+                              /\ (xcl ==> ((s.bst_xclb <> NONE) /\
+                                             mem_atomic M l cid (THE s.bst_xclb).xclb_time t)))
+                         s.bst_prom;
+           in
+             LIST_BIND ts
+                       (\v_post.
+                          case (fulfil_update_env p s xcl, fulfil_update_viewenv p s xcl v_post) of
+                          | (SOME new_env, SOME new_viewenv) => 
+                              [s with <| bst_viewenv := new_viewenv;
+                                         bst_environ := new_env;
+                                         bst_prom   updated_by (FILTER (\t'. t' <> v_post));
+                                         bst_coh    updated_by (l =+ MAX (s.bst_coh l) v_post);
+                                         bst_v_wOld updated_by MAX v_post;
+                                         bst_v_CAP  updated_by MAX v_addr;
+                                         bst_v_Rel  updated_by (MAX $ ifView (rel /\ acq) v_post);
+                                         bst_v_rNew updated_by (MAX $ ifView (rel /\ acq /\ xcl) v_post);
+                                         bst_v_wNew updated_by (MAX $ ifView (rel /\ acq /\ xcl) v_post);
+                                         bst_fwdb   updated_by (l =+ <| fwdb_time := v_post;
+                                                                        fwdb_view := MAX v_addr v_data;
+                                                                        fwdb_xcl  := xcl |>);
+                                         bst_pc     updated_by if xcl
+                                                               then (bir_pc_next o bir_pc_next o bir_pc_next)
+                                                               else bir_pc_next;
+                                         bst_xclb := if xcl then NONE else s.bst_xclb |>]
+                          | _ => []))
+      | (_, _) => []
+’;
+
+val eval_clstep_xclfail_def = Define‘
+  (eval_clstep_xclfail p cid s T =
+     case (xclfail_update_env p s, xclfail_update_viewenv p s) of
+     | (SOME new_env, SOME new_viewenv) =>
+         [s with <| bst_viewenv := new_viewenv;
+                    bst_environ := new_env;
+                    bst_xclb    := NONE;
+                    bst_pc updated_by (bir_pc_next o bir_pc_next o bir_pc_next) |>]
+     | _ => [])
+  ∧
+  eval_clstep_xclfail p cid s F = []
+’;
+
+val eval_clstep_amofulfil_def = Define‘
+  eval_clstep_amofulfil cid s M var a_e v_e acq rel =
+    case bir_eval_exp_view a_e s.bst_environ s.bst_viewenv of
+    | (NONE, v_addr) => []
+    | (SOME l, v_addr) =>
+    let
+      v_rPre = MAXL [v_addr; s.bst_v_rNew; ifView (acq /\ rel) s.bst_v_Rel; ifView (acq /\ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
+      msgs = mem_readable M l (MAX v_rPre (s.bst_coh l));
+    in                                 
+      LIST_BIND msgs
+                (\ (msg,t_r).
+                   let
+                     v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
+                     new_viewenv = FUPDATE s.bst_viewenv (var, v_rPost);
+                   in
+                     (case env_update_cast64 (bir_var_name var) msg.val (bir_var_type var) (s.bst_environ) of
+                      | NONE => []
+                      | SOME new_environ =>
+                          (case bir_eval_exp_view v_e new_environ new_viewenv of
+                          | (NONE, v_data) => []
+                          | (SOME v, v_data) =>
+                              let
+                                v_wPre = MAXL [v_addr; v_data; s.bst_v_CAP; v_rPost; s.bst_v_wNew;
+                                               ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
+                                               ifView (acq /\ rel) s.bst_v_Rel
+                                              ];
+                                msg = <| loc := l; val := v; cid := cid |>;
+                                t_ws = FILTER (\t_w.
+                                                 (mem_get M l t_w = SOME msg) /\
+                                                 (MAX v_wPre (s.bst_coh l) < t_w) /\
+                                                 (mem_every (\ (msg,t'). t_r < t' /\ t' < t_w ==> msg.loc <> l) M))
+                                              s.bst_prom;
+                              in LIST_BIND t_ws (\v_wPost.
+                                                   [ s with <| bst_viewenv := new_viewenv;
+                                                               bst_environ := new_environ;
+                                                               bst_fwdb   updated_by (l =+ <| fwdb_time := v_wPost;
+                                                                                              fwdb_view := MAX v_addr v_data;
+                                                                                              fwdb_xcl  := T |>);
+                                                               bst_prom   updated_by (FILTER (\t'. t' <> v_wPost));
+                                                               bst_coh    updated_by (l =+ MAX (s.bst_coh l) v_wPost);
+                                                               bst_v_Rel  updated_by (MAX (ifView (acq /\ rel) v_wPost));
+                                                               bst_v_rOld updated_by (MAX v_rPost);
+                                                               bst_v_rNew updated_by (MAX (ifView acq (if rel then v_wPost else v_rPost)));
+                                                               bst_v_wNew updated_by (MAX (ifView acq (if rel then v_wPost else v_rPost)));
+                                                               bst_v_CAP  updated_by (MAX v_addr);
+                                                               bst_v_wOld updated_by (MAX v_wPost);
+                                                               bst_pc     updated_by bir_pc_next o bir_pc_next;
+                                                     |> ])
+                           )
+                      )
+                 )
+’;
+
+val eval_clstep_fence_def = Define‘
+  eval_clstep_fence s K1 K2 =
+  let v = MAX (if is_read K1 then s.bst_v_rOld else 0)
+              (if is_write K1 then s.bst_v_wOld else 0)
+  in
+    [s with <| bst_v_rNew updated_by MAX (if is_read K2 then v else 0);
+               bst_v_wNew updated_by MAX (if is_write K2 then v else 0);
+               bst_pc     updated_by bir_pc_next |>]
+’;
+
+val eval_clstep_branch_def = Define‘
+  eval_clstep_branch p s cond_e lbl1 lbl2 =
+  let
+    stmt = BStmtE (BStmt_CJmp cond_e lbl1 lbl2);
+    (sv, v_addr) = bir_eval_exp_view cond_e s.bst_environ s.bst_viewenv
+  in
+    case sv of
+    | NONE => []
+    | SOME v =>
+        let (oo,s2) = bir_exec_stmt p stmt s
+        in [s2 with <| bst_v_CAP := MAX s.bst_v_CAP v_addr |>]
+’;
+
+val eval_clstep_exp_def = Define‘
+  eval_clstep_exp s var ex =
+  case bir_eval_exp_view ex s.bst_environ s.bst_viewenv
+  of (SOME val, v_val) =>
+       (case env_update_cast64 (bir_var_name var) val (bir_var_type var) (s.bst_environ) of
+          SOME new_env =>
+            [s with <| bst_environ := new_env;
+                       bst_viewenv updated_by (λe. FUPDATE e (var,v_val));
+                       bst_pc      updated_by bir_pc_next |>]
+        | _ => [])
+  | _ => []
+’;
+
+val eval_clstep_bir_step_def = Define‘
+  eval_clstep_bir_step p s stm =
+   let (oo,s') = bir_exec_stmt p stm s
+   in [s']
+’;
+
+val eval_clstep_def = Define‘
+  eval_clstep cid p s M =
+    case bir_get_stmt p s.bst_pc of
+    | BirStmt_Read var a_e cast_opt xcl acq rel =>
+        eval_clstep_read s M var a_e xcl acq rel
+    | BirStmt_Write a_e v_e xcl acq rel =>
+        eval_clstep_fulfil p cid s M a_e v_e xcl acq rel ++
+        eval_clstep_xclfail p cid s xcl
+    | BirStmt_Amo var a_e v_e acq rel =>
+        eval_clstep_amofulfil cid s M var a_e v_e acq rel
+    | BirStmt_Expr var e =>
+        eval_clstep_exp s var e
+    | BirStmt_Fence K1 K2 =>
+        eval_clstep_fence s K1 K2
+    | BirStmt_Branch cond_e lbl1 lbl2 =>
+        eval_clstep_branch p s cond_e lbl1 lbl2
+    | BirStmt_Generic stm =>
+        eval_clstep_bir_step p s stm
+    | BirStmt_None => []
+’;
+
+(* Returns true if certified step. *)
+(* TODO: check if halted and so on? *)
+(* eval_certify_def FUEL CORE_ID PROGRAM BIR_STATE MEMORY *)
+val eval_certify_def = Define‘
+  (
+  eval_certify 0 cid p s M = NULL s.bst_prom
+  ) ∧ (
+  eval_certify (SUC f) p cid s M =
+  (NULL s.bst_prom ∨
+  EXISTS (λs'. eval_certify f p cid s' M) (eval_clstep cid p s M))
+  )
+’;
+
+(********* Promising-mode steps ***********)
+
+(* Find promise write step (promise-step + fulfil) *)
+(* Perform a write and fulfil it immediately *)
+(* eval_fpstep_write PROGRAM CORE_ID BIR_STATE MEMORY ADDRESS_EXPR VALUE_EXPR XCL? ACQ? REL? *)
+val eval_fpstep_write_def = Define‘
+  eval_fpstep_write cid p s M a_e v_e xcl acq rel =
+    let
+      (val_opt, v_data) = bir_eval_exp_view v_e s.bst_environ s.bst_viewenv;
+      (loc_opt, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv;
+    in
+      case (val_opt, loc_opt) of
+      | (SOME v, SOME l) =>
+          (let
+             msg = <| val := v; loc := l; cid := cid |>;
+             M' = SNOC msg M;
+             s' = s with <| bst_prom updated_by (CONS (LENGTH M')) |>;
+             v_prom = MAXL [ v_addr ; v_data ; s.bst_v_wNew ; s.bst_v_CAP
+                             ; if rel then (MAX s.bst_v_rOld s.bst_v_wOld) else 0
+                             ; if (xcl /\ acq /\ rel) then s.bst_v_Rel else 0
+                             ; s.bst_coh l
+                           ];
+           in
+             MAP (\s''. SOME msg, s'')
+                 (eval_clstep_fulfil p cid s' M' a_e v_e xcl acq rel)
+          )
+      | _ => []
+’;
+
+(* eval_fpstep_write for atomic instructions *)
+(* eval_fpstep_amowrite PROGRAM CORE_ID BIR_STATE MEMORY DEST_REGISTER ADDRESS_EXPR VALUE_EXPR ACQ? REL? *)
+val eval_fpstep_amowrite_def = Define‘
+  eval_fpstep_amowrite cid s M var a_e v_e acq rel =
+    case bir_eval_exp_view a_e s.bst_environ s.bst_viewenv of
+    | (NONE, v_addr) => []
+    | (SOME l, v_addr) =>
+    let
+      v_rPre = MAXL [v_addr; s.bst_v_rNew; ifView (acq /\ rel) s.bst_v_Rel];
+      msgs = mem_readable M l (MAX v_rPre (s.bst_coh l));
+    in                                 
+      LIST_BIND msgs
+                (\ (msg,t_r).
+                   let
+                     v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
+                     new_viewenv = FUPDATE s.bst_viewenv (var, v_rPost);
+                   in
+                     (case env_update_cast64 (bir_var_name var) msg.val (bir_var_type var) (s.bst_environ) of
+                      | NONE => []
+                      | SOME new_environ =>
+                          (case bir_eval_exp_view v_e new_environ new_viewenv of
+                          | (NONE, v_data) => []
+                          | (SOME v, v_data) =>
+                              let
+                                msg = <| loc := l; val := v; cid := cid |>;
+                                M' = SNOC msg M;
+                                s' = s with <| bst_prom updated_by (CONS (LENGTH M')) |>;
+                              in
+                                MAP (\s''. (SOME msg, s''))
+                                    (eval_clstep_amofulfil cid s' M' var a_e v_e acq rel)
+                           )
+                      )
+                 )
+’;
+
+(* Find-promise step *)
+(* Make a promise finding step *)
+(* eval_fpstep CORE_ID PROGRAM BIR_STATE MEMORY *)
+val eval_fpstep_def = Define‘
+  eval_fpstep cid p s M =
+    case bir_get_stmt p s.bst_pc of
+    | BirStmt_Read var a_e cast_opt xcl acq rel =>
+        MAP (\s. (NONE,s)) (eval_clstep_read s M var a_e xcl acq rel)
+    | BirStmt_Write a_e v_e xcl acq rel =>
+        (MAP (\s. (NONE,s)) (eval_clstep_fulfil p cid s M a_e v_e xcl acq rel)) ++
+        (MAP (\s. (NONE,s)) (eval_clstep_xclfail p cid s xcl)) ++
+        (eval_fpstep_write cid p s M a_e v_e xcl acq rel)
+    | BirStmt_Amo var a_e v_e acq rel =>
+        (MAP (\s. (NONE,s)) (eval_clstep_amofulfil cid s M var a_e v_e acq rel)) ++
+        (eval_fpstep_amowrite cid s M var a_e v_e acq rel)
+    | BirStmt_Expr var e =>
+        MAP (\s. (NONE,s)) (eval_clstep_exp s var e)
+    | BirStmt_Fence K1 K2 =>
+        MAP (\s. (NONE,s)) (eval_clstep_fence s K1 K2)
+    | BirStmt_Branch cond_e lbl1 lbl2 =>
+        MAP (\s. (NONE,s)) (eval_clstep_branch p s cond_e lbl1 lbl2)
+    | BirStmt_Generic stm =>
+        MAP (\s. (NONE,s)) (eval_clstep_bir_step p s stm)
+
+’;
+
+(* eval_fpsteps finds potential promises or lack of promises.
+ * Returns list of (emem_msg_t + num).
+ * - INL msg: means that msg is candidate promise.
+ * - INR cid: means some valid trace of cid has no promises.
+ *)
+(* eval_fpsteps FUEL PROGRAM CORE_ID BIR_STATE MEMORY (PROMISES + CID) *)
+val eval_fpsteps_def = Define‘
+  (
+  eval_fpsteps 0 cid p s M = []
+  ) ∧ (
+  eval_fpsteps (SUC fuel) cid p s M = 
+    case s.bst_status of
+    | BST_Running =>
+        LIST_BIND (eval_fpstep cid p s M)
+                  (λ(msg_opt,s').
+                     case msg_opt of
+                     | SOME msg =>
+                         msg::eval_fpsteps fuel cid p s' (SNOC msg M)
+                     | NONE => eval_fpsteps fuel cid p s' M)
+    | _ => []
+  )
+’;
+
+val eval_cpstep_def = Define‘
+  eval_cpstep fuel cid p s M =
+  LIST_BIND (eval_fpsteps fuel cid p s M)
+            (\msg.
+               let
+                 M' = SNOC msg M;
+                 t  = LENGTH M';
+                 s' = s with bst_prom updated_by (CONS t)
+               in [(s', M)])
+’;
+
+val eval_cstep_def = Define‘
+  eval_cstep fuel cid p s M =
+  (eval_cpstep fuel cid p s M) ++
+  (MAP (\s'. (s', M)) (eval_clstep cid p s M))
+’;
+
+(*********** Optimized version of the executable semantics ***************)
+
+(* This datatype has extra information for the promising execution *)
+val _ = Datatype‘
+         exec_mem_msg_t = <| loc:bir_val_t ; val:bir_val_t ; cid:num ; succ:bool ; n:num |>
+        ’;
+
+val emem_default_def = Define‘
+  emem_default l = <| loc := l ; val := BVal_Imm (Imm64 0w) ; succ := T ; n := 0 |>
+’;
+
 val emem_get_def = Define‘
   (emem_get M l 0 = SOME $ emem_default l)
   ∧
@@ -89,21 +526,8 @@ val emem_to_mem_def = Define ‘
   else emem_to_mem ms)
 ’;
 
-val ifView_def = Define‘
-  ifView p (v:num) = if p then v else 0
-’;
-
-val MAXL_def = Define‘
-  MAXL (x::xs) = FOLDL MAX x xs
-’;
-
-val MINL_def = Define‘
-  MINL (x::xs) = FOLDL MIN x xs
-’;
-
-(* Core-local execution *)
-val eval_clstep_read_def = Define‘
-  eval_clstep_read s M var a_e xcl acq rel =
+val eval_clstep_readO1_def = Define‘
+  eval_clstep_readO1 s M var a_e xcl acq rel =
   case bir_eval_exp_view a_e s.bst_environ s.bst_viewenv of
   | (SOME l, v_addr) =>
       let
@@ -138,431 +562,6 @@ val eval_clstep_read_def = Define‘
         | _ => []
 ’;
 
-val eval_clstep_xclfail_def = Define‘
-  (eval_clstep_xclfail p cid s M a_e v_e T =
-  let
-    (l_opt, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv;
-    (v_opt, v_data) = bir_eval_exp_view v_e s.bst_environ s.bst_viewenv
-  in
-    case (l_opt, v_opt) of
-    | (SOME l, SOME v) =>
-        let
-          msg = <| loc := l ; val := v ; cid := cid ; succ := F ; n := SUC s.bst_counter |>;
-          ts = FILTER (λt. emem_get M l t = SOME msg) s.bst_prom
-        in
-          LIST_BIND ts 
-                    (λt.
-                       case (xclfail_update_env p s, xclfail_update_viewenv p s) of
-                       | (SOME new_env, SOME new_viewenv) =>
-                           [s with <| bst_viewenv := new_viewenv;
-                                      bst_environ := new_env;
-                                      bst_xclb    := NONE;
-                                      bst_counter updated_by SUC;
-                                      bst_prom    updated_by (FILTER (λp. p ≠ t));
-                                      bst_pc updated_by (bir_pc_next o bir_pc_next o bir_pc_next) |>]
-                       | _ => [])
-          | _ => [])
-  ∧
-  eval_clstep_xclfail p cid s M a_e v_e F = []
-’;
-
-val eval_clstep_amofulfil_def = Define‘
-  eval_clstep_amofulfil p cid s M var a_e v_e acq rel =
-    case bir_eval_exp_view a_e s.bst_environ s.bst_viewenv of
-    | (NONE, v_addr) => []
-    | (SOME l, v_addr) =>
-    let
-      v_rPre = MAXL [v_addr; s.bst_v_rNew; ifView (acq /\ rel) s.bst_v_Rel; ifView (acq /\ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
-      msgs = emem_readable M l (MAX v_rPre (s.bst_coh l));
-    in                                 
-      LIST_BIND msgs
-                (\ (msg,t_r).
-                   let
-                     v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
-                     new_viewenv = FUPDATE s.bst_viewenv (var, v_rPost);
-                   in
-                     (case env_update_cast64 (bir_var_name var) msg.val (bir_var_type var) (s.bst_environ) of
-                      | NONE => []
-                      | SOME new_environ =>
-                          (case bir_eval_exp_view v_e new_environ new_viewenv of
-                          | (NONE, v_data) => []
-                          | (SOME v, v_data) =>
-                              let
-                                v_wPre = MAXL [v_addr; v_data; s.bst_v_CAP; v_rPost; s.bst_v_wNew;
-                                               ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
-                                               ifView (acq /\ rel) s.bst_v_Rel
-                                              ];
-                                msg = <| loc := l; val := v; cid := cid; succ := T; n := SUC s.bst_counter |>;
-                                t_ws = FILTER (\t_w.
-                                                 (emem_get M l t_w = SOME msg) /\
-                                                 (MAX v_wPre (s.bst_coh l) < t_w) /\
-                                                 (mem_every (\ (msg,t'). t_r < t' /\ t' < t_w ==> msg.loc <> l) M))
-                                              s.bst_prom;
-                              in LIST_BIND t_ws (\v_wPost.
-                                                   [ s with <| bst_viewenv := new_viewenv;
-                                                               bst_environ := new_environ;
-                                                               bst_fwdb   updated_by (l =+ <| fwdb_time := v_wPost;
-                                                                                              fwdb_view := MAX v_addr v_data;
-                                                                                              fwdb_xcl  := T |>);
-                                                               bst_prom   updated_by (FILTER (\t'. t' <> v_wPost));
-                                                               bst_coh    updated_by (l =+ MAX (s.bst_coh l) v_wPost);
-                                                               bst_v_Rel  updated_by (MAX (ifView (acq /\ rel) v_wPost));
-                                                               bst_v_rOld updated_by (MAX v_rPost);
-                                                               bst_v_rNew updated_by (MAX (ifView acq (if rel then v_wPost else v_rPost)));
-                                                               bst_v_wNew updated_by (MAX (ifView acq (if rel then v_wPost else v_rPost)));
-                                                               bst_v_CAP  updated_by (MAX v_addr);
-                                                               bst_v_wOld updated_by (MAX v_wPost);
-                                                               bst_pc     updated_by bir_pc_next o bir_pc_next;
-                                                               bst_counter updated_by SUC;
-                                                     |> ])
-                           )
-                      )
-                 )
-’;
-
-val eval_clstep_fulfil_def = Define‘
-  eval_clstep_fulfil p cid s M a_e v_e xcl acq rel =
-    let
-      (l_opt, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv;
-      (v_opt, v_data) = bir_eval_exp_view v_e s.bst_environ s.bst_viewenv
-    in
-      case (l_opt,v_opt) of
-      | (SOME l, SOME v) =>
-          (let
-             v_pre = MAXL [ v_addr
-                          ; v_data
-                          ; s.bst_v_wNew
-                          ; s.bst_v_CAP
-                          ; ifView rel (MAX s.bst_v_rOld s.bst_v_wOld)
-                          ; ifView (xcl /\ acq /\ rel) s.bst_v_Rel
-                          ; ifView xcl (get_xclb_view s.bst_xclb)
-                          ];
-             msg = <| loc := l; val := v; cid := cid ; succ := T ; n := SUC s.bst_counter |>;
-             ts = FILTER (\t. (emem_get M l t = SOME msg)
-                              /\ (MAX v_pre (s.bst_coh l) < t)
-                              /\ (xcl ==> ((s.bst_xclb <> NONE) /\
-                                             emem_atomic M l cid (THE s.bst_xclb).xclb_time t)))
-                         s.bst_prom;
-           in
-             LIST_BIND ts
-                       (\v_post.
-                          case (fulfil_update_env p s xcl, fulfil_update_viewenv p s xcl v_post) of
-                          | (SOME new_env, SOME new_viewenv) => 
-                              [s with <| bst_viewenv := new_viewenv;
-                                         bst_environ := new_env;
-                                         bst_prom   updated_by (FILTER (\t'. t' <> v_post));
-                                         bst_coh    updated_by (l =+ MAX (s.bst_coh l) v_post);
-                                         bst_v_wOld updated_by MAX v_post;
-                                         bst_v_CAP  updated_by MAX v_addr;
-                                         bst_v_Rel  updated_by (MAX $ ifView (rel /\ acq) v_post);
-                                         bst_v_rNew updated_by (MAX $ ifView (rel /\ acq /\ xcl) v_post);
-                                         bst_v_wNew updated_by (MAX $ ifView (rel /\ acq /\ xcl) v_post);
-                                         bst_fwdb   updated_by (l =+ <| fwdb_time := v_post;
-                                                                        fwdb_view := MAX v_addr v_data;
-                                                                        fwdb_xcl  := xcl |>);
-                                         bst_pc     updated_by if xcl
-                                                               then (bir_pc_next o bir_pc_next o bir_pc_next)
-                                                               else bir_pc_next;
-                                         bst_counter updated_by SUC;
-                                         bst_xclb := if xcl then NONE else s.bst_xclb |>]
-                          | _ => []))
-      | (_, _) => []
-’;
-
-val eval_clstep_fence_def = Define‘
-  eval_clstep_fence s K1 K2 =
-  let v = MAX (if is_read K1 then s.bst_v_rOld else 0)
-              (if is_write K1 then s.bst_v_wOld else 0)
-  in
-    [s with <| bst_v_rNew updated_by MAX (if is_read K2 then v else 0);
-               bst_v_wNew updated_by MAX (if is_write K2 then v else 0);
-               bst_pc     updated_by bir_pc_next |>]
-’;
-
-val eval_clstep_branch_def = Define‘
-  eval_clstep_branch p s cond_e lbl1 lbl2 =
-  let
-    stmt = BStmtE (BStmt_CJmp cond_e lbl1 lbl2);
-    (sv, v_addr) = bir_eval_exp_view cond_e s.bst_environ s.bst_viewenv
-  in
-    case sv of
-      SOME v =>
-        let (oo,s2) = bir_exec_stmt p stmt s
-        in [s2 with <| bst_v_CAP updated_by MAX v_addr |>]
-    | _ => []
-’;
-
-val eval_clstep_exp_def = Define‘
-  eval_clstep_exp s var ex =
-  case bir_eval_exp_view ex s.bst_environ s.bst_viewenv
-  of (SOME val, v_val) =>
-       (case env_update_cast64 (bir_var_name var) val (bir_var_type var) (s.bst_environ) of
-          SOME new_env =>
-            [s with <| bst_environ := new_env;
-                       bst_viewenv updated_by (λe. FUPDATE e (var,v_val));
-                       bst_pc      updated_by bir_pc_next |>]
-        | _ => [])
-  | _ => []
-’;
-
-val eval_clstep_bir_step_def = Define‘
-  eval_clstep_bir_step p s stm =
-   let (oo,s') = bir_exec_stmt p stm s
-   in [s']
-’;
-
-val eval_clstep_def = Define‘
-  eval_clstep p cid s M =
-    case bir_get_stmt p s.bst_pc of
-    | BirStmt_Read var a_e cast_opt xcl acq rel =>
-        eval_clstep_read s M var a_e xcl acq rel
-    | BirStmt_Write a_e v_e xcl acq rel =>
-        eval_clstep_fulfil p cid s M a_e v_e xcl acq rel ++
-        eval_clstep_xclfail p cid s M a_e v_e xcl
-    | BirStmt_Amo var a_e v_e acq rel =>
-        eval_clstep_amofulfil p cid s M var a_e v_e acq rel
-    | BirStmt_Expr var e =>
-        eval_clstep_exp s var e
-    | BirStmt_Fence K1 K2 =>
-        eval_clstep_fence s K1 K2
-    | BirStmt_Branch cond_e lbl1 lbl2 =>
-        eval_clstep_branch p s cond_e lbl1 lbl2
-    | BirStmt_Generic stm =>
-        eval_clstep_bir_step p s stm
-    | BirStmt_None => []
-’;
-
-
-(*** Non-promising-mode execution ***)
-val eval_clsteps_def = Define‘
-  (
-  eval_clsteps 0 cid p s M =
-  case s.bst_status of
-  | BST_Running => [s]
-  | BST_Halted _ => [s]
-  | BST_JumpOutside _ => [s]
-  | _ => []
-  ) /\ (
-  eval_clsteps (SUC f) cid p s M = 
-  case s.bst_status of
-  | BST_Running => LIST_BIND (eval_clstep p cid s M)
-                             (λs'. eval_clsteps f cid p s' M)
-  | BST_Halted _ => [s]
-  | BST_JumpOutside _ => [s]
-  | _ => []
-  )
-’;
-
-val eval_clsteps_core_def = Define‘
-  eval_clsteps_core fuel (Core cid p s) M =
-    MAP (Core cid p) (eval_clsteps fuel cid p s M)
-’;
-
-(* Returns true if certified step. *)
-val eval_certify_def = Define‘
-  (
-  eval_certify prog cid st M 0 =
-  NULL st.bst_prom
-  ) ∧ (
-  eval_certify prog cid st M (SUC f) =
-  (NULL st.bst_prom ∨
-   EXISTS (λst'. eval_certify prog cid st' M f) (eval_clstep prog cid st M))
-  )
-’;
-
-val eval_certify_core_def = Define‘
-  eval_certify_core M f (Core cid prog st) =
-  eval_certify prog cid st M f
-’;
-
-(********* Promising-mode steps ***********)
-
-val has_write_def = Define‘
-  has_write M cid n = EXISTS (\m. m.cid = cid ∧ m.n = n) M
-’;
-
-(* Find promise write step (promise-step + fulfil) *)
-val eval_fpstep_write_def = Define‘
-  eval_fpstep_write p cid s M a_e v_e xcl acq rel =
-  if ~has_write M cid (SUC s.bst_counter) then
-    let
-      (val_opt, v_data) = bir_eval_exp_view v_e s.bst_environ s.bst_viewenv;
-      (loc_opt, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv;
-    in
-      case (val_opt, loc_opt) of
-      | (SOME v, SOME l) =>
-          (let
-             msg = <| val := v; loc := l; cid := cid ; succ := T ; n := SUC s.bst_counter |>;
-             M' = SNOC msg M;
-             s' = s with <| bst_prom updated_by (CONS (LENGTH M')) |>;
-             v_prom = MAXL [ v_addr ; v_data ; s.bst_v_wNew ; s.bst_v_CAP
-                             ; if rel then (MAX s.bst_v_rOld s.bst_v_wOld) else 0
-                             ; if (xcl /\ acq /\ rel) then s.bst_v_Rel else 0
-                             ; if xcl then get_xclb_view s.bst_xclb else 0
-                             ; s.bst_coh l
-                           ];
-           in
-             MAP (\s''. (SOME (msg,v_prom), s''))
-                 (eval_clstep_fulfil p cid s' M' a_e v_e xcl acq rel)
-          )
-      | _ => []
-  else
-    []
-’;
-
-val eval_fpstep_amowrite_def = Define‘
-  eval_fpstep_amowrite p cid s M var a_e v_e acq rel =
-    if ~has_write M cid (SUC s.bst_counter) then
-    case bir_eval_exp_view a_e s.bst_environ s.bst_viewenv of
-    | (NONE, v_addr) => []
-    | (SOME l, v_addr) =>
-    let
-      v_rPre = MAXL [v_addr; s.bst_v_rNew; ifView (acq /\ rel) s.bst_v_Rel];
-      msgs = emem_readable M l (MAX v_rPre (s.bst_coh l));
-    in                                 
-      LIST_BIND msgs
-                (\ (msg,t_r).
-                   let
-                     v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
-                     new_viewenv = FUPDATE s.bst_viewenv (var, v_rPost);
-                   in
-                     (case env_update_cast64 (bir_var_name var) msg.val (bir_var_type var) (s.bst_environ) of
-                      | NONE => []
-                      | SOME new_environ =>
-                          (case bir_eval_exp_view v_e new_environ new_viewenv of
-                          | (NONE, v_data) => []
-                          | (SOME v, v_data) =>
-                              let
-                                msg = <| loc := l; val := v; cid := cid; succ := T; n := SUC s.bst_counter |>;
-                                M' = SNOC msg M;
-                                s' = s with <| bst_prom updated_by (CONS (LENGTH M')) |>;
-                                v_prom = MAXL [v_addr; v_data; s.bst_v_CAP; v_rPost; s.bst_v_wNew; ifView rel (MAX s.bst_v_rOld s.bst_v_wOld); s.bst_coh l];
-                              in
-                                MAP (\s''. (SOME (msg, v_prom), s''))
-                                    (eval_clstep_amofulfil p cid s' M' var a_e v_e acq rel)
-                           )
-                      )
-                 )
-    else []
-’;
-
-val eval_fpstep_write_xclfail_def = Define‘
-  (eval_fpstep_write_xclfail p cid s M a_e v_e T =
-   if ~has_write M cid (SUC s.bst_counter) then
-  let
-    (l_opt, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv;
-    (v_opt, v_data) = bir_eval_exp_view v_e s.bst_environ s.bst_viewenv
-  in
-    case (l_opt, v_opt) of
-    | (SOME l, SOME v) =>
-        let
-          msg = <| loc := l ; val := v ; cid := cid ; succ := F ; n := SUC s.bst_counter|>;
-          M' = SNOC msg M;
-          s' = s with <| bst_prom updated_by (CONS (LENGTH M')) |>;
-        in
-          MAP (\s''. (SOME (msg,0:num), s''))
-              (eval_clstep_xclfail p cid s' M' a_e v_e T)
-          | _ => []
-   else
-     [])
-  ∧
-  eval_fpstep_write_xclfail p cid s M a_e v_e F = []
-’;
-
-(* Find-promise step *)
-val eval_fpstep_def = Define‘
-  eval_fpstep p cid s M =
-    case bir_get_stmt p s.bst_pc of
-    | BirStmt_Read var a_e cast_opt xcl acq rel =>
-        MAP (\s. (NONE,s)) (eval_clstep_read s M var a_e xcl acq rel)
-    | BirStmt_Write a_e v_e xcl acq rel =>
-        (MAP (\s. (NONE,s)) (eval_clstep_fulfil p cid s M a_e v_e xcl acq rel)) ++
-        (MAP (\s. (NONE,s)) (eval_clstep_xclfail p cid s M a_e v_e xcl)) ++
-        (eval_fpstep_write p cid s M a_e v_e xcl acq rel) ++
-        (eval_fpstep_write_xclfail p cid s M a_e v_e xcl)
-    | BirStmt_Amo var a_e v_e acq rel =>
-        (MAP (\s. (NONE,s)) (eval_clstep_amofulfil p cid s M var a_e v_e acq rel)) ++
-        (eval_fpstep_amowrite p cid s M var a_e v_e acq rel)
-    | BirStmt_Expr var e =>
-        MAP (\s. (NONE,s)) (eval_clstep_exp s var e)
-    | BirStmt_Fence K1 K2 =>
-        MAP (\s. (NONE,s)) (eval_clstep_fence s K1 K2)
-    | BirStmt_Branch cond_e lbl1 lbl2 =>
-        MAP (\s. (NONE,s)) (eval_clstep_branch p s cond_e lbl1 lbl2)
-    | BirStmt_Generic stm =>
-        MAP (\s. (NONE,s)) (eval_clstep_bir_step p s stm)
-    | BirStmt_None => []
-’;
-
-(* Find-promise steps *)
-val eval_fpsteps_def = Define‘
-  (
-  eval_fpsteps 0 prog cid st M = []
-  ) ∧ (
-  eval_fpsteps (SUC fuel) prog cid st M = 
-  case st.bst_status of
-  | BST_Running =>
-      LIST_BIND (eval_fpstep prog cid st M)
-                (λ(msg_opt,st').
-                   case msg_opt of
-                   | SOME (msg, v_prom) =>
-                       if eval_certify prog cid st' (SNOC msg M) fuel
-                       then ((msg, v_prom)::eval_fpsteps fuel prog cid st' (SNOC msg M))
-                       else []
-                   | NONE => eval_fpsteps fuel prog cid st' M)
-  | _ => []
-  )
-’;
-
-(* Find-promise steps on a core *)
-val eval_fpsteps_core_def = Define‘
-  eval_fpsteps_core fuel (Core cid p s) M =
-    eval_fpsteps fuel p cid s M
-’;
-
-(* Find promise all promises *)
-val eval_find_promises_def = Define‘
-  eval_find_promises fuel (cores, M) =
-  LIST_BIND cores (λcore. eval_fpsteps_core fuel core M)
-’;
-
-(* Make a promise step *)
-val eval_make_promise_def = Define‘
-  eval_make_promise ((Core cid p s)::cores,M) msg =
-  if msg.cid = cid then
-    let
-      M' = SNOC msg M;
-      t = LENGTH M';
-      s' = s with <| bst_prom updated_by (CONS t) |>;
-    in ((Core cid p s')::cores, M')
-  else
-    let
-      (cores', M') = eval_make_promise (cores, M) msg;
-    in ((Core cid p s)::cores', M')
-’;
-
-(* Promise-mode step *)
-val eval_pmstep_def = Define‘
-  eval_pmstep fuel cM =
-  let
-    promises = nub $ eval_find_promises fuel cM;
-    t = SUC $ LENGTH $ SND cM;
-    promises' = MAP FST $ FILTER (λx. SND x < t) promises
-  in
-  MAP (eval_make_promise cM) promises'
-’;
-
-val eval_pmsteps_def = Define‘
-  eval_pmsteps fuel 0 cM = [cM]
-  ∧
-  eval_pmsteps fuel (SUC pfuel) cM =
-  let cMs = eval_pmstep fuel cM in
-  if NULL cMs
-  then [cM]
-  else LIST_BIND cMs (eval_pmsteps fuel pfuel)
-’;
-
-(*********** Optimized version of the executable semantics ***************)
 (* Optimized fulfil *)
 val eval_clstep_fulfilO1_def = Define‘
   eval_clstep_fulfilO1 p cid s M a_e v_e xcl acq rel =
@@ -573,7 +572,7 @@ val eval_clstep_fulfilO1_def = Define‘
     case (val_opt, loc_opt) of
     | (SOME v, SOME l) =>
         (let
-           msg = <| val := v; loc := l; cid := cid; succ := T ; n := SUC s.bst_counter |>;
+           msg = <| val := v; loc := l; cid := cid; n := SUC s.bst_counter |>;
            v_pre = MAXL [ v_addr ; v_data ; s.bst_v_wNew ; s.bst_v_CAP
                         ; if rel then (MAX s.bst_v_rOld s.bst_v_wOld) else 0
                         ; if (xcl /\ acq /\ rel) then s.bst_v_Rel else 0
@@ -637,9 +636,62 @@ val eval_clstep_xclfailO1_def = Define‘
                                       bst_counter updated_by SUC;
                                       bst_pc      updated_by (bir_pc_next o bir_pc_next o bir_pc_next) |>]
                        | _ => [])
-          | _ => [])
+    | _ => [])
   ∧
   eval_clstep_xclfailO1 p cid s M a_e v_e F = []
+’;
+
+val eval_clstep_amofulfilO1_def = Define‘
+  eval_clstep_amofulfilO1 cid s M var a_e v_e acq rel =
+    case bir_eval_exp_view a_e s.bst_environ s.bst_viewenv of
+    | (NONE, v_addr) => []
+    | (SOME l, v_addr) =>
+    let
+      v_rPre = MAXL [v_addr; s.bst_v_rNew; ifView (acq /\ rel) s.bst_v_Rel; ifView (acq /\ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
+      msgs = emem_readable M l (MAX v_rPre (s.bst_coh l));
+    in                                 
+      LIST_BIND msgs
+                (\ (msg,t_r).
+                   let
+                     v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
+                     new_viewenv = FUPDATE s.bst_viewenv (var, v_rPost);
+                   in
+                     (case env_update_cast64 (bir_var_name var) msg.val (bir_var_type var) (s.bst_environ) of
+                      | NONE => []
+                      | SOME new_environ =>
+                          (case bir_eval_exp_view v_e new_environ new_viewenv of
+                          | (NONE, v_data) => []
+                          | (SOME v, v_data) =>
+                              let
+                                v_wPre = MAXL [v_addr; v_data; s.bst_v_CAP; v_rPost; s.bst_v_wNew;
+                                               ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
+                                               ifView (acq /\ rel) s.bst_v_Rel
+                                              ];
+                                msg = <| loc := l; val := v; cid := cid ; succ := T; n := SUC s.bst_counter |>;
+                                t_ws = FILTER (\t_w.
+                                                 (emem_get M l t_w = SOME msg) /\
+                                                 (MAX v_wPre (s.bst_coh l) < t_w) /\
+                                                 (emem_every (\ (msg,t'). msg.succ ∧ t_r < t' /\ t' < t_w ==> msg.loc <> l) M))
+                                              s.bst_prom;
+                              in LIST_BIND t_ws (\v_wPost.
+                                                   [ s with <| bst_viewenv := new_viewenv;
+                                                               bst_environ := new_environ;
+                                                               bst_fwdb   updated_by (l =+ <| fwdb_time := v_wPost;
+                                                                                              fwdb_view := MAX v_addr v_data;
+                                                                                              fwdb_xcl  := T |>);
+                                                               bst_prom   updated_by (FILTER (\t'. t' <> v_wPost));
+                                                               bst_coh    updated_by (l =+ MAX (s.bst_coh l) v_wPost);
+                                                               bst_v_Rel  updated_by (MAX (ifView (acq /\ rel) v_wPost));
+                                                               bst_v_rOld updated_by (MAX v_rPost);
+                                                               bst_v_rNew updated_by (MAX (ifView acq (if rel then v_wPost else v_rPost)));
+                                                               bst_v_wNew updated_by (MAX (ifView acq (if rel then v_wPost else v_rPost)));
+                                                               bst_v_CAP  updated_by (MAX v_addr);
+                                                               bst_v_wOld updated_by (MAX v_wPost);
+                                                               bst_pc     updated_by bir_pc_next o bir_pc_next;
+                                                     |> ])
+                           )
+                      )
+                 )
 ’;
 
 (* Optimized clstep *)
@@ -647,12 +699,12 @@ val eval_clstepO1_def = Define‘
   eval_clstepO1 p cid s M =
     case bir_get_stmt p s.bst_pc of
     | BirStmt_Read var a_e cast_opt xcl acq rel =>
-        eval_clstep_read s M var a_e xcl acq rel 
+        eval_clstep_readO1 s M var a_e xcl acq rel
     | BirStmt_Write a_e v_e xcl acq rel =>
         eval_clstep_fulfilO1 p cid s M a_e v_e xcl acq rel ++
         eval_clstep_xclfailO1 p cid s M a_e v_e xcl
     | BirStmt_Amo var a_e v_e acq rel =>
-        eval_clstep_amofulfil p cid s M var a_e v_e acq rel
+        eval_clstep_amofulfilO1 cid s M var a_e v_e acq rel
     | BirStmt_Expr var e =>
         eval_clstep_exp s var e
     | BirStmt_Fence K1 K2 =>
@@ -685,8 +737,8 @@ val eval_clstepsO1_def = Define‘
 ’;
 
 val eval_clsteps_coreO1_def = Define‘
-  eval_clsteps_coreO1 fuel (ExecCore cid prog st prom_mode) M =
-    MAP (\st'. ExecCore cid prog st' prom_mode) (eval_clstepsO1 fuel cid prog st M)
+  eval_clsteps_coreO1 fuel (Core cid prog st) M =
+    MAP (\st'. Core cid prog st') (eval_clstepsO1 fuel cid prog st M)
 ’;
 
 val eval_certifyO1_def = Define‘
@@ -701,8 +753,14 @@ val eval_certifyO1_def = Define‘
 ’;
 
 val eval_certify_coreO1_def = Define‘
-  eval_certify_coreO1 M f (ExecCore cid prog st prom_mode) =
+  eval_certify_coreO1 M f (Core cid prog st) =
   eval_certifyO1 prog cid st M f
+’;
+
+(**** Promising mode execution, optimized ****)
+
+val has_write = Define‘
+  has_write M cid n = EXISTS (\m. m.cid = cid ∧ m.n = n) M
 ’;
 
 (* Find promise write step (promise-step + fulfil) *)
@@ -755,20 +813,59 @@ val eval_fpstep_write_xclfailO1_def = Define‘
   eval_fpstep_write_xclfailO1 p cid s M a_e v_e F = []
 ’;
 
+val eval_fpstep_amowriteO1_def = Define‘
+  eval_fpstep_amowriteO1 cid s M var a_e v_e acq rel =
+  if ~has_write M cid (SUC s.bst_counter) then
+    case bir_eval_exp_view a_e s.bst_environ s.bst_viewenv of
+    | (NONE, v_addr) => []
+    | (SOME l, v_addr) =>
+        let
+          v_rPre = MAXL [v_addr; s.bst_v_rNew; ifView (acq /\ rel) s.bst_v_Rel];
+          msgs = emem_readable M l (MAX v_rPre (s.bst_coh l));
+        in                                 
+          LIST_BIND msgs
+                    (\ (msg,t_r).
+                       let
+                         v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
+                         new_viewenv = FUPDATE s.bst_viewenv (var, v_rPost);
+                       in
+                         case env_update_cast64 (bir_var_name var) msg.val (bir_var_type var) (s.bst_environ) of
+                         | NONE => []
+                         | SOME new_environ =>
+                             (case bir_eval_exp_view v_e new_environ new_viewenv of
+                              | (NONE, v_data) => []
+                              | (SOME v, v_data) =>
+                                  let
+                                    msg = <| loc := l; val := v; cid := cid ; succ := T ; n := (SUC s.bst_counter) |>;
+                                    M' = SNOC msg M;
+                                    s' = s with <| bst_prom updated_by (CONS (LENGTH M')) |>;
+                                    v_post = MAXL [v_addr; v_data; s.bst_v_CAP; v_rPost; s.bst_v_wNew;
+                                                   ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
+                                                   ifView (acq /\ rel) s.bst_v_Rel;
+                                                   s.bst_coh l
+                                                  ];
+                                  in
+                                    MAP (\s''. (SOME (msg, v_post), s''))
+                                        (eval_clstep_amofulfilO1 cid s' M' var a_e v_e acq rel)
+                             )
+                    )
+  else []
+’;
+
 (* Find promise step *)
 val eval_fpstepO1_def = Define‘
   eval_fpstepO1 p cid s M =
     case bir_get_stmt p s.bst_pc of
     | BirStmt_Read var a_e cast_opt xcl acq rel =>
-        MAP (\s. (NONE,s)) (eval_clstep_read s M var a_e xcl acq rel)
+        MAP (\s. (NONE,s)) (eval_clstep_readO1 s M var a_e xcl acq rel)
     | BirStmt_Write a_e v_e xcl acq rel =>
         (MAP (\s. (NONE,s)) (eval_clstep_fulfilO1 p cid s M a_e v_e xcl acq rel)) ++
         (MAP (\s. (NONE,s)) (eval_clstep_xclfailO1 p cid s M a_e v_e xcl)) ++
         (eval_fpstep_writeO1 p cid s M a_e v_e xcl acq rel) ++
         (eval_fpstep_write_xclfailO1 p cid s M a_e v_e xcl)
     | BirStmt_Amo var a_e v_e acq rel =>
-        (MAP (\s. (NONE,s)) (eval_clstep_amofulfil p cid s M var a_e v_e acq rel)) ++
-        (eval_fpstep_amowrite p cid s M var a_e v_e acq rel)
+        (MAP (\s. (NONE,s)) (eval_clstep_amofulfilO1 cid s M var a_e v_e acq rel)) ++
+        (eval_fpstep_amowriteO1 cid s M var a_e v_e acq rel)
     | BirStmt_Expr var e =>
         MAP (\s. (NONE,s)) (eval_clstep_exp s var e)
     | BirStmt_Fence K1 K2 =>
@@ -808,10 +905,8 @@ val eval_fpstepsO1_def = Define‘
 
 (* Find promise steps on a core *)
 val eval_fpsteps_coreO1_def = Define‘
-  eval_fpsteps_coreO1 fuel (ExecCore cid prog st prom_mode) M =
-  if prom_mode then
+  eval_fpsteps_coreO1 fuel (Core cid prog st) M =
     eval_fpstepsO1 fuel (SUC (LENGTH M)) prog cid st M []
-  else []
 ’;
 
 (* Find all next promises-steps *)
@@ -821,10 +916,10 @@ val eval_find_promisesO1_def = Define‘
 ’;
 
 val eval_make_promise_auxO1_def = Define‘
-  eval_make_promise_auxO1 msg t (ExecCore cid prog st prom_mode) =
+  eval_make_promise_auxO1 msg t (Core cid prog st) =
   if msg.cid = cid
-  then (ExecCore cid prog (st with <| bst_prom updated_by (CONS t) |>) prom_mode)
-  else (ExecCore cid prog st prom_mode) 
+  then (Core cid prog (st with <| bst_prom updated_by (CONS t) |>))
+  else (Core cid prog st) 
 ’;
 
 val eval_make_promiseO1_def = Define‘
@@ -865,114 +960,4 @@ val eval_finished_core_def = Define‘
   eval_finished_core (Core cid prog s) = eval_finished s
 ’;
 
-val eval_finished_ecore_def = Define‘
-  eval_finished_ecore (ExecCore cid prog s prom_mode) = eval_finished s
-’;
-
 val _ = export_theory();
-
-(********************** Example ***********************)
-(*
-val bir_get_stmt_def = Define‘
-  bir_get_stmt p pc = 
-  case bir_get_current_statement p pc of
-  | SOME (BStmtB (BStmt_Assign var e)) =>
-      if is_amo p pc then
-      (case get_read_args e of
-       | SOME (a_e, cast_opt) =>
-           (case bir_get_current_statement p (bir_pc_next pc) of
-           | SOME (BStmtB (BStmt_Assign var' e')) =>
-               (case get_fulfil_args e' of
-               | SOME (a_e', v_e) =>
-                   if a_e = a_e'
-                   then BirStmt_Amo var a_e v_e (is_acq p pc) (is_rel p pc)
-                   else BirStmt_None
-               | NONE => BirStmt_None)
-           | _ => BirStmt_None)
-       | NONE =>
-           (case get_fulfil_args e of
-            | SOME (a_e, v_e) => BirStmt_None
-            | NONE => BirStmt_Expr var e))
-      else
-       (case get_read_args e of
-       | SOME (a_e, cast_opt) => BirStmt_Read var a_e cast_opt (is_xcl_read p pc) (is_acq p pc) (is_rel p pc)
-       | NONE =>
-           (case get_fulfil_args e of
-           | SOME (a_e, v_e) => BirStmt_Write a_e v_e (is_xcl_write p pc) (is_acq p pc) (is_rel p pc)
-           | NONE => BirStmt_Expr var e))
-  | SOME (BStmtB (BStmt_Fence K1 K2)) => BirStmt_Fence K1 K2
-  | SOME (BStmtE (BStmt_CJmp cond_e lbl1 lbl2)) => BirStmt_Branch cond_e lbl1 lbl2
-  | SOME stmt => BirStmt_Generic stmt
-  | NONE => BirStmt_None
-’;
-
-term_EVAL “bir_get_stmt ^core2_prog <|bpc_label := BL_Label "start"; bpc_index := 0|>”
-val core1_prog =
-“BirProgram
- [<|bb_label := BL_Label "start";
-    bb_mc_tags := NONE;
-    bb_statements :=
-    [BStmt_Assign (BVar "x2" (BType_Imm Bit64)) (BExp_Const (Imm64 1w));
-    BStmt_Assign (BVar "MEM" (BType_Mem Bit64 Bit8))
-     (BExp_Store (BExp_Den (BVar "MEM" (BType_Mem Bit64 Bit8)))
-      (BExp_Den (BVar "x2" (BType_Imm Bit64))) BEnd_LittleEndian
-      (BExp_Const (Imm64 1w)));
-     BStmt_Assign (BVar "MEM" (BType_Mem Bit64 Bit8))
-                  (BExp_Store (BExp_Den (BVar "MEM" (BType_Mem Bit64 Bit8)))
-                   (BExp_Den (BVar "x2" (BType_Imm Bit64))) BEnd_LittleEndian
-                   (BExp_Const (Imm64 2w))) ]
-    ;
-    bb_last_statement :=
-    BStmt_Halt (BExp_Den (BVar "x2" (BType_Imm Bit64)))|>]: string bir_program_t”
-
-val core2_prog =
-“BirProgram
- [<|bb_label := BL_Label "start";
-    bb_mc_tags := SOME <| mc_atomic := T; mc_acq := F; mc_rel := F |>;
-    bb_statements :=
-    [BStmt_Assign (BVar "x1" (BType_Imm Bit64))
-                  (BExp_Load (BExp_Den (BVar "MEM" (BType_Mem Bit64 Bit8)))
-                   (BExp_Den (BVar "x2" (BType_Imm Bit64))) BEnd_LittleEndian
-                   Bit8);
-     BStmt_Assign (BVar "MEM" (BType_Mem Bit64 Bit8))
-                  (BExp_Store (BExp_Den (BVar "MEM" (BType_Mem Bit64 Bit8)))
-                   (BExp_Den (BVar "x2" (BType_Imm Bit64))) BEnd_LittleEndian
-                   (BExp_Den (BVar "x1" (BType_Imm Bit64))));
-                   ];
-    bb_last_statement :=
-    BStmt_Halt (BExp_Den (BVar "x2" (BType_Imm Bit64)))|>]: string bir_program_t”
-
-val set_env1_def = Define‘
-      set_env1 s =
-      let env = BEnv ((K NONE) (|
-                      "x0" |-> SOME $ BVal_Imm $ Imm64 0w;
-                      "x1" |-> SOME $ BVal_Imm $ Imm64 4w;
-                      "x2" |-> SOME $ BVal_Imm $ Imm64 8w
-                      |))
-         in s with <| bst_environ := env; bst_prom := []|>
-’;
-val set_env2_def = Define‘
-      set_env2 s =
-      let env = BEnv ((K NONE) (|
-                      "x0" |-> SOME $ BVal_Imm $ Imm64 0w;
-                      "x1" |-> SOME $ BVal_Imm $ Imm64 4w;
-                      "x2" |-> SOME $ BVal_Imm $ Imm64 8w
-                      |))
-         in s with <| bst_environ := env |>
-’;
-
-
-val core1_st = term_EVAL “set_env1 (bir_state_init ^core1_prog)”;
-val core2_st = term_EVAL “set_env2 (bir_state_init ^core2_prog)”;
-
-(* core definitions *)
-val cores = “[ Core 0 ^core1_prog ^core1_st
-             ; Core 1 ^core2_prog ^core2_st ]”;
-val exec_cores = “[ ExecCore 0 ^core1_prog ^core1_st T
-                  ; ExecCore 1 ^core2_prog ^core2_st T ]”;
-
-val term_EVAL = rand o concl o EVAL;
-
-val pmstep = term_EVAL “eval_pmsteps 8 16 (^cores, [])”;
-val pmstepO1 = term_EVAL “eval_pmstepsO1 8 16 (^exec_cores, [])”;
-*)
