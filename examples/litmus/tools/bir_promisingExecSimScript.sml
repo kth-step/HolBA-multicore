@@ -368,7 +368,75 @@ Theorem eval_clstep_amofulfil_soundness:
     MEM s' (eval_clstep_amofulfil cid s M var a_e v_e acq rel) ==>
     ?l. clstep p cid s M l s'
 Proof
-  cheat
+  rpt strip_tac >>
+  fs [eval_clstep_amofulfil_def] >>
+  Cases_on ‘bir_eval_exp_view a_e s.bst_environ s.bst_viewenv’ >>
+  rename1 ‘(l_opt, v_addr)’ >>
+  Cases_on ‘l_opt’ >|
+  [
+    (* NONE *)
+    fs []
+    ,
+    (* SOME l *)
+    rename1 ‘(SOME l, v_addr)’ >>
+    fs [] >>
+    fs [LIST_BIND_def, MEM_FLAT] >>
+    rename1 ‘MEM s' state_list’ >>
+    fs [MEM_MAP] >>
+    rename1 ‘MEM x (mem_readable M l _)’ >>
+    Cases_on ‘x’ >>
+    rename1 ‘MEM (m_r, t_r) (mem_readable M l _)’ >>
+    fs [MEM_readable_thm] >>
+    Cases_on ‘env_update_cast64 (bir_var_name var) m_r.val (bir_var_type var) s.bst_environ’ >|
+    [
+      (* NONE *)
+      gs []
+      ,
+      rename1 ‘SOME new_environ’ >>
+      fs [] >>
+      Cases_on ‘bir_eval_exp_view v_e new_environ
+               (s.bst_viewenv |+
+                (var,
+                 MAX
+                   (MAXL
+                      [v_addr; s.bst_v_rNew; ifView (acq /\ rel) s.bst_v_Rel;
+                       ifView (acq /\ rel) (MAX s.bst_v_rOld s.bst_v_wOld)])
+                   (mem_read_view (s.bst_fwdb l) t_r)))’ >>
+      rename1 ‘_ = (v_opt, v_data)’ >>
+      Cases_on ‘v_opt’ >|
+      [
+        (* NONE *)
+        rfs[]
+        ,
+        (* SOME v *)
+        rename1 ‘_ = (SOME v, v_data)’ >>
+        rfs [MEM_MAP, MEM_FILTER] >>
+        fs [clstep_cases, bir_state_t_component_equality, combinTheory.UPDATE_def, MAXL_def, ifView_def] >>
+        Q.EXISTS_TAC ‘v_data’ >>
+        Q.EXISTS_TAC ‘m_r.val’ >>
+        Q.EXISTS_TAC ‘v’ >>
+        Q.EXISTS_TAC ‘v_wPost’ >>
+        Q.EXISTS_TAC ‘t_r’ >>
+        fs [mem_get_mem_read] >>
+        (Cases_on ‘acq’ >> Cases_on ‘rel’ >> fs [MAX_ASSOC]) >>
+        (
+        Cases_on ‘t'’ >|
+        [
+          fs []
+          ,
+          fs [mem_is_loc_correctness] >>
+          rpt strip_tac >>
+          rfs [mem_every_thm] >>
+          qpat_x_assum ‘!m' t. oEL t M = SOME m' ==> _’ MP_TAC >>
+          fs [] >>
+          HINT_EXISTS_TAC >>
+          HINT_EXISTS_TAC >>
+          fs []
+        ]
+        )
+      ]
+    ]
+  ] 
 QED
 
 Theorem eval_clstep_expr_soundness:
@@ -464,20 +532,17 @@ Proof
   cheat
 QED
 
-
-Theorem LIST_TO_SET_MEM:
-  ∀x l.
-  set l x = MEM x l
-Proof
-  Induct_on ‘l’ >> (simp [])
-QED
-
 Theorem eval_clstep_correctness:
   ∀p cid s M s'.
-  set (eval_clstep cid p s M) s' = ∃l. clstep p cid s M l s'
+  MEM s' (eval_clstep cid p s M) = ∃l. clstep p cid s M l s'
 Proof
-  rpt strip_tac >> EQ_TAC >>
-  (simp [LIST_TO_SET_MEM, eval_clstep_completeness, eval_clstep_soundness])
+  rpt strip_tac >>
+  eq_tac >|
+  [
+    simp [eval_clstep_soundness]
+    ,
+    simp [eval_clstep_completeness]
+  ]
 QED
 
 val _ = export_theory();
