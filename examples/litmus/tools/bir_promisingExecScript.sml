@@ -406,19 +406,6 @@ val eval_clstep_def = Define‘
     | BirStmt_None => []
 ’;
 
-(* Returns true if certified step. *)
-(* TODO: check if halted and so on? *)
-(* eval_certify_def FUEL CORE_ID PROGRAM BIR_STATE MEMORY *)
-val eval_certify_def = Define‘
-  (
-  eval_certify 0 cid p s M = NULL s.bst_prom
-  ) ∧ (
-  eval_certify (SUC f) p cid s M =
-  (NULL s.bst_prom ∨
-  EXISTS (λs'. eval_certify f p cid s' M) (eval_clstep cid p s M))
-  )
-’;
-
 (********* Promising-mode steps ***********)
 
 (* Find promise write step (promise-step + fulfil) *)
@@ -547,6 +534,19 @@ val eval_cstep_def = Define‘
   eval_cstep fuel cid p s M =
   (eval_cpstep fuel cid p s M) ++
   (MAP (\s'. (s', M)) (eval_clstep cid p s M))
+’;
+
+(* Returns true if certified step. *)
+(* TODO: check if halted and so on? *)
+(* eval_certify_def FUEL CORE_ID PROGRAM BIR_STATE MEMORY *)
+val eval_certify_def = Define‘
+  (
+  eval_certify 0 cid p s M = NULL s.bst_prom
+  ) ∧ (
+  eval_certify (SUC f) p cid s M =
+  (NULL s.bst_prom ∨
+  EXISTS (λ(s',M'). eval_certify f p cid s' M') (eval_cstep f cid p s M))
+  )
 ’;
 
 (************************************************************
