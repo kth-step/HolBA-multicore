@@ -3,7 +3,7 @@ sig
     include Abbrev
     (* Argument: Final/Constraint section
        Returns: Predicate on bir_environments *)
-    val parse_final : string  (string list) -> term
+    val parse_final : string -> (string list) -> term
 end
 
 structure herdLitmusFinalLib : herdLitmusFinalLib =
