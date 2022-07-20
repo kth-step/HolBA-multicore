@@ -493,7 +493,7 @@ val eval_fpstep_def = Define‘
         MAP (\s. (NONE,s)) (eval_clstep_branch p s cond_e lbl1 lbl2)
     | BirStmt_Generic stm =>
         MAP (\s. (NONE,s)) (eval_clstep_bir_step p s stm)
-
+    | BirStmt_None => []
 ’;
 
 (* eval_fpsteps finds potential promises or lack of promises.
@@ -526,8 +526,8 @@ val eval_cpstep_def = Define‘
                let
                  M' = SNOC msg M;
                  t  = LENGTH M';
-                 s' = s with bst_prom updated_by (CONS t)
-               in [(s', M)])
+                 s' = s with bst_prom updated_by (SNOC t)
+               in [(s', M')])
 ’;
 
 val eval_cstep_def = Define‘

@@ -28,10 +28,11 @@ Proof
 QED
 
 Triviality IS_SOME_NONE:
-  !x.
-  IS_SOME x = (x <> NONE)
+  !opt.
+  IS_SOME opt = (opt <> NONE)
 Proof
-  Cases_on ‘x’ >> fs []
+  gen_tac >>
+  Cases_on ‘opt’ >> fs []
 QED
 
 Triviality MEM_ZIP_memory_timestamp0:
@@ -657,6 +658,74 @@ Proof
     simp [eval_clstep_soundness]
     ,
     simp [eval_clstep_completeness]
+  ]
+QED
+
+Triviality eval_fpstep_cid_triv:
+  !msg cid p s M s'.
+    MEM (SOME msg, s') (eval_fpstep cid p s M)
+        ==> msg.cid = cid
+Proof
+  simp [eval_fpstep_def] >>
+  rpt gen_tac >>
+  Cases_on ‘bir_get_stmt p s.bst_pc’ >> (fs [MEM_MAP]) >|
+  [
+    simp [eval_fpstep_write_def, bir_eval_exp_view_def] >>
+    rpt FULL_CASE_TAC >> (fs [MEM_MAP])
+    ,
+    simp [eval_fpstep_amowrite_def, bir_eval_exp_view_def] >>
+    rpt (FULL_CASE_TAC >> fs [MEM_MAP, MEM_FLAT, LIST_BIND_def]) >>
+    rpt strip_tac >>
+    rename1 ‘MEM msg_ts (mem_readable _ _ _)’ >>
+    Cases_on ‘msg_ts’ >>
+    fs [MEM_readable_thm] >>
+    rpt (FULL_CASE_TAC >> fs [MEM_MAP])
+  ]
+QED
+
+Triviality eval_fpsteps_cid_triv:
+  !msg f cid p s M.
+    MEM msg (eval_fpsteps f cid p s M) ==> msg.cid = cid
+Proof
+  Induct_on ‘f’ >|
+  [
+    fs [eval_fpsteps_def]
+    ,
+    fs [eval_fpsteps_def] >>
+    Cases_on ‘s.bst_status’ >> (fs []) >>
+    fs [LIST_BIND_def, MEM_MAP, MEM_FLAT] >>
+    rpt strip_tac >>
+    rename1 ‘MEM msg_state (eval_fpstep _ _ _ _)’ >>
+    Cases_on ‘msg_state’ >>
+    rename1 ‘MEM (msg', s') _’ >>
+    Cases_on ‘msg'’ >|
+    [
+      gvs [] >>
+      res_tac
+      ,
+      gvs [] >|
+      [
+        imp_res_tac eval_fpstep_cid_triv
+        ,
+        res_tac
+      ]
+    ]
+  ]
+QED
+
+Theorem eval_fpstep_soundness:
+  !f cid p s s' M M'.
+  MEM (s',M') (eval_cpstep f cid p s M) ==> ?l. cstep p cid s M l s' M'
+Proof
+  Induct_on ‘f’ >|
+  [
+    simp [eval_cpstep_def, LIST_BIND_def, MEM_FLAT, MEM_MAP] >>
+    rpt strip_tac >>
+    gvs [] >>
+    Q.EXISTS_TAC ‘[SUC (LENGTH M)]’ >>
+    simp [cstep_cases, SNOC_APPEND, combinTheory.UPDATE_def, bir_state_t_component_equality]
+    imp_res_tac eval_fpsteps_cid_triv
+    ,
   ]
 QED
 
