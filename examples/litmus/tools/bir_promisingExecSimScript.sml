@@ -1,17 +1,12 @@
 open HolKernel Parse boolLib bossLib BasicProvers;
 open bir_promisingTheory bir_promisingExecTheory bir_programTheory;
 
-open listTheory;
+open listTheory rich_listTheory;
 open arithmeticTheory;
-(*
-open listTheory arithmeticTheory;
-open bir_expTheory;
-open numeralTheory arithmeticTheory;
-open pred_setTheory;
-open prim_recTheory
-*)
+open relationTheory;
 
 val _ = new_theory "bir_promisingExecSim";
+
 
 (****************************************
  * THEOREM: EL_SNOC2
@@ -21,50 +16,191 @@ val _ = new_theory "bir_promisingExecSim";
  *)
 Theorem EL_SNOC2:
   ∀x l.
-    EL (LENGTH l) (SNOC x l) = x
+  EL (LENGTH l) (SNOC x l) = x
 Proof
   Induct_on ‘l’ >>
   (asm_rewrite_tac [LENGTH, SNOC, EL, HD, TL])
 QED
 
-Triviality IS_SOME_NONE:
-  !opt.
-  IS_SOME opt = (opt <> NONE)
+Triviality IS_SOME_EQ_NOT_NONE:
+  !x. IS_SOME x <=> x <> NONE
 Proof
-  gen_tac >>
-  Cases_on ‘opt’ >> fs []
+  Cases_on ‘x’ >> fs[]
 QED
 
-Triviality MEM_ZIP_memory_timestamp0:
-  ∀m M.
-    ~MEM (m, 0) (ZIP (M, [1 .. LENGTH M]))
+Theorem mem_get_SNOC:
+  !M l t msg.
+  t < SUC (LENGTH M) ==>
+  mem_get (SNOC msg M) l t = mem_get M l t
 Proof
-  Induct_on ‘M’ using SNOC_INDUCT >>
-  (fs [listRangeTheory.listRangeINC_def, oEL_def, rich_listTheory.ZIP_SNOC, GENLIST])
+  Cases_on ‘t’ >- fs [mem_get_def] >>
+  fs [mem_get_def, oEL_THM, EL_SNOC]
 QED
 
-Triviality MEM_ZIP_memory_timestamp:
-  ∀m t M.
-    MEM (m, SUC t) (ZIP (M, [1 .. LENGTH M])) = (oEL t M = SOME m)
+Theorem mem_get_SNOC2:
+  !M l msg.
+    mem_get (SNOC msg M) l (SUC (LENGTH M)) =
+    if (msg.loc = l) then SOME msg else NONE 
 Proof
-  Induct_on ‘M’ using SNOC_INDUCT >|
+  fs [mem_get_def, oEL_THM, EL_SNOC2]
+QED
+
+Theorem mem_read_correctness:
+  !M l t v.
+    mem_read M l t = SOME v <=>
+    ?m. mem_get M l t = SOME m /\ m.val = v
+Proof
+  Cases_on ‘t’ >> fs [mem_read_def, mem_get_def, CaseEq"option"]
+QED
+
+Theorem mem_is_loc_correctness:
+  !M t l.
+  mem_is_loc M t l <=> (t = 0 \/
+  (t <> 0 /\ PRE t < LENGTH M /\ (EL (PRE t) M).loc = l))
+Proof
+  Cases_on ‘t’ >- fs [mem_is_loc_def] >>
+  fs [mem_is_loc_def, oEL_THM] >>
+  rpt gen_tac >>
+  Cases_on ‘n < LENGTH M’ >> fs []
+QED
+
+Theorem mem_is_loc_mem_get:
+  !M t l.
+  mem_is_loc M t l <=> (mem_get M l t <> NONE)
+Proof
+  Cases_on ‘t’ >|
   [
-    fs [listRangeTheory.listRangeINC_def, oEL_def]
+    fs[mem_is_loc_def, mem_get_def]
     ,
-    fs [GENLIST, listRangeTheory.listRangeINC_def, rich_listTheory.ZIP_SNOC, oEL_THM] >>
-    simp [ADD1] >>
+    fs [mem_is_loc_def, mem_get_def] >>
+    gen_tac >>
+    Cases_on ‘oEL n M’ >> fs []
+  ]
+QED
+
+Theorem mem_is_cid_correctness:
+  !M t cid.
+  mem_is_cid M t cid <=> (t <> 0 /\ PRE t < LENGTH M /\ (EL (PRE t) M).cid = cid)
+Proof
+  Cases_on ‘t’ >|
+  [
+    fs [mem_is_cid_def]
+    ,
+    fs [mem_is_cid_def, oEL_THM] >>
     rpt gen_tac >>
-    eq_tac >|
+    Cases_on ‘n < LENGTH M’ >> fs []
+  ]
+QED
+
+Theorem MEM_ZIP_memory_timestamp:
+  ∀m t M.
+  MEM (m, t) (ZIP (M, [1 .. LENGTH M])) = (t <> 0 /\ oEL (PRE t) M = SOME m)
+Proof
+  Cases_on ‘t’ >|
+  [
+    Induct_on ‘M’ using SNOC_INDUCT >>
+    (fs [GENLIST, listRangeTheory.listRangeINC_def, rich_listTheory.ZIP_SNOC])
+    ,
+    Induct_on ‘M’ using SNOC_INDUCT >|
     [
-      rpt strip_tac >>
-      (fs [EL_SNOC, EL_SNOC2])
+      fs [listRangeTheory.listRangeINC_def, oEL_def]
       ,
-      rpt strip_tac >>
-      ‘t < LENGTH M \/ t = LENGTH M’ by (fs []) >>
-      (fs [EL_SNOC, EL_SNOC2])
+      fs [GENLIST, listRangeTheory.listRangeINC_def, rich_listTheory.ZIP_SNOC, oEL_THM] >>
+      simp [ADD1] >>
+      rpt gen_tac >>
+      eq_tac >|
+      [
+        rpt strip_tac >>
+        fs [EL_SNOC2, EL_SNOC]
+        ,
+        rpt strip_tac >>
+        fs [GSYM ADD1, EL_SNOC2, EL_SNOC] >>
+        rename1 ‘t < SUC (LENGTH M)’ >>
+        ‘t < LENGTH M \/ t = LENGTH M’ by (fs []) >>
+        (fs [EL_SNOC, EL_SNOC2])
+      ]
     ]
   ]
 QED
+
+Theorem mem_every_thm:
+  ∀P M.
+  mem_every P M = ∀m t. oEL t M = SOME m ⇒ P (m, SUC t)
+Proof
+  fs [mem_every_def, EVERY_MEM] >>
+  rpt gen_tac >> eq_tac >|
+  [
+    rpt strip_tac >>
+    fs [MEM_ZIP_memory_timestamp]
+    ,
+    rpt strip_tac >>
+    rename1 ‘P e’ >>
+    Cases_on ‘e’ >>
+    rename1 ‘P (m, t)’ >>
+    Cases_on ‘t’ >>
+    (fs [MEM_ZIP_memory_timestamp])
+  ]
+QED
+
+Theorem mem_filter_thm:
+  ∀P M m t.
+  MEM (m, t) (mem_filter P M) = (P (m, t) /\ t <> 0 ∧ oEL (PRE t) M = SOME m)
+Proof
+  fs [MEM_ZIP_memory_timestamp, mem_filter_def, MEM_FILTER]
+QED                           
+
+Theorem mem_every_amo:
+  !t_r t_w l M.
+  mem_every (\ (msg,t'). t_r < t' /\ t' < t_w ==> msg.loc <> l) M
+  <=> !t'. t_r < t' /\ t' < t_w ==> ~mem_is_loc M t' l
+Proof
+  rpt gen_tac >> eq_tac >|
+  [
+    rpt strip_tac >>
+    fs [mem_every_thm, oEL_THM, mem_is_loc_correctness] >>
+    Cases_on ‘t'’ >- fs[] >>
+    fs [] >>
+    res_tac
+    ,
+    rpt strip_tac >>
+    fs [mem_every_thm, oEL_THM] >>
+    rpt strip_tac >>
+    fs [mem_is_loc_correctness] >>
+    res_tac >>
+    fs []
+  ]
+QED
+
+Triviality MEM_MAP2:
+  !l f x y.
+    MEM (x, y) (MAP f l) <=> ?x' y'. (x, y) = f (x', y') /\ MEM (x', y') l
+Proof
+  rpt gen_tac >> eq_tac >|
+  [
+    fs [MEM_MAP] >>
+    rpt strip_tac >>
+    Cases_on ‘y'’ >>
+    Q.EXISTS_TAC ‘q’ >> Q.EXISTS_TAC ‘r’ >>
+    fs []
+    ,
+    fs [MEM_MAP] >>
+    rpt strip_tac >>
+    Q.EXISTS_TAC ‘(x', y')’  >>
+    fs []
+  ] 
+QED
+
+Triviality EXISTS_MEM2:
+  !P l.
+    EXISTS P l <=> ?x y. MEM (x, y) l /\ P (x, y)
+Proof
+  fs [EXISTS_MEM] >>
+  rpt gen_tac >> eq_tac >-
+   (rpt strip_tac >>
+    Cases_on ‘e’ >> METIS_TAC []) >>
+  METIS_TAC []
+QED
+
 
 
 
@@ -110,78 +246,30 @@ Proof
   fs [EVERY_EL, oEL_THM]
 QED
 
-Theorem mem_every_thm:
-  ∀P M.
-  mem_every P M = ∀m t. oEL t M = SOME m ⇒ P (m, SUC t)
-Proof
-  fs [mem_every_def, EVERY_MEM] >>
-  rpt gen_tac >> eq_tac >|
-  [
-    rpt strip_tac >>
-    fs [MEM_ZIP_memory_timestamp]
-    ,
-    rpt strip_tac >>
-    rename1 ‘P e’ >>
-    Cases_on ‘e’ >>
-    rename1 ‘P (m, t)’ >>
-    Cases_on ‘t’ >>
-    (fs [MEM_ZIP_memory_timestamp0, MEM_ZIP_memory_timestamp])
-  ]
-QED
-
-Theorem mem_filter_thm:
-∀P M m t.
-  MEM (m, SUC t) (mem_filter P M) = (P (m, SUC t) ∧ oEL t M = SOME m)
-Proof
-  fs [MEM_ZIP_memory_timestamp, mem_filter_def, MEM_FILTER]
-QED                           
-
-(* Replace this *)
-Theorem mem_get_0_SOME_thm:
-  !M l m.
-    mem_get M l 0 = SOME m <=> m = mem_default l
-Proof
-  fs [mem_get_def, EQ_SYM_EQ]
-QED
-
-Theorem mem_get_SUC_SOME_thm:
+Theorem mem_get_correctness:
   !M l t m.
-    mem_get M l (SUC t) = SOME m <=> oEL t M = SOME m /\ m.loc = l
+  mem_get M l t = SOME m <=>
+  ((t = 0 /\ m = mem_default l)
+  \/
+  (t <> 0 /\ oEL (PRE t) M = SOME m /\ m.loc = l))
 Proof
+  Cases_on ‘t’ >- fs [mem_get_def, EQ_SYM_EQ] >>
   fs [mem_get_def, CaseEq"option"]
 QED
-
-Theorem IS_SOME_mem_get_0_thm:
+  
+Triviality IS_SOME_mem_get_0_thm:
   ∀M l.
-    IS_SOME (mem_get M l 0)
+  IS_SOME (mem_get M l 0)
 Proof
   fs [mem_get_def]
 QED
 
 Theorem mem_get_mem_read:
   !M l t m.
-  mem_get M l t = SOME m ==> mem_read M l t = SOME m.val
+    mem_get M l t = SOME m ==> mem_read M l t = SOME m.val
 Proof
   Cases_on ‘t’ >>
   (fs [mem_get_def, mem_default_def, mem_read_def])
-QED
-
-Theorem mem_is_loc_correctness:
-  !M t l.
-    mem_is_loc M (SUC t) l <=> ?m. oEL t M = SOME m /\ m.loc = l
-Proof
-  fs [mem_is_loc_def] >>
-  rpt gen_tac >>
-  Cases_on ‘oEL t M’ >> (fs [])
-QED
-
-Theorem mem_is_cid_correctness:
-  !M t cid.
-    mem_is_cid M (SUC t) cid <=> ?m. oEL t M = SOME m /\ m.cid = cid
-Proof
-  fs [mem_is_cid_def] >>
-  rpt gen_tac >>
-  Cases_on ‘oEL t M’ >> (fs [])
 QED
 
 Theorem mem_atomic_correctness:
@@ -197,27 +285,27 @@ Proof
     [
       fs []
       ,
-      fs [mem_is_loc_correctness, mem_is_cid_correctness] >>
-      LAST_X_ASSUM drule >>
-      fs []
+      fs [mem_is_loc_correctness, mem_is_cid_correctness, oEL_THM]
     ]
     ,
     rpt strip_tac >>
     rename1 ‘t_r < SUC t’ >>
-    ‘mem_is_loc M (SUC t) l’ by (fs [mem_is_loc_correctness]) >>
-    ‘mem_is_cid M (SUC t) cid’ by (fs [mem_is_cid_correctness]) >>
+    ‘mem_is_loc M (SUC t) l’ by (fs [mem_is_loc_correctness, oEL_THM]) >>
+    ‘mem_is_cid M (SUC t) cid’ by (fs [mem_is_cid_correctness, oEL_THM]) >>
     LAST_X_ASSUM drule >>
-    gs [mem_is_cid_correctness]
+    gs [mem_is_cid_correctness, oEL_THM]
   ]
 QED
 
 
 Theorem MEM_readable_thm:
-  ∀m t M v_max l.
-    MEM (m, t) (mem_readable M l v_max)
-    = (mem_get M l t = SOME m ∧
-       ∀t'. t < t' ∧ t' ≤ v_max ⇒ ~mem_is_loc M t' l)
+  ∀m_t M v_max l.
+  MEM m_t (mem_readable M l v_max)
+  = (mem_get M l (SND m_t) = SOME (FST m_t) ∧
+     ∀t'. (SND m_t) < t' ∧ t' ≤ v_max ⇒ ~mem_is_loc M t' l)
 Proof
+  tmCases_on “m_t” ["m t"] >>
+  fs [] >>
   rpt gen_tac >>
   eq_tac >|
   [
@@ -231,14 +319,14 @@ Proof
       [
         fs []
         ,
-        fs [mem_is_loc_correctness] >>
+        fs [mem_is_loc_correctness, oEL_THM] >>
         FIRST_X_ASSUM drule >>
         fs []
       ]
       ,
       Cases_on ‘t’ >|
       [
-        fs [MEM, mem_filter_def, MEM_ZIP_memory_timestamp0, MEM_FILTER]
+        fs [MEM, mem_filter_def, MEM_ZIP_memory_timestamp, MEM_FILTER]
         ,
         fs [mem_filter_thm, mem_get_def]
       ]
@@ -247,7 +335,7 @@ Proof
       [
         fs []
         ,
-        fs [mem_is_loc_correctness] >>
+        fs [mem_is_loc_correctness, oEL_THM] >>
         FIRST_X_ASSUM drule >>
         fs []
       ]
@@ -258,13 +346,13 @@ Proof
     rpt strip_tac >|
     [
       FIRST_X_ASSUM drule >>
-      fs [mem_is_loc_correctness]
+      fs [mem_is_loc_correctness, oEL_THM]
       ,
       Cases_on ‘t’ >|
       [
         fs [mem_get_def]
         ,
-        fs [mem_get_SUC_SOME_thm, mem_filter_thm]
+        fs [mem_get_correctness, mem_filter_thm]
       ]
     ]
   ]
@@ -276,79 +364,56 @@ QED
  ************************************************************)
 
 Theorem eval_clstep_read_soundness:
-  ∀p cid M s s' var e acq rel xcl cast.
-    bir_get_stmt p s.bst_pc = BirStmt_Read var e cast acq rel xcl ⇒
-    MEM s' (eval_clstep_read s M var e acq rel xcl) ⇒ ?l. clstep p cid s M l s'
+  ∀p cid M s s' var e acq rel xcl cast l.
+  MEM (l, s') (eval_clstep_read s M var e acq rel xcl) ==>
+  bir_get_stmt p s.bst_pc = BirStmt_Read var e cast acq rel xcl ==>
+  clstep p cid s M l s'
 Proof
-  rpt strip_tac
-  >> fs [clstep_cases, eval_clstep_read_def, bir_state_t_component_equality, bir_eval_exp_view_def]
-  >> Cases_on ‘bir_eval_exp e s.bst_environ’
-  >- (fs [CaseEq"option"])
-  >> fs [CaseEq"option"]
-  (* MEM s' (MAP_PARTIAL (λ(msg,t). state option) (mem_readable M x (MAX ...)) *)
-  >> fs [MEM_MAP_PARTIAL, MEM_MAP]
-  >> rename1 ‘MEM x' (mem_readable _ _ _)’
-  >> Cases_on ‘x'’
-  >> fs [MEM_readable_thm]
-  >> rename1 ‘mem_get M l t = SOME msg’
-  >> Q.EXISTS_TAC ‘msg.val’ >> Q.EXISTS_TAC ‘t’
-  >> fs [mem_get_mem_read, MAXL_def, ifView_def, combinTheory.UPDATE_def]
-  >> rw []
-  >> (
-  fs []
-  (* Fix the MAX parts if needed. *)
-  >> METIS_TAC [MAX_ASSOC, MAX_COMM]
-  )
+  rpt strip_tac >>
+  fs [eval_clstep_read_def, bir_eval_exp_view_def] >>
+  Cases_on ‘bir_eval_exp e s.bst_environ’ >- (fs [CaseEq"option"]) >>
+  fs [CaseEq"option"] >>
+  fs [MEM_MAP_PARTIAL, MEM_MAP] >>
+  rename1 ‘MEM msg_t (mem_readable M loc _)’ >> tmCases_on “msg_t” ["msg t"] >>
+  fs [MEM_readable_thm] >>
+  fs [clstep_cases, bir_state_t_component_equality, bir_eval_exp_view_def] >>
+  imp_res_tac mem_get_mem_read >>
+  Q.EXISTS_TAC ‘msg.val’ >> Q.EXISTS_TAC ‘t’ >>
+  fs [MAXL_def, ifView_def, combinTheory.UPDATE_def] >>
+  Cases_on ‘xcl’ >> Cases_on ‘acq’ >> Cases_on ‘rel’ >>
+  (rfs [] >> METIS_TAC [MAX_COMM, MAX_ASSOC])
 QED                                   
 
 Theorem eval_clstep_fulfil_soundness:
-  ∀p s s' a_e v_e xcl acq rel cid M.
-    bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel ⇒
-    MEM s' (eval_clstep_fulfil p cid s M a_e v_e xcl acq rel) ⇒ ?l. clstep p cid s M l s'
+  ∀p s s' a_e v_e xcl acq rel cid M l.
+  bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel ==>
+  MEM (l, s') (eval_clstep_fulfil p cid s M a_e v_e xcl acq rel) ==>
+  clstep p cid s M l s'
 Proof
   rpt strip_tac >>
-  fs [eval_clstep_fulfil_def] >>
-  (* Get pairs from bir_eval_exp_view *)
-  Cases_on ‘bir_eval_exp_view v_e s.bst_environ s.bst_viewenv’ >>
-  Cases_on ‘bir_eval_exp_view a_e s.bst_environ s.bst_viewenv’ >>
-  rename1 ‘bir_eval_exp_view v_e s.bst_environ s.bst_viewenv = (v_opt,v_data)’ >>
-  rename1 ‘bir_eval_exp_view a_e s.bst_environ s.bst_viewenv = (l_opt,v_addr)’ >>
-  (* Removes NONE cases *)
-  (Cases_on ‘l_opt’ >> Cases_on ‘v_opt’ >> fs []) >> 
-  (* Removes MEM, MAP_PARTIONAL, MAP, and FILTER *)
+  fs [eval_clstep_fulfil_def, bir_eval_exp_view_def] >>
+  tmCases_on “bir_eval_exp a_e s.bst_environ” ["", "loc"] >> fs[] >>
+  tmCases_on “bir_eval_exp v_e s.bst_environ” ["", "val"] >> fs[] >>
   fs [MEM_MAP_PARTIAL, MEM_MAP, MEM_FILTER] >>
-  (* Removes NONE cases *)
-  (Cases_on ‘fulfil_update_env p s xcl’ >> Cases_on ‘fulfil_update_viewenv p s xcl v_post’ >> fs []) >>
-  (* At this point we have no big case splits (except rel acq xcl) *)
-  (* Simplify assumptions *)
-  Cases_on ‘xcl’ >|
-  [
-    (* xcl = T *)
-    Cases_on ‘s.bst_xclb’ >- (fs []) >>
-    fs [clstep_cases, MAXL_def, ifView_def, bir_state_t_component_equality, combinTheory.UPDATE_def] >>
-    fs [mem_atomic_correctness] >>
-    Q.EXISTS_TAC ‘[v_post]’ >>
-    rw [MAX_COMM, EQ_SYM_EQ]
-    ,
-    (* xcl = F *)
-    fs [clstep_cases, MAXL_def, ifView_def, bir_state_t_component_equality, combinTheory.UPDATE_def] >>
-    Q.EXISTS_TAC ‘v_post’ >>
-    fs [MAX_COMM, EQ_SYM_EQ]
-  ]
+  tmCases_on “fulfil_update_env p s xcl” ["", "new_env"] >> fs [] >>
+  tmCases_on “fulfil_update_viewenv p s xcl v_post” ["", "new_viewenv"] >> fs [] >>
+  fs [clstep_cases, bir_eval_exp_view_def, bir_state_t_component_equality, combinTheory.UPDATE_def, mem_atomic_correctness, MAXL_def, ifView_def, IS_SOME_EQ_NOT_NONE] >>
+  Cases_on ‘xcl’ >> Cases_on ‘acq’ >> Cases_on ‘rel’ >> fs [] >> METIS_TAC [MAX_COMM]
 QED
 
 Theorem eval_clstep_xclfail_soundness:
-  ∀p s s' a_e v_e xcl acq rel cid M.
-    bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel ⇒
-    MEM s' (eval_clstep_xclfail p cid s xcl) ⇒ ?l. clstep p cid s M l s'
+  ∀p s s' a_e v_e xcl acq rel cid M l.
+  bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel ==>
+  MEM (l, s') (eval_clstep_xclfail p cid s xcl) ==>
+  clstep p cid s M l s'
 Proof
+  rpt strip_tac >>
   Cases_on ‘xcl’ >|
   [
     fs [eval_clstep_xclfail_def, clstep_cases] >>
     Cases_on ‘xclfail_update_env p s’ >- (fs []) >>
     Cases_on ‘xclfail_update_viewenv p s’ >- (fs []) >>
     rpt strip_tac >>
-    Q.EXISTS_TAC ‘[]’ >>
     fs [bir_state_t_component_equality]
     ,
     fs [eval_clstep_xclfail_def]
@@ -356,62 +421,36 @@ Proof
 QED
 
 Theorem eval_clstep_amofulfil_soundness:
-  ∀p s var a_e v_e acq rel s' cid M.
-    bir_get_stmt p s.bst_pc = BirStmt_Amo var a_e v_e acq rel ==>
-    MEM s' (eval_clstep_amofulfil cid s M var a_e v_e acq rel) ==>
-    ?l. clstep p cid s M l s'
+  ∀p s var a_e v_e acq rel s' cid M l.
+  MEM (l, s') (eval_clstep_amofulfil cid s M var a_e v_e acq rel) ==>
+  bir_get_stmt p s.bst_pc = BirStmt_Amo var a_e v_e acq rel ==>
+  clstep p cid s M l s'
 Proof
   rpt strip_tac >>
-  fs [eval_clstep_amofulfil_def] >>
-  Cases_on ‘bir_eval_exp_view a_e s.bst_environ s.bst_viewenv’ >>
-  rename1 ‘(l_opt, v_addr)’ >>
-  Cases_on ‘l_opt’ >- (fs[]) >>
-  rename1 ‘(SOME l, v_addr)’ >>
-  fs [] >>
+  fs [eval_clstep_amofulfil_def, bir_eval_exp_view_def] >>
+  tmCases_on “bir_eval_exp a_e s.bst_environ” ["", "loc"] >> fs [] >>
   fs [LIST_BIND_def, MEM_FLAT] >>
-  rename1 ‘MEM s' state_list’ >>
+  rename1 ‘MEM (l, s') state_list’ >>
   fs [MEM_MAP] >>
-  rename1 ‘MEM x (mem_readable M l _)’ >>
-  Cases_on ‘x’ >>
-  rename1 ‘MEM (m_r, t_r) (mem_readable M l _)’ >>
+  rename1 ‘MEM x (mem_readable M loc _)’ >> tmCases_on “x” ["m_r t_r"] >>
   fs [MEM_readable_thm] >>
   Cases_on ‘env_update_cast64 (bir_var_name var) m_r.val (bir_var_type var) s.bst_environ’ >- (gs []) >>
   rename1 ‘SOME new_environ’ >>
-  fs [] >>
-  Cases_on ‘bir_eval_exp_view v_e new_environ
-            (s.bst_viewenv |+ (var, MAX (MAXL [v_addr; s.bst_v_rNew;
-                                               ifView (acq /\ rel) s.bst_v_Rel;
-                                               ifView (acq /\ rel) (MAX s.bst_v_rOld s.bst_v_wOld)])
-                                        (mem_read_view (s.bst_fwdb l) t_r)))’ >>
-  rename1 ‘_ = (v_opt, v_data)’ >>
-  Cases_on ‘v_opt’ >- (rfs []) >>
-  rename1 ‘_ = (SOME v, v_data)’ >>
-  rfs [MEM_MAP, MEM_FILTER] >>
-  fs [clstep_cases, bir_state_t_component_equality, combinTheory.UPDATE_def, MAXL_def, ifView_def] >>
-  Q.EXISTS_TAC ‘v_data’ >>
-  Q.EXISTS_TAC ‘m_r.val’ >>
-  Q.EXISTS_TAC ‘v’ >>
-  Q.EXISTS_TAC ‘v_wPost’ >>
-  Q.EXISTS_TAC ‘t_r’ >>
-  fs [mem_get_mem_read] >>
-  (Cases_on ‘acq’ >> Cases_on ‘rel’ >> fs [MAX_ASSOC]) >>
-  (
-  Cases_on ‘t'’ >- (fs []) >>
-  fs [mem_is_loc_correctness] >>
-  rpt strip_tac >>
-  rfs [mem_every_thm] >>
-  qpat_x_assum ‘!m' t. oEL t M = SOME m' ==> _’ MP_TAC >>
-  fs [] >>
-  HINT_EXISTS_TAC >>
-  HINT_EXISTS_TAC >>
-  fs []
-  )
+  fs [bir_eval_exp_view_def] >>
+  tmCases_on “bir_eval_exp v_e new_environ” ["", "v"] >- rfs [] >>
+  rfs [] >>
+  fs [MEM_MAP, MEM_FILTER] >>
+  fs [clstep_cases, bir_state_t_component_equality, combinTheory.UPDATE_def, MAXL_def, ifView_def, bir_eval_exp_view_def, mem_every_amo] >>
+  imp_res_tac mem_get_mem_read >>
+  Q.EXISTS_TAC ‘m_r.val’ >> Q.EXISTS_TAC ‘t_r’ >>
+  Cases_on ‘acq’ >> Cases_on ‘rel’ >> fs []
 QED
 
 Theorem eval_clstep_expr_soundness:
-  ∀p cid M s s' var e.
-  bir_get_stmt p s.bst_pc = BirStmt_Expr var e ⇒
-  MEM s' (eval_clstep_exp s var e) ⇒ ?l. clstep p cid s M l s'
+  ∀p cid M s s' var e l.
+  MEM (l, s') (eval_clstep_exp s var e) ==>
+  bir_get_stmt p s.bst_pc = BirStmt_Expr var e ==>
+  clstep p cid s M l s'
 Proof
   rpt strip_tac >>
   fs [clstep_cases, eval_clstep_exp_def] >>
@@ -419,9 +458,10 @@ Proof
 QED                                              
 
 Theorem eval_clstep_fence_soundness:
-  ∀p cid M s s' K1 K2.
-  bir_get_stmt p s.bst_pc = BirStmt_Fence K1 K2 ⇒
-  MEM s' (eval_clstep_fence s K1 K2) ⇒ ?l. clstep p cid s M l s'
+  ∀p cid M s s' K1 K2 l.
+  bir_get_stmt p s.bst_pc = BirStmt_Fence K1 K2 ==>
+  MEM (l, s') (eval_clstep_fence s K1 K2) ==>
+  clstep p cid s M l s'
 Proof
   rpt strip_tac >>
   fs [clstep_cases, eval_clstep_fence_def, bir_state_t_component_equality] >>
@@ -430,9 +470,10 @@ Proof
 QED
 
 Theorem eval_clstep_branch_soundness:
-  ∀p cid M s s' cond_e lbl1 lbl2.
-  bir_get_stmt p s.bst_pc = BirStmt_Branch cond_e lbl1 lbl2 ⇒
-  MEM s' (eval_clstep_branch p s cond_e lbl1 lbl2) ⇒ ?l. clstep p cid s M l s'
+  ∀p cid M s s' cond_e lbl1 lbl2 l.
+  bir_get_stmt p s.bst_pc = BirStmt_Branch cond_e lbl1 lbl2 ==>
+  MEM (l,s') (eval_clstep_branch p s cond_e lbl1 lbl2) ==>
+  clstep p cid s M l s'
 Proof
   rpt strip_tac >>
   fs [clstep_cases, eval_clstep_branch_def, bir_state_t_component_equality] >>
@@ -444,9 +485,10 @@ Proof
 QED
 
 Theorem eval_clstep_generic_soundness:
-  ∀p cid M s s' stmt.
-  bir_get_stmt p s.bst_pc = BirStmt_Generic stmt ⇒
-  MEM s' (eval_clstep_bir_step p s stmt) ⇒ ?l. clstep p cid s M l s'
+  ∀p cid M s s' stmt l.
+  bir_get_stmt p s.bst_pc = BirStmt_Generic stmt ==>
+  MEM (l,s') (eval_clstep_bir_step p s stmt) ==>
+  clstep p cid s M l s'
 Proof
   rpt strip_tac >>
   fs [clstep_cases, eval_clstep_bir_step_def, bir_state_t_component_equality] >>
@@ -455,8 +497,9 @@ Proof
 QED
 
 Theorem eval_clstep_soundness:
-  ∀p cid M l s s'.
-  MEM s' (eval_clstep cid p s M) ⇒ ∃l. clstep p cid s M l s'
+  ∀p cid M s s' l.
+  MEM (l,s') (eval_clstep cid p s M) ==>
+  clstep p cid s M l s'
 Proof
   rpt strip_tac
   >> fs [eval_clstep_def]
@@ -482,9 +525,9 @@ QED
 
 Theorem eval_clstep_read_completeness:
   ∀p cid M s s' var a_e acq rel xcl cast l.
-    clstep p cid s M l s' /\
-    bir_get_stmt p s.bst_pc = BirStmt_Read var a_e cast xcl acq rel ==>
-    MEM s' (eval_clstep_read s M var a_e xcl acq rel)
+  clstep p cid s M l s' ==>
+  bir_get_stmt p s.bst_pc = BirStmt_Read var a_e cast xcl acq rel ==>
+  MEM (l,s') (eval_clstep_read s M var a_e xcl acq rel)
 Proof
   rpt strip_tac >>
   gvs [clstep_cases, eval_clstep_read_def, bir_eval_exp_view_def] >>
@@ -506,10 +549,9 @@ QED
 
 Theorem eval_clstep_write_completeness:
   ∀p s s' a_e v_e xcl acq rel cid M l.
-    clstep p cid s M l s' /\
-    bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel ==>
-    (MEM s' (eval_clstep_fulfil p cid s M a_e v_e xcl acq rel) \/
-    MEM s' (eval_clstep_xclfail p cid s xcl))
+  clstep p cid s M l s' ==>
+  bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel ==>
+  MEM (l,s') (eval_clstep_fulfil p cid s M a_e v_e xcl acq rel ++ eval_clstep_xclfail p cid s xcl)
 Proof
   rpt strip_tac >>
   fs [clstep_cases, eval_clstep_fulfil_def, eval_clstep_xclfail_def, bir_eval_exp_view_def]
@@ -517,7 +559,7 @@ Proof
     (* xclfail *)
     DISJ2_TAC >>
     (Cases_on ‘xclfail_update_env p s’ >>
-    Cases_on ‘xclfail_update_viewenv p s’) >>
+     Cases_on ‘xclfail_update_viewenv p s’) >>
     (fs [bir_state_t_component_equality, combinTheory.UPDATE_def])
     ,
     (* fulfill *)
@@ -529,64 +571,53 @@ Proof
     (Cases_on ‘fulfil_update_env p s xcl’ >>
      Cases_on ‘fulfil_update_viewenv p s xcl v_post’ >> fs[]) >>
     gvs [bir_state_t_component_equality, combinTheory.UPDATE_def, ifView_def, MAXL_def] >>
-    fs [mem_atomic_correctness, IS_SOME_NONE] >>
+    fs [mem_atomic_correctness, IS_SOME_EQ_NOT_NONE] >>
     (rpt FULL_CASE_TAC >> fs[] >>
-    METIS_TAC [MAX_ASSOC, MAX_COMM])
+     METIS_TAC [MAX_ASSOC, MAX_COMM])
   ] 
 QED
 
 Theorem eval_clstep_amo_completeness:
-  ∀p s var a_e v_e acq rel s' cid M prom_fulfilled.
-    clstep p cid s M prom_fulfilled s' /\
-    bir_get_stmt p s.bst_pc = BirStmt_Amo var a_e v_e acq rel ==>
-    MEM s' (eval_clstep_amofulfil cid s M var a_e v_e acq rel)
+  ∀p s var a_e v_e acq rel s' cid M l.
+  clstep p cid s M l s' ==>
+  bir_get_stmt p s.bst_pc = BirStmt_Amo var a_e v_e acq rel ==>
+  MEM (l,s') (eval_clstep_amofulfil cid s M var a_e v_e acq rel)
 Proof
-  rpt strip_tac
-  >> fs [clstep_cases, eval_clstep_amofulfil_def, bir_eval_exp_view_def]
-  >> Cases_on ‘bir_eval_exp a_e s.bst_environ’ >- fs []
-  >> fs [LIST_BIND_def, MEM_FLAT, MEM_MAP]
-  >> CONV_TAC (DEPTH_CONV LEFT_AND_EXISTS_CONV)
-  >> CONV_TAC SWAP_EXISTS_CONV
-  >> fs [mem_read_def]
-  >> Cases_on ‘mem_get M l t_r’ >- fs []
-  >> rename1 ‘mem_get M l t_r = SOME msg’
-  >> fs []
-  >> Q.EXISTS_TAC ‘(msg, t_r)’
-  >> fs [MEM_readable_thm]
-  >> Cases_on ‘env_update_cast64 (bir_var_name var) v_r (bir_var_type var) s.bst_environ’ >- fs []
-  >> gvs []
-  >> Cases_on ‘bir_eval_exp v_e new_environ’ >- fs []
-  >> gvs [] 
-  >> fs [MEM_MAP, MEM_FILTER]
-  >> CONV_TAC RIGHT_AND_EXISTS_CONV
-  >> Q.EXISTS_TAC ‘t_w’
-  >> fs []
-  >> fs [mem_every_thm, MAXL_def, ifView_def, bir_state_t_component_equality, combinTheory.UPDATE_def]
-  >> Cases_on ‘acq’ >> Cases_on ‘rel’
-  >> fs []
-  >> rpt strip_tac
-  >> assume_tac mem_is_loc_correctness
-  >> res_tac
-QED
+  rpt strip_tac >>
+  fs [clstep_cases, eval_clstep_amofulfil_def, bir_eval_exp_view_def] >>
+  Cases_on ‘bir_eval_exp a_e s.bst_environ’ >- fs [] >>
+  fs [LIST_BIND_def, MEM_FLAT, MEM_MAP] >>
+  CONV_TAC (DEPTH_CONV LEFT_AND_EXISTS_CONV) >>
+  CONV_TAC SWAP_EXISTS_CONV >>
+  fs [mem_read_correctness] >>
+  Q.EXISTS_TAC ‘(m, t_r)’ >>
+  fs [MEM_readable_thm] >>
+  Cases_on ‘env_update_cast64 (bir_var_name var) v_r (bir_var_type var) s.bst_environ’ >- fs [] >>
+  Cases_on ‘bir_eval_exp v_e new_environ’ >- fs [] >>
+  gvs [MEM_FILTER, MEM_MAP] >>
+  fs [bir_state_t_component_equality, mem_every_amo] >>
+  fs [MAXL_def, ifView_def] >>
+  Cases_on ‘acq’ >> Cases_on ‘rel’ >> fs[]
+QED                                              
 
 Theorem eval_clstep_expr_completeness:
   ∀p cid M s s' var e l.
-  clstep p cid s M l s' /\
+  clstep p cid s M l s' ==>
   bir_get_stmt p s.bst_pc = BirStmt_Expr var e ==>
-  MEM s' (eval_clstep_exp s var e)
+  MEM (l, s') (eval_clstep_exp s var e)
 Proof
-  rpt strip_tac
-  >> gvs [clstep_cases, eval_clstep_exp_def, bir_eval_exp_view_def]
-  >> Cases_on ‘bir_eval_exp e s.bst_environ’ >- fs []
-  >> Cases_on ‘env_update_cast64 (bir_var_name var) x (bir_var_type var) s.bst_environ’ >- fs []
-  >> fs []
-QED                                              
+  rpt strip_tac >>
+  gvs [clstep_cases, eval_clstep_exp_def, bir_eval_exp_view_def] >>
+  CASE_TAC >- fs [] >>
+  CASE_TAC >- fs [] >>
+  fs [combinTheory.UPDATE_def, bir_state_t_component_equality, MAX_COMM]
+QED
 
 Theorem eval_clstep_fence_completeness:
   ∀p cid M s s' K1 K2 l.
-  bir_get_stmt p s.bst_pc = BirStmt_Fence K1 K2 ==>
   clstep p cid s M l s' ==>
-  MEM s' (eval_clstep_fence s K1 K2)
+  bir_get_stmt p s.bst_pc = BirStmt_Fence K1 K2 ==>
+  MEM (l, s') (eval_clstep_fence s K1 K2)
 Proof
   rpt strip_tac >>
   gvs [clstep_cases, eval_clstep_fence_def, bir_eval_exp_view_def] >>
@@ -595,9 +626,9 @@ QED
 
 Theorem eval_clstep_branch_completeness:
   ∀p cid M s s' cond_e lbl1 lbl2 l.
-  bir_get_stmt p s.bst_pc = BirStmt_Branch cond_e lbl1 lbl2 ==>
   clstep p cid s M l s' ==>
-  MEM s' (eval_clstep_branch p s cond_e lbl1 lbl2)
+  bir_get_stmt p s.bst_pc = BirStmt_Branch cond_e lbl1 lbl2 ==>
+  MEM (l,s') (eval_clstep_branch p s cond_e lbl1 lbl2)
 Proof
   rpt strip_tac >>
   gvs [clstep_cases, eval_clstep_branch_def, bir_eval_exp_view_def] >>
@@ -606,22 +637,22 @@ QED
 
 Theorem eval_clstep_bir_generic_completeness:
   ∀p cid M s s' stmt l.
-  bir_get_stmt p s.bst_pc = BirStmt_Generic stmt ==>
   clstep p cid s M l s' ==>
-  MEM s' (eval_clstep_bir_step p s stmt)
+  bir_get_stmt p s.bst_pc = BirStmt_Generic stmt ==>
+  MEM (l,s') (eval_clstep_bir_step p s stmt)
 Proof
   rpt strip_tac >>
   gvs [clstep_cases, eval_clstep_bir_step_def]
 QED
 
 Theorem eval_clstep_completeness:
-  ∀p cid s M l s'.
-   clstep p cid s M l s' ⇒ MEM s' (eval_clstep cid p s M)
+  ∀p cid s M s' l.
+   clstep p cid s M l s' ⇒ MEM (l,s') (eval_clstep cid p s M)
 Proof
   rpt strip_tac >>
   fs [eval_clstep_def] >>
-  Cases_on ‘bir_get_stmt p s.bst_pc’ >> (fs [])
-  >| [
+  Cases_on ‘bir_get_stmt p s.bst_pc’ >> (fs []) >|
+  [
     (* read *)
     imp_res_tac eval_clstep_read_completeness
     ,
@@ -649,8 +680,8 @@ Proof
 QED
 
 Theorem eval_clstep_correctness:
-  ∀p cid s M s'.
-  MEM s' (eval_clstep cid p s M) = ∃l. clstep p cid s M l s'
+  ∀p cid s M s' l.
+  MEM (l,s') (eval_clstep cid p s M) = clstep p cid s M l s'
 Proof
   rpt strip_tac >>
   eq_tac >|
@@ -661,71 +692,427 @@ Proof
   ]
 QED
 
-Triviality eval_fpstep_cid_triv:
-  !msg cid p s M s'.
-    MEM (SOME msg, s') (eval_fpstep cid p s M)
-        ==> msg.cid = cid
-Proof
-  simp [eval_fpstep_def] >>
-  rpt gen_tac >>
-  Cases_on ‘bir_get_stmt p s.bst_pc’ >> (fs [MEM_MAP]) >|
-  [
-    simp [eval_fpstep_write_def, bir_eval_exp_view_def] >>
-    rpt FULL_CASE_TAC >> (fs [MEM_MAP])
-    ,
-    simp [eval_fpstep_amowrite_def, bir_eval_exp_view_def] >>
-    rpt (FULL_CASE_TAC >> fs [MEM_MAP, MEM_FLAT, LIST_BIND_def]) >>
-    rpt strip_tac >>
-    rename1 ‘MEM msg_ts (mem_readable _ _ _)’ >>
-    Cases_on ‘msg_ts’ >>
-    fs [MEM_readable_thm] >>
-    rpt (FULL_CASE_TAC >> fs [MEM_MAP])
-  ]
-QED
+Definition cstep_seq_rtc_f_def:
+  (cstep_seq_rtc_f 0 p cid (s,M) (s',M') <=> (s = s' /\ M = M'))
+  /\
+  (cstep_seq_rtc_f (SUC f) p cid (s,M) (s',M') <=>
+  ((s = s' /\ M = M') \/
+   ?s'' M''. cstep_seq p cid (s,M) (s'',M'') /\ cstep_seq_rtc_f f p cid (s'',M'') (s',M')))
+End
 
-Triviality eval_fpsteps_cid_triv:
-  !msg f cid p s M.
-    MEM msg (eval_fpsteps f cid p s M) ==> msg.cid = cid
+(* Fueled version of is_certified *)
+Definition is_certified_f_def:
+  is_certified_f f p cid s M <=>
+   ?s' M'. cstep_seq_rtc_f f p cid (s, M) (s', M') /\ s'.bst_prom = []
+End
+
+Triviality NULL_prom_is_certified_triv:
+  !p cid s M.
+  s.bst_prom = [] ==> is_certified p cid s M
+Proof
+  rw [is_certified_def] >>
+  Q.EXISTS_TAC ‘s’ >> Q.EXISTS_TAC ‘M’ >>
+  fs [cstep_seq_rtc_def]
+QED  
+
+Theorem cstep_seq_rtc_f_soundness_thm:
+  !f cid p s M s' M'.
+    cstep_seq_rtc_f f p cid (s,M) (s', M') ==>
+    cstep_seq_rtc p cid (s,M) (s',M')
 Proof
   Induct_on ‘f’ >|
   [
-    fs [eval_fpsteps_def]
+    fs [cstep_seq_rtc_def, cstep_seq_rtc_f_def]
     ,
-    fs [eval_fpsteps_def] >>
-    Cases_on ‘s.bst_status’ >> (fs []) >>
-    fs [LIST_BIND_def, MEM_MAP, MEM_FLAT] >>
-    rpt strip_tac >>
-    rename1 ‘MEM msg_state (eval_fpstep _ _ _ _)’ >>
-    Cases_on ‘msg_state’ >>
-    rename1 ‘MEM (msg', s') _’ >>
-    Cases_on ‘msg'’ >|
+    simp [cstep_seq_rtc_def, Once RTC_CASES1] >>
+    simp [cstep_seq_rtc_f_def] >>
+    rpt strip_tac >|
     [
-      gvs [] >>
-      res_tac
+      fs []
       ,
-      gvs [] >|
-      [
-        imp_res_tac eval_fpstep_cid_triv
-        ,
-        res_tac
-      ]
+      DISJ2_TAC >>
+      Q.EXISTS_TAC ‘(s'', M'')’ >>
+      res_tac >>
+      fs [cstep_seq_rtc_def]
     ]
   ]
 QED
 
-Theorem eval_fpstep_soundness:
-  !f cid p s s' M M'.
-  MEM (s',M') (eval_cpstep f cid p s M) ==> ?l. cstep p cid s M l s' M'
+Theorem cstep_seq_rtc_f_completeness_thm:
+  !cid p s M s' M'.
+    cstep_seq_rtc p cid (s,M) (s',M') ==>
+    ?f. cstep_seq_rtc_f f p cid (s,M) (s', M')
+Proof
+  rpt gen_tac >>
+  qabbrev_tac ‘sM = (s, M)’ >> qabbrev_tac ‘sM' = (s', M')’ >>
+  qid_spec_tac ‘sM'’ >> qid_spec_tac ‘sM’ >>
+  fs [Abbr ‘sM’, Abbr ‘sM'’] >>
+  fs [cstep_seq_rtc_def] >>
+  ho_match_mp_tac RTC_INDUCT >>
+  rpt strip_tac >|
+  [
+    Q.EXISTS_TAC ‘0’ >>
+    Cases_on ‘sM’ >>
+    fs [cstep_seq_rtc_f_def]
+    ,
+    Cases_on ‘sM’ >> Cases_on ‘sM'’ >> Cases_on ‘sM''’ >>
+    Q.EXISTS_TAC ‘SUC f’ >>
+    simp [cstep_seq_rtc_f_def] >>
+    DISJ2_TAC >>
+    rename1 ‘cstep_seq p cid (s,M) (s', M')’ >>
+    Q.EXISTS_TAC ‘s'’ >> Q.EXISTS_TAC ‘M'’ >>
+    fs []
+  ]  
+QED
+
+Theorem cstep_seq_rtc_f_correctness_thm:
+  !cid p s M s' M'.
+    (?f. cstep_seq_rtc_f f p cid (s,M) (s', M')) <=>
+    cstep_seq_rtc p cid (s,M) (s',M')
+Proof
+  rpt gen_tac >> eq_tac >>
+  simp [cstep_seq_rtc_f_completeness_thm, cstep_seq_rtc_f_soundness_thm]
+QED
+
+Theorem is_certified_f_correctness_thm:
+  !cid p s M.
+  (?f. is_certified_f f p cid s M) <=> is_certified p cid s M
+Proof
+  METIS_TAC [cstep_seq_rtc_f_correctness_thm, is_certified_f_def, is_certified_def]
+QED
+
+Theorem eval_cstep_seq_write_soundness:
+  !cid p s M s' M' a_e v_e xcl acq rel msgs.
+  MEM (s', msgs) (eval_cstep_seq cid p s M) ==>
+  bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel
+  ==>
+  cstep_seq p cid (s, M) (s', M ++ msgs)
+Proof
+  rpt strip_tac >>
+  (* Decompose assumptions *)
+  gvs [eval_cstep_seq_def, eval_cstep_seq_write_def, bir_eval_exp_view_def] >|
+  [
+    Cases_on ‘bir_eval_exp v_e s.bst_environ’ >- fs[] >>
+    Cases_on ‘bir_eval_exp a_e s.bst_environ’ >- fs[] >>
+    fs [MEM_MAP, MEM_FILTER] >>
+    rename1 ‘(s', msgs) = _ smsgs’ >> Cases_on ‘smsgs’ >>
+    ‘bir_get_stmt p (s with bst_prom updated_by SNOC (SUC (LENGTH M))).bst_pc = BirStmt_Write a_e v_e xcl acq rel’ by
+      fs [] >>
+    imp_res_tac eval_clstep_fulfil_soundness >>
+    fs [cstep_seq_cases] >>
+    Q.EXISTS_TAC ‘s with bst_prom updated_by SNOC (SUC (LENGTH M))’ >>
+    Q.EXISTS_TAC ‘SUC (LENGTH M)’ >>
+    gvs [SNOC_APPEND, cstep_cases, bir_state_t_component_equality]
+    ,
+    fs [MEM_MAP2, cstep_seq_cases] >>
+    imp_res_tac eval_clstep_fulfil_soundness >>
+    HINT_EXISTS_TAC >>
+    fs []
+    ,
+    fs [MEM_MAP2, cstep_seq_cases] >>
+    imp_res_tac eval_clstep_xclfail_soundness >>
+    rename1 ‘MEM (l, s') _’ >>
+    Q.EXISTS_TAC ‘l’ >>
+    fs []
+  ]   
+QED
+
+Theorem eval_cstep_seq_amowrite_soundness:
+  !cid p s M s' M' var a_e v_e acq rel msgs.
+  MEM (s', msgs) (eval_cstep_seq cid p s M) ==>
+  bir_get_stmt p s.bst_pc = BirStmt_Amo var a_e v_e acq rel ==>
+  cstep_seq p cid (s, M) (s', M ++ msgs)
+Proof
+  rpt strip_tac >>
+  (* Decompose assumptions *)
+  gvs [eval_cstep_seq_def, MEM_MAP2, eval_cstep_seq_amowrite_def, bir_eval_exp_view_def] >|
+  [
+    tmCases_on “bir_eval_exp a_e s.bst_environ” ["","a"] >- fs[] >>
+    fs [LIST_BIND_def, MEM_FLAT, MEM_MAP] >>
+    rename1 ‘MEM m_t_r (mem_readable _ _ _)’ >>
+    tmCases_on “m_t_r” ["m t_r"] >>
+    fs [MEM_readable_thm] >>
+    tmCases_on “env_update_cast64 (bir_var_name var) m.val (bir_var_type var) s.bst_environ” ["","new_environ"] >- rfs [] >>
+    tmCases_on “bir_eval_exp v_e new_environ” ["","v"] >- gvs [] >>
+    gvs [MEM_MAP2, MEM_FILTER] >>
+    imp_res_tac eval_clstep_amofulfil_soundness >>
+    fs [cstep_seq_cases] >>
+    Q.EXISTS_TAC ‘s with bst_prom updated_by SNOC (SUC (LENGTH M))’ >>
+    Q.EXISTS_TAC ‘SUC (LENGTH M)’ >>
+    CONJ_TAC >|
+    [
+      fs [cstep_cases, bir_state_t_component_equality]
+      ,
+      gvs []
+    ]
+    ,
+    fs [cstep_seq_cases] >>
+    imp_res_tac eval_clstep_amofulfil_soundness >>
+    HINT_EXISTS_TAC >>
+    fs []
+  ]
+QED
+
+Theorem eval_cstep_seq_soundness:
+  !cid p s M s' msgs.
+  MEM (s', msgs) (eval_cstep_seq cid p s M)
+  ==>
+  cstep_seq p cid (s, M) (s', M ++ msgs)
+Proof
+  rpt strip_tac >>
+  Cases_on ‘bir_get_stmt p s.bst_pc’ >|
+  [
+    gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
+    rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
+    fs [eval_clstep_read_soundness]
+    ,
+    imp_res_tac eval_cstep_seq_write_soundness
+    ,
+    imp_res_tac eval_cstep_seq_amowrite_soundness
+    ,
+    gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
+    rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
+    fs [eval_clstep_expr_soundness]
+    ,
+    gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
+    rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
+    fs [eval_clstep_fence_soundness]
+    ,
+    gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
+    rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
+    fs [eval_clstep_branch_soundness]
+    , 
+    gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
+    rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
+    fs [eval_clstep_generic_soundness]
+    ,
+    fs [eval_cstep_seq_def]
+  ]
+QED
+
+Theorem eval_cstep_seq_write_completeness:
+  !cid p s M s' a_e v_e xcl acq rel msgs.
+    (cstep_seq p cid (s,M) (s',M ++ msgs)) ==>
+    (bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel) ==>
+    MEM (s', msgs) (eval_cstep_seq cid p s M)
+Proof
+  rpt strip_tac >>
+  fs [cstep_seq_cases, MEM_MAP2] >|
+  [
+    imp_res_tac eval_clstep_write_completeness >>
+    fs [eval_cstep_seq_def] >|
+    [
+      DISJ1_TAC >> DISJ2_TAC >>
+      fs [MEM_MAP2] >>
+      Q.EXISTS_TAC ‘prom’ >>
+      fs []
+      ,
+      DISJ2_TAC >>
+      fs [MEM_MAP2] >>
+      Q.EXISTS_TAC ‘prom’ >>
+      fs []
+    ] 
+    ,
+    fs [eval_cstep_seq_def] >>
+    DISJ1_TAC >> DISJ1_TAC >>
+    fs [cstep_cases] >>
+    fs [eval_cstep_seq_write_def, bir_eval_exp_view_def] >>
+    Cases_on ‘bir_eval_exp v_e s.bst_environ’ >- gvs [bir_eval_exp_view_def, clstep_cases] >>
+    Cases_on ‘bir_eval_exp a_e s.bst_environ’ >- gvs [bir_eval_exp_view_def, clstep_cases] >>
+    rename1 ‘bir_eval_exp v_e s.bst_environ = SOME v’ >>
+    rename1 ‘bir_eval_exp a_e s.bst_environ = SOME l’ >>
+    fs [MEM_MAP2, MEM_FILTER] >>
+    imp_res_tac eval_clstep_write_completeness >>
+    gvs [bir_state_t_accfupds] >|
+    [
+      ‘<| loc := l; val := v; cid := msg.cid |> = msg’ by
+       (gvs [clstep_cases, bir_eval_exp_view_def, GSYM ADD1, GSYM SNOC_APPEND, mem_get_SNOC2]) >>
+      ‘(\pr. pr ++ [LENGTH M + 1]) = SNOC (SUC (LENGTH M))’ by
+        METIS_TAC [ADD1, GSYM SNOC_APPEND] >>
+      gvs [GSYM ADD1, GSYM SNOC_APPEND]
+      ,
+      Cases_on ‘xcl’ >|
+      [
+        fs [eval_clstep_xclfail_def] >>
+        Cases_on ‘xclfail_update_env p (s with bst_prom updated_by (\pr. pr ++ [LENGTH M + 1]))’ >- fs[] >>
+        Cases_on ‘xclfail_update_viewenv p (s with bst_prom updated_by (\pr. pr ++ [LENGTH M + 1]))’ >- fs[] >>
+        fs []
+        ,
+        fs [eval_clstep_xclfail_def]
+      ]
+    ]
+  ]
+QED
+  
+
+Theorem eval_cstep_seq_amowrite_completeness:
+  !cid p s M s' M a_e v_e xcl acq rel var msgs.
+    (cstep_seq p cid (s,M) (s',M ++ msgs)) ==>
+    (bir_get_stmt p s.bst_pc = BirStmt_Amo var a_e v_e acq rel) ==>
+    MEM (s', msgs) (eval_cstep_seq cid p s M)
+Proof
+  rpt strip_tac >>
+  fs [cstep_seq_cases, MEM_MAP2] >|
+  [
+    imp_res_tac eval_clstep_amo_completeness >>
+    fs [eval_cstep_seq_def] >>
+    DISJ2_TAC >>
+    fs [MEM_MAP2] >>
+    Q.EXISTS_TAC ‘prom’ >>
+    fs []
+    ,
+    fs [cstep_cases] >>
+    ‘bir_get_stmt p (s''').bst_pc = BirStmt_Amo var a_e v_e acq rel’ by fs [] >>
+    imp_res_tac eval_clstep_amo_completeness >>
+    fs [eval_cstep_seq_def] >>
+    DISJ1_TAC >>
+    fs [eval_cstep_seq_amowrite_def, bir_eval_exp_view_def] >>
+    Cases_on ‘bir_eval_exp a_e s.bst_environ’ >- gvs [clstep_cases, bir_eval_exp_view_def] >>
+    fs [LIST_BIND_def, MEM_FLAT, MEM_MAP] >>
+    CONV_TAC (DEPTH_CONV LEFT_AND_EXISTS_CONV) >>
+    CONV_TAC SWAP_EXISTS_CONV >>
+    fs [clstep_cases, bir_eval_exp_view_def] >>
+    Q.EXISTS_TAC ‘(THE (mem_get (M ++ msgs) l t_r), t_r)’ >>
+    fs [MEM_readable_thm] >>
+    gvs [mem_read_correctness] >>
+    fs [mem_get_SNOC, Once (GSYM SNOC_APPEND)] >>
+    Cases_on ‘env_update_cast64 (bir_var_name var) m.val (bir_var_type var) s.bst_environ’ >- fs[] >>
+    Cases_on ‘bir_eval_exp v_e new_environ’ >- gvs [] >>
+    gvs [MEM_MAP2, MEM_FILTER] >>
+    ‘(\pr. pr ++ [LENGTH M + 1]) = SNOC (SUC (LENGTH M))’ by
+      METIS_TAC [ADD1, GSYM SNOC_APPEND] >>
+    ‘<| loc := l; val := v_w; cid := msg.cid |> = msg’ by
+       (gvs [GSYM ADD1, GSYM SNOC_APPEND, mem_get_SNOC2]) >>
+    gvs [SNOC_APPEND, ADD1] >>
+    fs [MAXL_def, ifView_def] >>
+    strip_tac  >> strip_tac >>
+    (‘t' < LENGTH M + 1’ by (Cases_on ‘acq’ >> Cases_on ‘rel’ >> fs []) >>
+     fs [mem_is_loc_mem_get, GSYM SNOC_APPEND, mem_get_SNOC])
+  ]
+QED
+
+
+Theorem eval_cstep_seq_completeness:
+  !cid p s M s' msgs.
+  cstep_seq p cid (s, M) (s', M ++ msgs) ==> MEM (s', msgs) (eval_cstep_seq cid p s M)
+Proof
+  rpt strip_tac >>
+  Cases_on ‘bir_get_stmt p s.bst_pc’ >|
+  [
+    fs [cstep_seq_cases] >|
+    [
+      imp_res_tac eval_clstep_read_completeness >>
+      fs [eval_cstep_seq_def, MEM_MAP2] >>
+      Q.EXISTS_TAC ‘prom’ >>
+      fs []
+      ,
+      gvs [cstep_cases, clstep_cases, bir_state_t_component_equality]
+    ]
+    ,
+    imp_res_tac eval_cstep_seq_write_completeness
+    ,
+
+    imp_res_tac eval_cstep_seq_amowrite_completeness
+    ,
+    fs [cstep_seq_cases] >|
+    [
+      imp_res_tac eval_clstep_expr_completeness >>
+      fs [eval_cstep_seq_def, MEM_MAP2] >>
+      Q.EXISTS_TAC ‘prom’ >>
+      fs []
+      ,
+      gvs [cstep_cases, clstep_cases, bir_state_t_component_equality]
+    ]
+    ,
+    fs [cstep_seq_cases] >|
+    [
+      imp_res_tac eval_clstep_fence_completeness >>
+      fs [eval_cstep_seq_def, MEM_MAP2] >>
+      Q.EXISTS_TAC ‘prom’ >>
+      fs []
+      ,
+      gvs [cstep_cases, clstep_cases, bir_state_t_component_equality]
+    ]
+    ,
+    fs [cstep_seq_cases] >|
+    [
+      imp_res_tac eval_clstep_branch_completeness >>
+      fs [eval_cstep_seq_def, MEM_MAP2] >>
+      Q.EXISTS_TAC ‘prom’ >>
+      fs []
+      ,
+      gvs [cstep_cases, clstep_cases, bir_state_t_component_equality]
+    ]
+    ,
+    fs [cstep_seq_cases] >|
+    [
+      imp_res_tac eval_clstep_bir_generic_completeness >>
+      fs [eval_cstep_seq_def, MEM_MAP2] >>
+      Q.EXISTS_TAC ‘prom’ >>
+      fs []
+      ,
+      gvs [cstep_cases, clstep_cases, bir_state_t_component_equality]
+    ]
+    ,
+    fs [cstep_seq_cases] >|
+    [
+      fs [clstep_cases]
+      ,
+      gvs [cstep_cases, clstep_cases, bir_state_t_component_equality]
+    ]
+  ] 
+QED
+
+Theorem eval_cstep_seq_correctness:
+  !cid p s M s' msgs.
+    MEM (s', msgs) (eval_cstep_seq cid p s M) <=> cstep_seq p cid (s, M) (s', M ++ msgs)
+Proof
+  rpt gen_tac >> eq_tac >> fs [eval_cstep_seq_soundness, eval_cstep_seq_completeness]
+QED
+
+Theorem cstep_seq_Msuffix:
+  !p cid s M s' M'.
+  cstep_seq p cid (s,M) (s', M') ==>
+  ?suffix. M ++ suffix = M'
+Proof
+  fs [cstep_seq_cases, cstep_cases] >>
+  rpt strip_tac >> (fs [cstep_cases])
+QED
+  
+
+Theorem eval_is_certified_correctness:
+  !f cid p s M.
+     eval_is_certified f p cid s M <=> is_certified_f f p cid s M
 Proof
   Induct_on ‘f’ >|
   [
-    simp [eval_cpstep_def, LIST_BIND_def, MEM_FLAT, MEM_MAP] >>
-    rpt strip_tac >>
-    gvs [] >>
-    Q.EXISTS_TAC ‘[SUC (LENGTH M)]’ >>
-    simp [cstep_cases, SNOC_APPEND, combinTheory.UPDATE_def, bir_state_t_component_equality]
-    imp_res_tac eval_fpsteps_cid_triv
+    fs [eval_is_certified_def, is_certified_f_def, cstep_seq_rtc_f_def]
     ,
+    fs [eval_is_certified_def, is_certified_f_def, EXISTS_MEM2, eval_cstep_seq_correctness] >>
+    rpt gen_tac >> eq_tac >|
+    [
+      rpt strip_tac >|
+      [
+        Q.EXISTS_TAC ‘s’ >> Q.EXISTS_TAC ‘M’ >>
+        fs [cstep_seq_rtc_f_def]
+        ,
+        Q.EXISTS_TAC ‘s'’ >> Q.EXISTS_TAC ‘M'’ >>
+        fs [cstep_seq_rtc_f_def] >>
+        DISJ2_TAC >>
+        rename1 ‘cstep_seq p cid (s,M) (s'', M'')’ >>
+        Q.EXISTS_TAC ‘s''’ >> Q.EXISTS_TAC ‘M''’ >>
+        fs []
+      ]
+      ,
+      rpt strip_tac >> 
+      fs [cstep_seq_rtc_f_def] >>
+      DISJ2_TAC >>
+      imp_res_tac cstep_seq_Msuffix >>
+      Q.EXISTS_TAC ‘s''’ >> Q.EXISTS_TAC ‘suffix’ >>
+      fs [] >>
+      rpt HINT_EXISTS_TAC >>
+      fs []
+    ]
   ]
 QED
 
