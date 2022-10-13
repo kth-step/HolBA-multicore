@@ -4,6 +4,9 @@ open bir_promisingTheory bir_promisingExecTheory bir_programTheory;
 open listTheory rich_listTheory;
 open arithmeticTheory;
 open relationTheory;
+open finite_mapTheory;
+open optionTheory;
+open quantHeuristicsTheory;
 
 val _ = new_theory "bir_promisingExecSim";
 
@@ -20,12 +23,6 @@ Theorem EL_SNOC2:
 Proof
   Induct_on ‘l’ >>
   (asm_rewrite_tac [LENGTH, SNOC, EL, HD, TL])
-QED
-
-Triviality IS_SOME_EQ_NOT_NONE:
-  !x. IS_SOME x <=> x <> NONE
-Proof
-  Cases_on ‘x’ >> fs[]
 QED
 
 Theorem mem_get_SNOC:
@@ -1115,5 +1112,373 @@ Proof
     ]
   ]
 QED
+
+(* PROMISE FINDING *)
+
+(* Simulation relation for timestamps *)
+Definition sim_timestamp_def:
+  sim_timestamp i j t =
+  if t < i \/ t > j then t
+  else if t = i then j
+  else PRE t
+End
+
+(* Maps mem_msg_t in M to M' *)
+(* k < LENGTH M' ==> 
+*    EL k M' = bisim_mem i j k M *)
+Definition sim_mem_def:
+  sim_mem (i: num) (j: num) (k: num) (M: mem_msg_t list)  =
+  if k < i \/ j < k then EL k M
+  else if k = j then EL i M
+  else EL (SUC k) M
+End
+
+(* Simulation relation for views *)
+Definition sim_view_def:
+  sim_view i j v v' = ?vs. v = MAXL vs /\ v' = MAXL (MAP (sim_timestamp i j) vs)
+End
+
+(* Simulation relation for register views *)
+Definition sim_viewenv_def:
+  sim_viewenv i j (viewenv : bir_var_t |-> num) viewenv' =
+  !r. sim_view i j (case FLOOKUP viewenv r of NONE => 0 | SOME v => v)
+                   (case FLOOKUP viewenv' r of NONE => 0 | SOME v => v)
+End
+
+(* Simulation relation for coherence views *)
+Definition sim_coh_def:
+  sim_coh i j (coh : bir_val_t -> num) coh' = !l. sim_view i j (coh l) (coh' l)
+End
+
+(* Valid promise set *)
+Definition sim_valid_prom_def:
+  sim_valid_prom cid prom M =
+    !p. MEM p prom ==> mem_is_cid M p cid
+End
+
+Definition sim_valid_view_def:
+  sim_valid_view v prom (LenM: num) = (~MEM v prom /\ v <= LenM)
+End
+
+Definition sim_valid_coh_def:
+  sim_valid_coh (coh : bir_val_t -> num) prom (LenM: num) =
+  !l. ~MEM (coh l) prom /\ (coh l) <= LenM
+End
+
+Definition sim_valid_viewenv_def:
+  sim_valid_viewenv (viewenv : bir_var_t |-> num) prom (LenM: num) =
+  !r. ~MEM (viewenv ' r) prom /\ (viewenv ' r) <= LenM
+End
+
+val (sim_rules, sim_ind, sim_cases) = Hol_reln ‘
+  P.bst_pc = Q.bst_pc
+  /\ P.bst_status = Q.bst_status
+  /\ P.bst_environ = Q.bst_environ
+  /\ sim_valid_prom cid P.bst_prom MP
+  /\ sim_valid_view P.bst_v_rOld P.bst_prom (LENGTH MP)
+  /\ sim_valid_view P.bst_v_wOld P.bst_prom (LENGTH MP)
+  /\ sim_valid_view P.bst_v_rNew P.bst_prom (LENGTH MP)
+  /\ sim_valid_view P.bst_v_wNew P.bst_prom (LENGTH MP)
+  /\ sim_valid_view P.bst_v_CAP P.bst_prom (LENGTH MP)
+  /\ sim_valid_view P.bst_v_Rel P.bst_prom (LENGTH MP)
+  /\ sim_valid_coh P.bst_coh P.bst_prom (LENGTH MP)
+  /\ sim_valid_viewenv P.bst_viewenv P.bst_prom (LENGTH MP)
+  /\ sim_view i j P.bst_v_rOld Q.bst_v_rOld
+  /\ sim_view i j P.bst_v_wOld Q.bst_v_wOld
+  /\ sim_view i j P.bst_v_rNew Q.bst_v_rNew
+  /\ sim_view i j P.bst_v_wNew Q.bst_v_wNew
+  /\ sim_view i j P.bst_v_CAP  Q.bst_v_CAP
+  /\ sim_view i j P.bst_v_Rel  Q.bst_v_Rel
+  /\ sim_coh i j P.bst_coh Q.bst_coh
+  /\ sim_viewenv i j P.bst_viewenv Q.bst_viewenv
+  ==>
+  sim cid i j (P,MP) (Q,MQ)
+’;
+
+Theorem sim_view_trivial:
+  (!i j. sim_view i j 0 0) 
+  /\
+  !i j v. sim_view i j v (sim_timestamp i j v)
+Proof
+  rpt strip_tac >|
+  [
+    fs [sim_view_def] >>
+    Q.EXISTS_TAC ‘[]’ >> fs [MAXL_def]
+    ,
+    fs [sim_view_def] >>
+    Q.EXISTS_TAC ‘[v]’ >> fs[MAXL_def]
+  ]
+QED
+
+Theorem sim_coh_trivial:
+  !i j coh. sim_coh i j coh ((sim_timestamp i j) o coh) 
+Proof
+  rw [sim_coh_def, sim_view_trivial]
+QED
+
+Theorem sim_viewenv_trivial:
+  !i j viewenv. sim_viewenv i j viewenv (FMAP_MAP2 (\ (r, v). sim_timestamp i j v) viewenv)
+Proof
+  rpt strip_tac >>
+  fs [sim_viewenv_def,FLOOKUP_DEF, FMAP_MAP2_THM] >>
+  gen_tac >>
+  CASE_TAC >>
+  gvs [sim_view_trivial]
+QED
+
+Theorem sim_view_MAX:
+  !i j v v' v''.
+  sim_view i j v v' ==>
+  sim_view i j (MAX v v'') (MAX v' (sim_timestamp i j v''))
+Proof
+  rpt strip_tac >>
+  fs [sim_view_def] >>
+  Q.EXISTS_TAC ‘v''::vs’ >>
+  fs [MAX_COMM, MAXL_def]
+QED
+
+Theorem MAX_MAXL2:
+  !vs vs'.
+    MAX (MAXL vs) (MAXL vs') = MAXL (vs ++ vs')
+Proof
+  Induct_on ‘vs’ >|
+  [
+    fs [MAXL_def]
+    ,
+    rpt gen_tac >>
+    fs [MAXL_def] >>
+    METIS_TAC [MAX_ASSOC]
+  ]
+QED
+
+Theorem sim_view_join:
+  !i j v v' w w'.
+  sim_view i j v v' 
+  /\ sim_view i j w w'
+  ==>
+  sim_view i j (MAX v w) (MAX v' w')
+Proof
+  rpt strip_tac >>
+  fs [sim_view_def] >>
+  Q.EXISTS_TAC ‘vs ++ vs'’ >>
+  fs [MAX_MAXL2]
+QED
+
+Theorem sim_coh_update:
+!i j coh coh' v v' l.
+  sim_coh i j coh coh' /\
+  sim_view i j v v' ==>
+  sim_coh i j ((l =+ v) coh) ((l =+ v') coh')
+Proof
+  rpt strip_tac >>
+  fs [sim_coh_def, combinTheory.APPLY_UPDATE_THM] >>
+  gen_tac >>
+  CASE_TAC
+QED
+
+Theorem sim_viewenv_update:
+!i j viewenv viewenv' v v' r.
+  sim_viewenv i j viewenv viewenv' /\
+  sim_view i j v v' ==>
+  sim_viewenv i j (viewenv |+ (r, v)) (viewenv' |+ (r,v'))
+Proof
+  rpt strip_tac >>
+  fs [sim_viewenv_def, FLOOKUP_UPDATE] >>
+  gen_tac >>
+  CASE_TAC >>
+  fs []
+QED
+
+Theorem sim_viewenv_expr:
+!i j viewenv viewenv'.
+  sim_viewenv i j viewenv viewenv'
+  = (!e. sim_view i j (bir_eval_view_of_exp e viewenv) (bir_eval_view_of_exp e viewenv'))
+Proof
+  fs [sim_viewenv_def] >>
+  rpt strip_tac >>
+  eq_tac >|
+  [
+    rpt strip_tac >>
+    Induct_on ‘e’ >>
+    (fs [bir_eval_view_of_exp_def, sim_view_trivial, sim_view_join, sim_view_MAX])
+    ,
+    rpt strip_tac >>
+    first_x_assum (qspec_then ‘BExp_Den r’ assume_tac) >>
+    fs [bir_eval_view_of_exp_def]
+  ]
+QED
+
+Triviality MAX_IN:
+  !x y S.
+  x IN S /\ y IN S ==>
+  MAX x y IN S
+Proof
+  rpt strip_tac >>
+  Cases_on ‘x < y’ >> gvs [MAX_DEF]
+QED
+
+Theorem bir_eval_view_of_exp_in_FRANGE_viewenv:
+  !e viewenv.
+  (bir_eval_view_of_exp e viewenv) IN (FRANGE viewenv) ∪ {0}
+Proof
+  rpt strip_tac >>
+  Induct_on ‘e’ >> fs [bir_eval_view_of_exp_def, MAX_IN] >>
+  gen_tac >>
+  CASE_TAC >> METIS_TAC [FRANGE_FLOOKUP]
+QED
+
+Theorem sim_valid_prom_not_0:
+  !cid prom v M.
+  sim_valid_prom cid prom M ==> ~MEM 0 prom
+Proof
+  METIS_TAC [sim_valid_prom_def, mem_is_cid_correctness]
+QED
+
+Theorem sim_valid_viewenv_prom:
+  !p viewenv prom LenM.
+  sim_valid_viewenv viewenv prom LenM /\
+  MEM p prom ==> ~(p IN (FRANGE viewenv))
+Proof
+  rpt strip_tac >>
+  gvs [sim_valid_viewenv_def, FRANGE_DEF]
+QED
+
+Theorem sim_valid_viewenv_expr:
+  !cid e prom viewenv M.
+  sim_valid_prom cid prom M /\
+  sim_valid_viewenv viewenv prom (LENGTH M) ==>
+  ~MEM (bir_eval_view_of_exp e viewenv) prom
+Proof
+  rpt strip_tac >>
+  drule sim_valid_viewenv_prom >>
+  fs [] >>
+  HINT_EXISTS_TAC >>
+  fs [MEM] >>
+  qspecl_then [‘e’, ‘viewenv’] assume_tac bir_eval_view_of_exp_in_FRANGE_viewenv >>
+  imp_res_tac sim_valid_prom_not_0 >>
+  gvs []
+QED
+
+Theorem sim_view_expr_update:
+!i j viewenv viewenv' v v'.
+  (!e. sim_view i j (bir_eval_view_of_exp e viewenv) (bir_eval_view_of_exp e viewenv'))
+  /\ sim_view i j v v'
+  ==> 
+  !var e.
+    sim_view i j
+             (bir_eval_view_of_exp e (viewenv |+ (var, v)))
+             (bir_eval_view_of_exp e (viewenv' |+ (var, v')))
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  fs [GSYM sim_viewenv_expr] >>
+  irule sim_viewenv_update >>
+  fs []
+QED
+
+Theorem bir_exec_stmt_noninterference:
+  !prog stmt P oo P' Q.
+  bir_exec_stmt prog stmt P = (oo, P') /\
+  P.bst_status = Q.bst_status /\
+  P.bst_pc = Q.bst_pc /\
+  P.bst_environ = Q.bst_environ
+  ==>
+  bir_exec_stmt prog stmt Q = (oo, Q with <| bst_status := P'.bst_status ; bst_environ := P'.bst_environ; bst_pc := P'.bst_pc |>)
+Proof
+  rpt strip_tac >>
+  fs [bir_state_t_component_equality] >>
+  Cases_on ‘stmt’ >|
+  [
+    rename1 ‘BStmtB stmtB’ >>
+    fs [bir_exec_stmt_def] >>
+    Cases_on ‘stmtB’ >>
+    (fs [bir_exec_stmtB_def, bir_exec_stmt_assign_def, bir_exec_stmt_assert_def,
+         bir_exec_stmt_assume_def, bir_exec_stmt_observe_def, bir_exec_stmt_fence_def] >>
+     rpt (gvs [bir_state_set_typeerror_def, bir_state_t_component_equality, bir_state_is_terminated_def] >>
+          FULL_CASE_TAC))
+    ,
+    rename1 ‘BStmtE stmtE’ >>
+    fs [bir_exec_stmt_def] >>
+    Cases_on ‘stmtE’ >>
+    rpt (gvs [bir_exec_stmtE_def, bir_exec_stmt_jmp_def, bir_state_set_typeerror_def, bir_state_t_component_equality,
+             bir_state_is_terminated_def, bir_exec_stmt_jmp_to_label_def, bir_exec_stmt_cjmp_def, bir_exec_stmt_jmp_def, bir_exec_stmt_halt_def] >>
+         FULL_CASE_TAC)
+  ]
+QED
+
+Theorem bir_exec_stmt_invar:
+  !prog stmt S oo S'.
+  bir_exec_stmt prog stmt S = (oo, S') ==>
+  bir_exec_stmt prog stmt S = (oo, S with <| bst_status := S'.bst_status ; bst_environ := S'.bst_environ; bst_pc := S'.bst_pc |>)
+Proof
+  rpt strip_tac >>
+  irule bir_exec_stmt_noninterference >>
+  HINT_EXISTS_TAC >>
+  fs []
+QED
+
+Triviality RHS_OPTION:
+  (!x y.
+    (SOME x = y) <=> (y = SOME x)) /\
+  !y.
+    (NONE = y) <=> (y = NONE)
+Proof
+  METIS_TAC []
+QED
+
+Theorem sim_clstep_def:
+  !P P' Q MP MQ i j prog cid l.
+    sim cid i j (P,MP) (Q,MQ) /\
+    clstep prog cid P MP l P'
+    ==>
+    ?Q'.
+    clstep prog cid Q MQ (MAP (sim_timestamp i j) l) Q' /\ sim cid i j (P',MP) (Q',MQ)
+Proof
+  rpt strip_tac >>
+  Cases_on ‘bir_get_stmt prog P.bst_pc’ >>
+  (‘bir_get_stmt prog Q.bst_pc = bir_get_stmt prog P.bst_pc’ by gvs [sim_cases] >> gvs [clstep_cases]) >|
+  [
+    rename1 ‘BirStmt_Read var a_e opt_cast xcl acq’ >>
+    cheat
+    ,
+    rename1 ‘BirStmt_Write a_e v_e T acq rel’ >>
+    fs [EXISTS_bir_state_t, bir_state_t_component_equality, sim_cases] >>
+    rpt $ qpat_x_assum ‘SOME _ = _’ $ assume_tac o GSYM >>
+    gvs [xclfail_update_env_def, xclfail_update_viewenv_def] >>
+    rpt (CASE_TAC >> gvs[]) >>
+    fs [sim_viewenv_update, sim_view_trivial]
+    ,
+    rename1 ‘BirStmt_Write a_e v_e xcl acq rel’ >>
+    cheat
+    ,
+    rename1 ‘BirStmt_Amo var a_e v_e acq rel’ >>
+    cheat
+    ,
+    rename1 ‘BirStmt_Expr var e’ >>
+    fs [EXISTS_bir_state_t, bir_state_t_component_equality, sim_cases, bir_eval_exp_view_def] >>
+    rpt $ qpat_x_assum ‘SOME _ = _’ $ assume_tac o GSYM >>
+    rpt $CHANGED_TAC $CONV_TAC $DEPTH_CONV AND_EXISTS_CONV >>
+    gvs [bir_eval_exp_view_def, sim_viewenv_update, sim_view_expr_update, sim_viewenv_expr]
+    ,
+    rename1 ‘BirStmt_Fence K1 K2’ >>
+    fs [sim_cases] >>
+    rpt (CASE_TAC >> fs [sim_view_MAX, sim_view_join])
+    ,
+    rename1 ‘BirStmt_Branch cond_e lbl1 lbl2’ >>
+    gvs [bir_eval_exp_view_def, sim_cases, bir_state_t_component_equality, EXISTS_bir_state_t] >>
+    rpt $ qpat_x_assum ‘SOME _ = _’ $ assume_tac o GSYM >>
+    drule_all bir_exec_stmt_invar >>
+    drule_all bir_exec_stmt_noninterference >>
+    rpt strip_tac >>
+    fs [bir_state_t_component_equality, sim_view_join, sim_view_expr_update, sim_viewenv_expr]
+    ,
+    rename1 ‘BirStmt_Generic stmt’ >>
+    fs [sim_cases] >>
+    drule_all bir_exec_stmt_invar >>
+    drule_all bir_exec_stmt_noninterference >>
+    rpt strip_tac >>
+    gvs [bir_state_t_component_equality, EXISTS_bir_state_t] 
+  ]
+QED
+
 
 val _ = export_theory();

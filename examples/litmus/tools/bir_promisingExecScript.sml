@@ -505,11 +505,8 @@ val eval_findprom_def = Define‘
   eval_findprom 0 cid p s M = []
   ) ∧ (
   eval_findprom (SUC f) cid p s M = 
-    case s.bst_status of
-    | BST_Running =>
         LIST_BIND (eval_cstep_seq cid p s M)
                   (λ(s', msgs). msgs ++ eval_findprom f cid p s' (M ++ msgs)) 
-    | _ => []
   )
 ’;
 
@@ -517,7 +514,7 @@ val eval_promstep_def = Define‘
   eval_cpstep f cid p s M =
   FILTER (\ (s',M'). eval_is_certified f p cid s' M')
          $ MAP (\msg. (s with bst_prom updated_by (SNOC (SUC (LENGTH M))), (M ++ [msg])))
-         (eval_fpsteps f cid p s M)
+         (eval_findprom f cid p s M)
 ’;
 
 (*
@@ -860,7 +857,7 @@ val eval_fpstep_amowriteO1_def = Define‘
                                                    s.bst_coh l
                                                   ];
                                   in
-                                    MAP (\s''. (SOME (msg, v_post), s''))
+                                    map (\s''. (SOME (msg, v_post), s''))
                                         (eval_clstep_amofulfilO1 cid s' M' var a_e v_e acq rel)
                              )
                     )
