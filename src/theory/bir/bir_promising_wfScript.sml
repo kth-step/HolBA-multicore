@@ -7,6 +7,23 @@ open finite_mapTheory;
 
 val _ = new_theory "bir_promising_wf";
 
+Theorem bir_exec_stmt_jmp_bst_eq:
+  !s p lbl.
+     (bir_exec_stmt_jmp p lbl s).bst_v_rNew = s.bst_v_rNew
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_rOld = s.bst_v_rOld
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wNew = s.bst_v_wNew
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wOld = s.bst_v_wOld
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_Rel  = s.bst_v_Rel
+  /\ (bir_exec_stmt_jmp p lbl s).bst_viewenv  = s.bst_viewenv
+  /\ (!l. (bir_exec_stmt_jmp p lbl s).bst_coh l = s.bst_coh l)
+Proof
+  rw[bir_exec_stmt_jmp_def]
+  >> CASE_TAC
+  >> fs[bir_state_set_typeerror_def,bir_exec_stmt_jmp_to_label_def]
+  >> CASE_TAC
+  >> fs[]
+QED
+
 Definition latest_def:
   latest l 0 M = 0
   /\ latest l (SUC t) M =
@@ -56,10 +73,10 @@ Definition well_formed_def:
             /\ msg.cid = cid
             /\ s.bst_coh(msg.loc) < t)
            ==>
-           MEM t s.bst_prom)
+           MEM (SUC t) s.bst_prom)
     )
 End
-    
+
 Theorem latest_bound:
 !l t M.
   latest l t M <= t
@@ -289,6 +306,17 @@ Proof
   metis_tac[bir_eval_view_of_exp_wf]
 QED
 
+Theorem well_formed_viewenv_UPDATE:
+  !s M v_val var.
+  well_formed_viewenv s.bst_viewenv M
+  /\ v_val <= LENGTH M
+  ==> well_formed_viewenv (s.bst_viewenv |+ (var,v_val)) M
+Proof
+  rw[well_formed_viewenv_def,FLOOKUP_UPDATE]
+  >> BasicProvers.FULL_CASE_TAC
+  >> fs[] >> res_tac
+QED
+
 Theorem bir_eval_exp_view_bound:
   !l a_e s M v_addr.
     well_formed_viewenv s.bst_viewenv M
@@ -306,46 +334,115 @@ Theorem clstep_preserves_wf:
 ==>
   well_formed cid M s'
 Proof
-  cheat
-QED
-(* Incomplete proof for time reasons,
-   but it should be straightforward
-
   rpt strip_tac
   >> fs[well_formed_def]
   >> drule_then imp_res_tac clstep_preserves_wf_fwdb
   >> fs[clstep_cases]
-    >|
-  [ (* read *)
+  >~ [`BirStmt_Read`]
+  >- (
     ‘v_addr <= LENGTH M’
      by (fs[bir_eval_exp_view_def]
          >> drule bir_eval_view_of_exp_wf
          >> fs[])
     >> fs[well_formed_viewenv_def]
+    >> irule_at Any mem_read_view_wf_fwdb
+    >> qexists_tac ‘l’ >> qexists_tac ‘s.bst_coh l’
+    >> gvs[]
+    >> conj_asm1_tac
+    >-
+      (‘t <= LENGTH M \/ (t = 0 /\ v = mem_default_value)’
+        by metis_tac[mem_read_some]
+        >> fs[])
     >> Cases_on ‘acq /\ rel’
-    >|
-    [
-      irule_at Any mem_read_view_wf_fwdb
-      >> qexists_tac ‘l’ >> qexists_tac ‘s.bst_coh l’
-      >> gvs[]
-      >> conj_asm1_tac
-      >-
-        (‘t <= LENGTH M \/ (t = 0 /\ v = mem_default_value)’
-         by metis_tac[mem_read_some]
-         >> fs[])
-      >> rw[]
+    >- (
+      rw[]
       >> Cases_on ‘var' = var’
       >> gvs[FLOOKUP_DEF, FLOOKUP_UPDATE]
       >> irule mem_read_view_wf_fwdb
       >> fs[]
       >> qexists_tac ‘s.bst_coh l’ >> qexists_tac ‘l’
       >> fs[]
-      ,
-      cheat
-    ]
-  , proof follows here
-  ]
-*)
+    )
+    >> asm_rewrite_tac[]
+    >> conj_tac
+    >~ [`FLOOKUP (_ |+ _)`]
+    >- (
+      simp[FLOOKUP_UPDATE]
+      >> ntac 2 $ first_x_assum $ qspec_then `l` mp_tac
+      >> asm_rewrite_tac[]
+      >> ntac 2 strip_tac
+      >> rpt gen_tac
+      >> BasicProvers.FULL_CASE_TAC
+      >> gvs[]
+      >> rw[mem_read_view_def]
+      >> fs[well_formed_fwdb_def]
+    )
+    >> rw[mem_read_view_def]
+    >> ntac 2 $ first_x_assum $ qspec_then `l` mp_tac
+    >> gvs[well_formed_fwdb_def]
+  )
+  >~ [`BirStmt_Write`,`xclfail_update_env`]
+  >- (
+    gvs[xclfail_update_env_def,xclfail_update_viewenv_def,AllCaseEqs(),well_formed_viewenv_def,FLOOKUP_UPDATE]
+    >> rw[] >> gvs[] >> metis_tac[]
+  )
+  >~ [`BirStmt_Write`]
+  >- (
+    conj_tac
+    >- (
+      gvs[well_formed_viewenv_def,fulfil_update_viewenv_def,AllCaseEqs(),FLOOKUP_UPDATE]
+      >> rw[] >> gvs[] >> metis_tac[]
+    )
+    >> conj_tac
+    >- (
+      gen_tac
+      >> first_assum drule
+      >> first_assum $ qspec_then `l` mp_tac
+      >> first_x_assum $ qspec_then `l'` mp_tac
+      >> first_assum $ qspec_then `l` mp_tac
+      >> first_x_assum $ qspec_then `l'` mp_tac
+      >> rw[well_formed_fwdb_def]
+    )
+    >> conj_tac
+    >- (first_assum drule >> rw[well_formed_fwdb_def])
+    >> conj_tac
+    >- (first_assum drule >> rw[well_formed_fwdb_def])
+    >> conj_asm1_tac
+    >- (
+      drule_then rev_drule bir_eval_exp_view_bound
+      >> fs[]
+    )
+    >> conj_tac
+    >- (first_assum drule >> rw[])
+    >> conj_tac >- rw[listTheory.MEM_FILTER]
+    >> rw[]
+    >> first_x_assum $ drule_then $ drule_at_then Any assume_tac
+    >> gvs[]
+    >> rw[listTheory.MEM_FILTER]
+    >> spose_not_then assume_tac
+    >> Cases_on `v_post`
+    >> gs[mem_read_def,mem_get_def]
+  )
+  >~ [`BirStmt_Amo`]
+  >- cheat
+  >~ [`BirStmt_Fence`]
+  >- rw[]
+  >~ [`BirStmt_Branch`]
+  >- (
+    drule_then (rev_drule_then assume_tac) bir_eval_exp_view_bound
+    >> gvs[bir_exec_stmt_def,bir_exec_stmtE_def,bir_exec_stmt_cjmp_def,AllCaseEqs(),bir_state_set_typeerror_def,GSYM bir_exec_stmt_jmp_bst_prom,bir_exec_stmt_jmp_bst_eq]
+  )
+  >~ [`BirStmt_Generic`]
+  >- (
+    drule_then strip_assume_tac bir_exec_stmt_mc_invar
+    >> gvs[]
+  )
+  >~ [`BirStmt_Expr`]
+  >- (
+    drule_then irule well_formed_viewenv_UPDATE
+    >> drule_all bir_eval_exp_view_bound
+    >> fs[]
+  )
+QED
 
-        
 val _ = export_theory ();
