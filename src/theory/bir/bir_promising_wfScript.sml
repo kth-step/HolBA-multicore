@@ -19,7 +19,7 @@ End
 Definition well_formed_fwdb_def:
  well_formed_fwdb l M coh_t fwd =
    (fwd.fwdb_time <= latest l coh_t M
-    /\ fwd.fwdb_view <= fwd.fwdb_time
+    /\ fwd.fwdb_view < fwd.fwdb_time
     /\ ?v. mem_read M l fwd.fwdb_time = SOME v)
 End
 (*
