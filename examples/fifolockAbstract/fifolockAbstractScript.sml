@@ -59,7 +59,7 @@ Definition fifo_lock_aprog_def:
 ] ;
                 
 Definition fifo_unlock_aprog_def:
-  fifo_unlock_aprog cid queue =
+  fifo_unlock_aprog cid =
   BirProgram [
   <|bb_label := BL_Address (Imm64 0w) "";
     bb_mc_tags := SOME <|mc_atomic := F; mc_acq := F; mc_rel := F|>;
@@ -68,7 +68,7 @@ Definition fifo_unlock_aprog_def:
         (* crit = 0 *)
         BStmt_Gassign (fn gs => gs with crit updated_with fn x => 0) ;
         (* queue := tail(queue) *)
-        BStmt_Gassign queue (fn gs => gs with queue updated_by fn (hd::tl) => tl) ;
+        BStmt_Gassign (fn gs => gs with queue updated_by fn (hd::tl) => tl) ;
       ];
     bb_last_statement :=
       (* goto 4w *)
