@@ -7,6 +7,12 @@ open finite_mapTheory;
 
 val _ = new_theory "bir_promising_wf";
 
+Theorem MAX_LE[simp]:
+  MAX a b <= c <=> a <= c /\ b <= c
+Proof
+  rw[arithmeticTheory.MAX_DEF,EQ_IMP_THM]
+QED
+
 Theorem bir_exec_stmt_jmp_bst_eq:
   !s p lbl.
      (bir_exec_stmt_jmp p lbl s).bst_v_rNew = s.bst_v_rNew
@@ -22,6 +28,19 @@ Proof
   >> fs[bir_state_set_typeerror_def,bir_exec_stmt_jmp_to_label_def]
   >> CASE_TAC
   >> fs[]
+QED
+
+Theorem mem_get_LENGTH:
+  !t M l v. mem_get M l t = SOME v ==> t <= LENGTH M
+Proof
+  Cases >> rw[mem_get_def,listTheory.oEL_THM]
+QED
+
+Theorem mem_read_LENGTH:
+  !t M l v. mem_read M l t = SOME v ==> t <= LENGTH M
+Proof
+  Cases >> rw[mem_read_some,mem_read_def,AllCaseEqs()]
+  >> imp_res_tac mem_get_LENGTH
 QED
 
 Definition latest_def:
@@ -56,8 +75,8 @@ Definition well_formed_viewenv_def:
 End
 
 Definition well_formed_def:
-  well_formed cid M s =
-  ( well_formed_viewenv s.bst_viewenv M
+  well_formed cid M s <=>
+    well_formed_viewenv s.bst_viewenv M
     /\ (!l. s.bst_coh(l) <= LENGTH M)
      /\ s.bst_v_rNew <= LENGTH M
      /\ s.bst_v_rOld <= LENGTH M
@@ -74,7 +93,6 @@ Definition well_formed_def:
             /\ s.bst_coh(msg.loc) < t)
            ==>
            MEM (SUC t) s.bst_prom)
-    )
 End
 
 Theorem latest_bound:
@@ -346,13 +364,9 @@ Proof
          >> fs[])
     >> fs[well_formed_viewenv_def]
     >> irule_at Any mem_read_view_wf_fwdb
-    >> qexists_tac ‘l’ >> qexists_tac ‘s.bst_coh l’
+    >> map_every qexists_tac [‘l’,‘s.bst_coh l’]
     >> gvs[]
-    >> conj_asm1_tac
-    >-
-      (‘t <= LENGTH M \/ (t = 0 /\ v = mem_default_value)’
-        by metis_tac[mem_read_some]
-        >> fs[])
+    >> imp_res_tac mem_read_LENGTH
     >> Cases_on ‘acq /\ rel’
     >- (
       rw[]
@@ -424,7 +438,29 @@ Proof
     >> gs[mem_read_def,mem_get_def]
   )
   >~ [`BirStmt_Amo`]
-  >- cheat
+  >- (
+    irule_at Any mem_read_view_wf_fwdb
+    >> map_every qexists_tac [‘l’,‘s.bst_coh l’]
+    >> drule_then (irule_at Any) well_formed_viewenv_UPDATE
+    >> imp_res_tac mem_get_LENGTH
+    >> drule_then (rev_drule_then assume_tac) bir_eval_exp_view_bound
+    >> imp_res_tac mem_read_LENGTH
+    >> asm_rewrite_tac[]
+    >> conj_asm1_tac
+    >- (
+      rw[] >> gvs[]
+      >> irule arithmeticTheory.LESS_EQ_TRANS
+      >> irule_at Any arithmeticTheory.LESS_IMP_LESS_OR_EQ
+      >> goal_assum drule
+      >> fs[]
+    )
+    >> rw[combinTheory.APPLY_UPDATE_THM,listTheory.MEM_FILTER]
+    >> first_x_assum $ drule
+    >> gvs[]
+    >> spose_not_then assume_tac
+    >> Cases_on `t_w`
+    >> gs[mem_read_def,mem_get_def]
+  )
   >~ [`BirStmt_Fence`]
   >- rw[]
   >~ [`BirStmt_Branch`]
