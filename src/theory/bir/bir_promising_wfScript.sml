@@ -252,11 +252,11 @@ fs[]
   Cases_on ‘l = l'’
   >| [
     ‘mem_read M l' v_post = SOME v’ by fs[mem_read_def]
-    >> fs[]
+    >> fs[combinTheory.APPLY_UPDATE_THM]
     >> ‘v_post = latest l' v_post M’ by fs[latest_exact]
-    >> ‘latest l' v_post M <= latest l' (MAX (s.bst_coh l') v_post) M’ suffices_by fs[]
+    >> ‘latest l' v_post M <= latest l' v_post M’ suffices_by fs[]
     >> fs[latest_max]
-    , fs[]
+    , fs[combinTheory.APPLY_UPDATE_THM]
   ]
   , (* amo *)
   Cases_on ‘l = l'’
@@ -265,7 +265,7 @@ fs[]
       >> ‘mem_read M l t_w = SOME v_w’ by fs[mem_read_def]
       >> fs[]
       >> ‘t_w = latest l t_w M’  by fs[latest_exact]
-      >> ‘latest l' t_w M <= latest l' (MAX (s.bst_coh l') t_w) M’
+      >> ‘latest l' t_w M <= latest l' t_w M’
          suffices_by gvs[]
       >> fs[latest_max]
       ,
@@ -415,7 +415,9 @@ Proof
       >> first_x_assum $ qspec_then `l'` mp_tac
       >> first_assum $ qspec_then `l` mp_tac
       >> first_x_assum $ qspec_then `l'` mp_tac
-      >> rw[well_formed_fwdb_def]
+      >> fs[well_formed_fwdb_def,combinTheory.APPLY_UPDATE_THM]
+      >> rpt strip_tac
+      >> rw[]
     )
     >> conj_tac
     >- (first_assum drule >> rw[well_formed_fwdb_def])
@@ -429,9 +431,10 @@ Proof
     >> conj_tac
     >- (first_assum drule >> rw[])
     >> conj_tac >- rw[listTheory.MEM_FILTER]
+    >> gvs[combinTheory.APPLY_UPDATE_THM]
     >> rw[]
-    >> first_x_assum $ drule_then $ drule_at_then Any assume_tac
-    >> gvs[]
+    >> first_x_assum $ drule
+    >> fs[]
     >> rw[listTheory.MEM_FILTER]
     >> spose_not_then assume_tac
     >> Cases_on `v_post`

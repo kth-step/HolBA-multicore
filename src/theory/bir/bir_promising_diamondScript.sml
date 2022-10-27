@@ -244,28 +244,26 @@ Induct_on ‘clstep’
   (* read *)
   HO_MATCH_MP_TAC (List.nth (CONJUNCTS clstep_rules,0))
   >> Q.LIST_EXISTS_TAC [‘v’, ‘a_e’, ‘xcl’,‘acq’,‘rel’, ‘l’, ‘t’, ‘v_pre’, ‘v_post’, ‘v_addr’, ‘var’, ‘new_env’, ‘opt_cast’]
-  >> rpt strip_tac >- fs[] >- fs[]
-  >|
-  [drule mem_read_some >> strip_tac >> fs[mem_read_append]
-  ,fs[]
-  , (* quantifier case *)
-  ‘t' <= LENGTH M1’ by (* wf invariant *)
+  >> rpt strip_tac >> fs[]
+  >- (
+    drule mem_read_some >> strip_tac >> fs[mem_read_append]
+  )
+  (* quantifier case *)
+  >> ‘t' <= LENGTH M1’ by (* wf invariant *)
     (‘v_addr <= LENGTH M1’ by metis_tac[well_formed_def, bir_eval_exp_view_bound]
      >> ‘v_pre <= LENGTH M1’ by
        (Cases_on ‘acq /\ rel’ >> fs[well_formed_def])
      >> ‘MAX v_pre
          ((s with bst_prom updated_by (λpr. pr ⧺ [LENGTH M1 + 1])).bst_coh l) <= LENGTH M1’ by fs[well_formed_def, bir_programTheory.bir_state_t_accfupds]
-     >> decide_tac)
+     >> fs[])
+     (* decide_tac *)
   >> qpat_assum ‘!t''._’ (fn th => drule (Q.SPEC ‘t'’ th))
   >> rpt strip_tac
   >> ‘¬mem_is_loc M1 t' l’ by fs[]
   >> fs[listTheory.oEL_EQ_EL, listTheory.EL_APPEND_EQN]
   >> fs[GSYM mem_get_is_loc, optionTheory.IS_SOME_EXISTS]
   >> fs[mem_get_append]
-  ,fs[]
-  ,fs[]
-  ,fs[]
-  ]
+
   , (* xclfail *)
   HO_MATCH_MP_TAC (List.nth (CONJUNCTS clstep_rules,1))
   >> Q.LIST_EXISTS_TAC [‘a_e’, ‘v_e’, ‘acq’, ‘rel’, ‘new_env’, ‘new_viewenv’]
@@ -437,29 +435,23 @@ Proof
   >| [ (* read *)
     HO_MATCH_MP_TAC (List.nth (CONJUNCTS clstep_rules,0))
     >> Q.LIST_EXISTS_TAC [‘v’, ‘a_e’, ‘xcl’, ‘acq’, ‘rel’, ‘l’, ‘t’, ‘v_pre’, ‘v_post’, ‘v_addr’,‘var’, ‘new_env’, ‘opt_cast’]
-    >> rpt strip_tac >- fs[] >- fs[]
-    >|
-    [drule mem_read_some >> strip_tac >> fs[mem_read_append]
-     ,fs[]
-     , (* quantifier case *)
-     (* using the wf invariant *)
-     ‘t' <= LENGTH M’ by
+    >> rpt strip_tac >> fs[]
+    >- (drule mem_read_some >> strip_tac >> fs[mem_read_append])
+    (* quantifier case *)
+    (* using the wf invariant *)
+    >> ‘t' <= LENGTH M’ by
        (‘v_addr <= LENGTH M’ by metis_tac[well_formed_def, bir_eval_exp_view_bound]
         >> ‘v_pre <= LENGTH M’ by
           (Cases_on ‘acq /\ rel’ >> fs[well_formed_def])
         >> ‘MAX v_pre (s.bst_coh l) <= LENGTH M’ by fs[well_formed_def]
-        >> decide_tac)
-     >> qpat_assum ‘!t''._’ (fn th => drule (Q.SPEC ‘t'’ th))
-     >> rpt strip_tac
-     >> ‘t' ≤ MAX v_pre (s.bst_coh l)’ by fs[bir_state_t_accfupds]
-     >> ‘~mem_is_loc M t' l’ by fs[]
-     >> fs[optionTheory.IS_SOME_EXISTS, GSYM mem_get_is_loc]
-     >> qpat_assum ‘!x._’ (fn th => assume_tac (Q.SPEC ‘x’ th))
-     >> fs[mem_get_append]
-     ,fs[]
-     ,fs[]
-     ,fs[]
-    ]
+        >> fs[])
+    >> qpat_assum ‘!t''._’ (fn th => drule (Q.SPEC ‘t'’ th))
+    >> rpt strip_tac
+    >> ‘t' ≤ MAX v_pre (s.bst_coh l)’ by fs[bir_state_t_accfupds]
+    >> ‘~mem_is_loc M t' l’ by fs[]
+    >> fs[optionTheory.IS_SOME_EXISTS, GSYM mem_get_is_loc]
+    >> qpat_assum ‘!x._’ (fn th => assume_tac (Q.SPEC ‘x’ th))
+    >> fs[mem_get_append]
     , (* xclfail *)
     HO_MATCH_MP_TAC (List.nth (CONJUNCTS clstep_rules,1))
     >> Q.LIST_EXISTS_TAC [‘a_e’, ‘v_e’, ‘acq’, ‘rel’, ‘new_env’, ‘new_viewenv’]

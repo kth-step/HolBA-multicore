@@ -570,9 +570,7 @@ clstep p cid s M [] s')
  /\ s' = s with <| bst_viewenv := new_viewenv;
                    bst_prom updated_by (FILTER (\t'. t' <> t));
                    bst_environ := new_env;
-                   bst_coh := (\lo. if lo = l
-                                    then MAX (s.bst_coh l) v_post
-                                    else s.bst_coh(lo));
+                   bst_coh     updated_by (l =+ v_post);
                    bst_v_wOld := MAX s.bst_v_wOld v_post;
                    bst_v_CAP := MAX s.bst_v_CAP v_addr;
                    bst_v_Rel := MAX s.bst_v_Rel (if (rel /\ acq) then v_post else 0);
@@ -631,7 +629,7 @@ clstep p cid s M [] s')
    /\ s' = s with <| bst_viewenv := new_viewenv;
                      bst_environ := new_environ;
                      bst_prom    updated_by (FILTER (\t'. t' <> t_w));
-                     bst_coh     updated_by (l =+ MAX (s.bst_coh l) v_wPost);
+                     bst_coh     updated_by (l =+ v_wPost);
                      bst_v_Rel   updated_by (MAX (if acq /\ rel then v_wPost else 0));
                      bst_v_rOld  updated_by (MAX v_rPost);
                      bst_v_rNew  updated_by (MAX (if acq then (if rel then v_wPost else v_rPost)else 0));
