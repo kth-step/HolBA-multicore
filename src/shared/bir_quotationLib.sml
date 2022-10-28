@@ -471,7 +471,7 @@ fun bir_program_parser obs_ty =
                ++ many stmt_parser
                ++ end_stmt_parser_finished)
                >> (fn (lbl,(stmts,end_stmt))
-                      => bblock obs_ty (lbl, stmts, end_stmt)))
+                      => bblock obs_ty (lbl, ``SOME <| mc_acq:= F; mc_rel:= F; mc_atomic:= F |>``, stmts, end_stmt)))
               inp
       fun prog_parser inp =
           (many block_parser >>
@@ -798,7 +798,7 @@ fun pp_stmt stmt =
 fun pp_prog prog =
     let val (block_list,_) = dest_list (dest_BirProgram prog)
         fun pp_block bl =
-            let val (lbl,stmts_tm,end_stmt) = dest_bir_block bl
+            let val (lbl, mc_tags, stmts_tm,end_stmt) = dest_bir_block bl
                 val (stmts,_) = dest_list stmts_tm;
             in
               PP.block INCONSISTENT 0 [
