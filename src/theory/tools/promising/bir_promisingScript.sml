@@ -564,7 +564,7 @@ clstep p cid s M [] s')
              (if (acq /\ rel) then s.bst_v_Rel else 0))))))
    /\ v_wPost = t_w
    /\ MAX v_wPre (s.bst_coh l) < t_w
-
+   /\ t_r < t_w
    (* No writes to memory location between read and write *)
    /\ (!t'. t_r < t' /\ t' < t_w ==> mem_is_loc M t' l)
 
