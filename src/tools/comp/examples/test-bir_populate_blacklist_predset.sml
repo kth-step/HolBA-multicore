@@ -6,10 +6,10 @@ open bir_bool_expTheory;
 val observe_type = Type `: 'a`
 val bdefprog_list = bdefprog_list observe_type
 
-val p_def = bdefprog_list "p" [(blabel_str "entry", [], (bjmp o belabel_str) "0w"),
-                               (blabel_str "0w", [], (bjmp o belabel_str) "1w"),
-                               (blabel_str "1w", [], (bjmp o belabel_addr64) 2),
-                               (blabel_addr64 2, [], (bhalt o bconst64) 0)]
+val p_def = bdefprog_list "p" [(blabel_str "entry", bmc_none, [], (bjmp o belabel_str) "0w"),
+                               (blabel_str "0w", bmc_none, [], (bjmp o belabel_str) "1w"),
+                               (blabel_str "1w", bmc_none, [], (bjmp o belabel_addr64) 2),
+                               (blabel_addr64 2, bmc_none, [], (bhalt o bconst64) 0)]
 
 val post = ``(\l. if (l = BL_Address (Imm64 2w)) then bir_exp_true else bir_exp_false)``
 val c = prove(

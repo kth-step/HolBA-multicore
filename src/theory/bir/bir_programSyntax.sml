@@ -130,11 +130,11 @@ fun dest_bir_block tm = let
   val (ty, l) = TypeBase.dest_record tm
   val _ = if is_bir_block_t_ty ty then () else fail()
   val lbl = Lib.assoc "bb_label" l
-  val mc_tags = Lib.assoc "bb_mc_tags" l
+  val mc_tags_opt = Lib.assoc1 "bb_mc_tags" l
   val stmts = Lib.assoc "bb_statements" l
   val last_stmt = Lib.assoc "bb_last_statement" l
 in
-  (lbl, mc_tags, stmts, last_stmt)
+  (lbl, if isSome mc_tags_opt then snd $ valOf mc_tags_opt else bir_mc_tags_NONE, stmts, last_stmt)
 end handle e => raise wrap_exn "dest_bir_block" e;
 
 val is_bir_block = can dest_bir_block;
