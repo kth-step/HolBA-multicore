@@ -28,6 +28,8 @@ val _ = Datatype `bir_exp_t =
 
   | BExp_IfThenElse        bir_exp_t bir_exp_t bir_exp_t
 
+  (* TODO: The get function could also take a BIR state, but this is only defined later *)
+  | BExp_ExtGet            ('ext_state_t -> bir_val_t option) bir_type_t
   | BExp_Load              bir_exp_t bir_exp_t bir_endian_t bir_immtype_t
   | BExp_Store             bir_exp_t bir_exp_t bir_endian_t bir_exp_t
 (*  | BExp_TAS               bir_exp_t bir_exp_t bir_endian_t bir_exp_t bir_exp_t *)
