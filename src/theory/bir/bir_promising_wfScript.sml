@@ -30,17 +30,28 @@ Proof
   >> fs[]
 QED
 
+(* TODO move closer to mem_get definition *)
 Theorem mem_get_LENGTH:
   !t M l v. mem_get M l t = SOME v ==> t <= LENGTH M
 Proof
   Cases >> rw[mem_get_def,listTheory.oEL_THM]
 QED
 
+(* TODO move closer to mem_read definition *)
 Theorem mem_read_LENGTH:
   !t M l v. mem_read M l t = SOME v ==> t <= LENGTH M
 Proof
   Cases >> rw[mem_read_some,mem_read_def,AllCaseEqs()]
   >> imp_res_tac mem_get_LENGTH
+QED
+
+(* TODO move closer to mem_read definition *)
+Theorem mem_read_mem_is_loc:
+  !t M l l' v. 0 < t /\ mem_read M l t = SOME v /\ mem_is_loc M t l' ==> l = l'
+Proof
+  Cases
+  >> rw[mem_read_def,mem_is_loc_def,mem_get_def]
+  >> gs[AllCaseEqs()]
 QED
 
 Definition latest_def:
@@ -55,17 +66,17 @@ End
 Definition well_formed_fwdb_def:
  well_formed_fwdb l M coh_t fwd =
    (fwd.fwdb_time <= latest l coh_t M
-    /\ fwd.fwdb_view < fwd.fwdb_time
+    /\ fwd.fwdb_view <= fwd.fwdb_time
     /\ ?v. mem_read M l fwd.fwdb_time = SOME v)
 End
-(*
+
 Definition well_formed_xclb_def:
-  well_formed_xclb M coh_t xclb =
-  (xclb.xclb_time <= latest xclb.xclb_loc coh_t M
-   /\ xclb.xclb_view <= coh_t
-   /\ ?v. mem_read M xclb.xclb_loc xclb.xclb_time = SOME v)
+  well_formed_xclb M coh xclb <=>
+    !l. mem_is_loc M xclb.xclb_time l
+    /\ 0 < xclb.xclb_time
+    ==> xclb.xclb_time <= latest l (coh l) M
+      /\ xclb.xclb_view <= coh l
 End
-*)
 
 Definition well_formed_viewenv_def:
   well_formed_viewenv viewenv M =
@@ -85,7 +96,7 @@ Definition well_formed_def:
      /\ s.bst_v_CAP <= LENGTH M
      /\ s.bst_v_Rel <= LENGTH M
      /\ (!l. well_formed_fwdb l M (s.bst_coh(l)) (s.bst_fwdb(l)))
-(*     /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M (s.bst_coh(xclb.loc) xclb)) *)
+     /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
      /\ (!t. MEM t s.bst_prom ==> t <= LENGTH M)
      /\ (!t msg.
            (oEL t M = SOME msg
@@ -121,6 +132,17 @@ Proof
   >> ‘x = msg’ by fs[mem_get_def]
   >> ‘l = msg.loc’ by (drule mem_get_SOME >> fs[])
   >> gvs[]
+QED
+
+Theorem latest_exact':
+!t l M msg.
+  mem_read M l t = SOME msg
+  ==>
+  latest l t M = t
+Proof
+  Cases >> rw[mem_read_def]
+  >> fs[AllCaseEqs()]
+  >> drule_then irule latest_exact
 QED
 
 Theorem latest_sound:
@@ -285,6 +307,72 @@ fs[]
 ]
 QED
 
+Theorem well_formed_xclb_bst_coh_update:
+  !M s xclb v_post l.
+    well_formed_xclb M s.bst_coh xclb
+    /\ s.bst_coh l < v_post
+    ==> well_formed_xclb M s.bst_coh(|l |-> v_post|) xclb
+Proof
+  rw[well_formed_xclb_def,combinTheory.APPLY_UPDATE_THM]
+  >> first_x_assum $ drule_all_then strip_assume_tac
+  >> IF_CASES_TAC
+  >> gvs[]
+  >> irule arithmeticTheory.LESS_EQ_TRANS
+  >> goal_assum drule
+  >> fs[latest_monotonicity]
+QED
+
+Theorem clstep_preserves_wf_xclb:
+  !p cid s M prom s'.
+    (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
+    /\ (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
+    /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
+    /\ clstep p cid s M prom s'
+    ==> (!xclb. s'.bst_xclb = SOME xclb ==> well_formed_xclb M s'.bst_coh xclb)
+Proof
+  rw[clstep_cases] >> fs[]
+  >~ [`BirStmt_Branch`]
+  >- (drule_then strip_assume_tac bir_exec_stmt_mc_invar >> fs[])
+  >~ [`BirStmt_Generic`]
+  >- (drule_then strip_assume_tac bir_exec_stmt_mc_invar >> fs[])
+  >~ [`BirStmt_Read`]
+  >- (
+    qmatch_asmsub_abbrev_tac `<|xclb_time:=_;xclb_view:=v_post|>`
+    >> Cases_on `xcl` >> gvs[]
+    >~ [`SOME (_:xclb_t)`]
+    >- (
+      simp[well_formed_xclb_def]
+      >> rpt gen_tac >> strip_tac
+      >> drule_all_then (fs o single) mem_read_mem_is_loc
+      >> qmatch_asmsub_rename_tac `mem_is_loc M t l`
+      >> first_x_assum $ qspec_then `l` strip_assume_tac
+      >> Cases_on `(s.bst_fwdb l).fwdb_time = t /\ ~(s.bst_fwdb l).fwdb_xcl`
+      >- (
+        irule arithmeticTheory.LESS_EQ_TRANS
+        >> gvs[well_formed_fwdb_def]
+        >> goal_assum drule
+        >> fs[latest_max]
+      )
+      >> rev_drule_then (ONCE_REWRITE_TAC o single o GSYM) latest_exact'
+      >> irule latest_monotonicity
+      >> qunabbrev_tac `v_post`
+      >> simp[arithmeticTheory.MAX_DEF,mem_read_view_def]
+    )
+    >> fs[well_formed_xclb_def]
+    >> rpt gen_tac >> strip_tac
+    >> first_x_assum $ drule_all_then strip_assume_tac
+    >> qmatch_goalsub_abbrev_tac `COND cond _ _`
+    >> Cases_on `cond` >> gvs[]
+    >> irule arithmeticTheory.LESS_EQ_TRANS
+    >> goal_assum drule
+    >> fs[latest_max]
+  )
+  >~ [`BirStmt_Write`]
+  >- (rpt strip_tac >> fs[well_formed_xclb_bst_coh_update])
+  >~ [`BirStmt_Amo`]
+  >- (rpt strip_tac >> fs[well_formed_xclb_bst_coh_update])
+QED
+
 Theorem bir_eval_view_of_exp_wf:
 !a_e env viewenv M v_addr.
  well_formed_viewenv viewenv M
@@ -307,7 +395,7 @@ Theorem mem_read_view_wf_fwdb:
 well_formed_fwdb l M coh_t fwd
 /\ t <= LENGTH M
 ==>
-mem_read_view fwd t ≤ LENGTH M
+mem_read_view fwd t <= LENGTH M
 Proof
   rpt strip_tac
   >> fs[mem_read_view_def, well_formed_fwdb_def]
@@ -354,7 +442,10 @@ Theorem clstep_preserves_wf:
 Proof
   rpt strip_tac
   >> fs[well_formed_def]
-  >> drule_then imp_res_tac clstep_preserves_wf_fwdb
+  >> drule_at_then (Pat `clstep _ _ _ _ _`) assume_tac clstep_preserves_wf_fwdb
+  >> drule_at (Pat `clstep _ _ _ _ _`) clstep_preserves_wf_xclb
+  >> gs[]
+  >> disch_then kall_tac (* removes wf_xclb *)
   >> fs[clstep_cases]
   >~ [`BirStmt_Read`]
   >- (
