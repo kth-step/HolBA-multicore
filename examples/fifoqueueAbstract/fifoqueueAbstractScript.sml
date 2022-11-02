@@ -5,8 +5,18 @@ open bir_promisingTheory ;
 open tracesTheory ;
 val _ = new_theory "fifoqueueAbstract";
 
+(* BStmt_Noop: assert true *)
+
 Definition noop_def:
   BStmt_Noop = BStmt_Assert (BExp_Const (Imm64 1w)) ;
+
+Definition queue_is_full_def:
+  queue_is_full _ = 
+    BVal_Imm (Imm1 (BExp_Get (fn gs. [gs.qSize = gs.capacity]))) ;
+
+Definition queue_is_empty_def:
+  queue_is_empty _ =
+    BVal_Imm (Imm1 (BExp_Get (fn gs. [gs.qSize = 0]))) ;
 
 (*****************************************************************************)
 (* Abstract blocking fifo queue specification ********************************)
@@ -33,19 +43,17 @@ Definition fifo_queue_enq_aprog_def:
       [
         (* tryagain := qSize = capacity *)
         BStmt_Assign
-          (BVar "tryagain" (BType_Imm Bit1))
-          (BIExp_Equal
-            (BExp_Gexp (fn gs => (fn (hd::tl) => hd) gs.qSize))
-            (BExp_Gexp (fn gs => (fn (hd::tl) => hd) gs.capacity))) ;
-        (* if tryagain then ignore = ignore else queue = APPEND queue [v] *)
+          (BVar "tryagain" (BType_Imm Bit1)) $ queue_is_full () ; 
+        (* if tryagain then noop else queue = APPEND queue [v] *)
         BStmt_IfThenElse
           (BExp_Den (BVar "tryagain" (BType_Imm Bit1)))
           (BStmt_Noop)
-          (BStmt_Gassign ((fn gs => gs with queue updated_with fn x => APPEND x (BExp_Den BVar "arg0" (BType_Imm Bit64))))) ;
+          (BStmt_Put (fn bs => (fn gs => gs with queue updated_with fn x => APPEND x (BExp_Den $ BVar "arg0" (BType_Imm Bit64)))) ;
+        (* if tryagain then noop else qSize = qSize + 1 *)
         BStmt_IfThenElse
           (BExp_Den (BVar "tryagain" (BType_Imm Bit1)))
           (BStmt_Noop)
-          (BStmt_Gassign ((fn gs => gs with qSize updated_with fn x => x + 1)))
+          (BStmt_Put (gn bs => (fn gs => gs with qSize updated_with fn x => x + 1)))
       ] ;
     bb_last_statement :=
       BStmt_CJmp 
@@ -55,28 +63,33 @@ Definition fifo_queue_enq_aprog_def:
   |> ;
 ] ;
 
+(* fifo_queue_deq_aprog: Return value bool[64] passed in register arg0 *)
+                
 Definition fifo_queue_deq_aprog_def:
-  fifo_queue_enq_aprog =
+  fifo_queue_deq_aprog =
   BirProgram [
   <|bb_label := BL_Address (Imm64 0w) "";
     bb_mc_tags := SOME <|mc_atomic := T; mc_acq := F; mc_rel := F|>;
     bb_statements := 
       [
-        (* tryagain := qSize = capacity *)
+        (* tryagain := qSize = 0 *)
         BStmt_Assign
-          (BVar "tryagain" (BType_Imm Bit1))
-          (BIExp_Equal
-            (BExp_Gexp (fn gs => gs.qSize))
-            (BExp_Gexp (fn gs => 0))) ;
-        (* if tryagain then ignore = ignore else queue = APPEND queue [v] *)
+          (BVar "tryagain" (BType_Imm Bit1)) $ queue_is_empty () ;
+        (* if tryagain then noop else arg0 = hd(queue) *)
         BStmt_IfThenElse
           (BExp_Den (BVar "tryagain" (BType_Imm Bit1)))
           (BStmt_Noop)
-          (BStmt_Gassign ((fn gs => gs with queue updated_with fn (hd::tl) => tl))) ;
+          (BStmt_Assign (BVar "arg0" (BType_Imm Bit64)) $ BVal_Imm  $ Imm64 $ BExp_Get $ fn gs.(fn (hd::tl) => hd) gs.queue) ;
+        (* if tryagain then noop else queue = tail(queue) *)
         BStmt_IfThenElse
           (BExp_Den (BVar "tryagain" (BType_Imm Bit1)))
           (BStmt_Noop)
-          (BStmt_Gassign ((fn gs => gs with qSize updated_with fn x => x - 1)))
+          (BStmt_Put (fn bs => (fn gs => gs with queue updated_with fn (hd::tl) => tl))) ;
+        (* if tryagain then noop else qSize = qSize - 1 *)
+        BStmt_IfThenElse
+          (BExp_Den (BVar "tryagain" (BType_Imm Bit1)))
+          (BStmt_Noop)
+          (BStmt_Put (fn bs => (fn gs => gs with qSize updated_with fn x => x - 1)))
       ] ;
     bb_last_statement :=
       BStmt_CJmp 
