@@ -449,6 +449,7 @@ val (bir_clstep_rules, bir_clstep_ind, bir_clstep_cases) = Hol_reln`
 (* read *)
 (!p s s' v a_e xcl acq rel M l (t:num) v_pre v_post v_addr var new_env cid opt_cast.
    bir_get_stmt p s.bst_pc = BirStmt_Read var a_e opt_cast xcl acq rel
+ /\ s.bst_status = BST_Running
  /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv
  ∧ mem_read M l t = SOME v
  ∧ v_pre = MAX (MAX (MAX v_addr s.bst_v_rNew) (if (acq /\ rel) then s.bst_v_Rel else 0))
@@ -478,6 +479,7 @@ val (bir_clstep_rules, bir_clstep_ind, bir_clstep_cases) = Hol_reln`
 /\ (* exclusive-failure *)
 (!p s s' M a_e v_e acq rel cid new_env new_viewenv.
    bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e T acq rel
+ /\ s.bst_status = BST_Running
  /\  SOME new_env = xclfail_update_env p s
  /\  SOME new_viewenv = xclfail_update_viewenv p s
  /\  s' = s with <| bst_environ := new_env;
@@ -489,6 +491,7 @@ clstep p cid s M [] s')
 /\ (* fulfil *)
 (!p s s' M v a_e xcl acq rel l (t:num) v_pre v_post v_addr v_data v_e cid new_env new_viewenv.
    bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel
+ /\ s.bst_status = BST_Running
  /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv
  /\ (SOME v, v_data) = bir_eval_exp_view v_e s.bst_environ s.bst_viewenv
  /\ (xcl ==> s.bst_xclb <> NONE /\ fulfil_atomic_ok M l cid (THE s.bst_xclb).xclb_time t)
@@ -535,6 +538,7 @@ clstep p cid s M [] s')
 /\ (* AMO fulfil *)
 (!p cid s s' M acq rel var l a_e v_r v_w v_e v_rPre v_rPost v_wPre v_wPost (t_w:num) (t_r :num) new_environ new_viewenv.
    bir_get_stmt p s.bst_pc = BirStmt_Amo var a_e v_e acq rel
+   /\ s.bst_status = BST_Running
 
    (* Get location *)
    /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv
@@ -589,6 +593,7 @@ clstep p cid s M [] s')
 /\ (* fence *)
 (!p s s' K1 K2 M cid v.
    bir_get_stmt p s.bst_pc = BirStmt_Fence K1 K2
+   /\ s.bst_status = BST_Running
    /\ v = MAX (if is_read K1 then s.bst_v_rOld else 0) (if is_write K1 then s.bst_v_wOld else 0)
    /\ s' = s with <| bst_v_rNew := MAX s.bst_v_rNew (if is_read K2 then v else 0);
                      bst_v_wNew := MAX s.bst_v_wNew (if is_write K2 then v else 0);
@@ -598,6 +603,7 @@ clstep p cid s M [] s')
 /\ (* branch (conditional jump) *)
 (!p s s' M cid v oo s2 v_addr cond_e lbl1 lbl2 stm.
    bir_get_stmt p s.bst_pc = BirStmt_Branch cond_e lbl1 lbl2
+   /\ s.bst_status = BST_Running
     /\ stm = BStmtE (BStmt_CJmp cond_e lbl1 lbl2)
     /\ (SOME v, v_addr) = bir_eval_exp_view cond_e s.bst_environ s.bst_viewenv
     /\ bir_exec_stmt p stm s = (oo,s2)
@@ -607,6 +613,7 @@ clstep p cid s M [] s')
 /\ (* register-to-register operation *)
 (!p s s' var M cid v v_val e new_env.
   bir_get_stmt p s.bst_pc = BirStmt_Expr var e
+ /\ s.bst_status = BST_Running
  /\ (SOME v, v_val) = bir_eval_exp_view e s.bst_environ s.bst_viewenv
  /\ NONE = get_read_args e
  /\ NONE = get_fulfil_args e
@@ -618,6 +625,7 @@ clstep p cid s M [] s')
 /\ (* Other BIR single steps *)
 (!p s s' M cid stm oo.
    bir_get_stmt p s.bst_pc = BirStmt_Generic stm
+    /\ s.bst_status = BST_Running
     /\ bir_exec_stmt p stm s = (oo,s')
 ==>
   clstep p cid s M [] s')
