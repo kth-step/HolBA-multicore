@@ -528,6 +528,24 @@ Proof
 QED
 *)
 
+(* reading at time stamp  t  at location  l  from memory  M  would not see a
+   memory update that is out of scope wrt  to  *)
+Definition latest_t_def:
+  latest_t l M (t:num) to =
+  !t'. t < t' /\ t' <= to ==> ~(mem_is_loc M t' l)
+End
+
+Theorem latest_t_append:
+  !t l M M' to.
+  latest_t l M t to /\ to <= LENGTH M
+  ==> latest_t l (M ++ M') t to
+Proof
+  rw[latest_t_def]
+  >> first_x_assum drule
+  >> fs[mem_is_loc_append]
+QED
+
+
 (* TODO: "Generalising variable "ν_pre" in clause #0"? *)
 (* core-local steps that don't affect memory *)
 val (bir_clstep_rules, bir_clstep_ind, bir_clstep_cases) = Hol_reln`
@@ -539,7 +557,7 @@ val (bir_clstep_rules, bir_clstep_ind, bir_clstep_cases) = Hol_reln`
  ∧ mem_read M l t = SOME v
  ∧ v_pre = MAX (MAX (MAX v_addr s.bst_v_rNew) (if (acq /\ rel) then s.bst_v_Rel else 0))
                (if (acq /\ rel) then (MAX s.bst_v_rOld s.bst_v_wOld) else 0)
- ∧ (∀t'. ((t:num) < t' ∧ t' ≤ (MAX v_pre (s.bst_coh l))) ⇒ ~(mem_is_loc M t' l))
+ /\ latest_t l M t $ MAX v_pre (s.bst_coh l)
  ∧ v_post = MAX v_pre (mem_read_view (s.bst_fwdb(l)) t)
  /\ SOME new_env = env_update_cast64 (bir_var_name var) v (bir_var_type var) (s.bst_environ)
  (* TODO: Update viewenv by v_addr or v_post? *)
