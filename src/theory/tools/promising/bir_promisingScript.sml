@@ -94,6 +94,83 @@ Proof
   ]
 QED
 
+Theorem mem_is_loc_append:
+  !t M M'. t <= LENGTH M
+  ==> mem_is_loc (M ++ M') t l = mem_is_loc M t l
+Proof
+  Cases
+  >> fs[mem_is_loc_def,listTheory.oEL_THM,rich_listTheory.EL_APPEND1]
+QED
+
+Theorem mem_get_SOME:
+  !l t M msg.
+    mem_get M l t = SOME msg
+    ==>
+    l = msg.loc
+Proof
+  Cases_on ‘t’
+  >> fs[mem_get_def, mem_default_def]
+  >> rpt strip_tac
+  >> Cases_on ‘oEL n M’
+  >> gvs[]
+QED
+
+Theorem mem_get_mem_read:
+  !M l t v.
+    mem_read M l t = SOME v
+    ==>
+    ?m. mem_get M l t = SOME m /\ m.val = v
+Proof
+  Induct_on ‘t’ >- fs[mem_read_def, mem_get_def]
+  >> rpt strip_tac
+  >> fs[mem_read_def, mem_get_def]
+  >> Cases_on ‘oEL t M’
+  >- fs[]
+  >> Cases_on ‘x.loc = l’ >- fs[]
+  >> fs[]
+QED
+
+Theorem mem_get_LENGTH:
+  !t M l v. mem_get M l t = SOME v ==> t <= LENGTH M
+Proof
+  Cases >> rw[mem_get_def,listTheory.oEL_THM]
+QED
+
+Theorem mem_get_append:
+  !t M M' l msg.
+    t <= LENGTH M ==> mem_get (M++M') l t = mem_get M l t
+Proof
+  rpt strip_tac
+  >> Cases_on ‘t’
+  >> fs[mem_get_def] (* discharges 0 case, SUC remains *)
+  >> fs[listTheory.oEL_THM, rich_listTheory.EL_APPEND1]
+QED
+
+Theorem mem_read_some:
+  !M l t v.
+    mem_read M l t = SOME v ==> t <= LENGTH M \/ (t = 0 /\ v = mem_default_value)
+Proof
+  Induct_on ‘t’
+  >> rpt strip_tac
+  >> fs[mem_read_def,mem_get_def]
+  >> Cases_on ‘oEL t M’
+  >> fs[listTheory.oEL_EQ_EL, listTheory.oEL_def]
+QED
+
+Theorem mem_read_append:
+  !t M M' l msg.
+    t <= LENGTH M ==> mem_read (M++M') l t = mem_read M l t
+Proof
+  fs[mem_read_def,mem_get_append]
+QED
+
+Theorem mem_read_LENGTH:
+  !t M l v. mem_read M l t = SOME v ==> t <= LENGTH M
+Proof
+  Cases >> rw[mem_read_some,mem_read_def,AllCaseEqs()]
+  >> imp_res_tac mem_get_LENGTH
+QED
+
 val mem_is_cid_def = Define‘
    mem_is_cid M 0 cid = F
    /\
@@ -102,6 +179,14 @@ val mem_is_cid_def = Define‘
    | SOME m => m.cid = cid
    | NONE => F
 ’;
+
+Theorem mem_read_mem_is_loc:
+  !t M l l' v. 0 < t /\ mem_read M l t = SOME v /\ mem_is_loc M t l' ==> l = l'
+Proof
+  Cases
+  >> rw[mem_read_def,mem_is_loc_def,mem_get_def]
+  >> gs[AllCaseEqs()]
+QED
 
 (* Note that this currently does not take into account ARM *)
 val mem_read_view_def = Define‘
