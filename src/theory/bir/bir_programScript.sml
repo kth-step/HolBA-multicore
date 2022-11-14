@@ -22,7 +22,7 @@ val _ = Datatype `bir_label_t =
 
 val _ = Datatype `bir_label_exp_t =
     BLE_Label bir_label_t
-  | BLE_Exp ('ext_state_t bir_exp_t)
+  | BLE_Exp bir_exp_t
 `;
 
 val _ = Datatype `bir_memop_t =
@@ -38,31 +38,38 @@ val _ = Datatype `bir_memop_t =
   Observe observation_id condition_expression expression_list observation_function
 *)
 Datatype:
-  bmc_stmt_basic_t =
-  (* reg, address, cast, xcl, acq rel *)
-  | BMCStmt_Load bir_var_t ('ext_state_t bir_exp_t) ((bir_cast_t # bir_immtype_t) option) bool bool bool
-  (* success reg, address, value, xcl, acq, rel *)
-  | BMCStmt_Store bir_var_t ('ext_state_t bir_exp_t) ('ext_state_t bir_exp_t) bool bool bool
-  (* success reg, address, value, acq, rel *)
-  | BMCStmt_Amo ('ext_state_t bir_exp_t) ('ext_state_t bir_exp_t) ('ext_state_t bir_exp_t) bool bool
-  | BMCStmt_Assign bir_var_t ('ext_state_t bir_exp_t)
-  | BMCStmt_Fence bir_memop_t bir_memop_t
-  (* TODO: Should take view of the input *)
-  | BMCStmt_ExtPut  (bir_val_t -> 'ext_state_t -> 'ext_state_t option) ('ext_state_t bir_exp_t)
-(*  | BStmt_Observe num ('ext_state_t bir_exp_t) (('ext_state_t bir_exp_t) list) (bir_val_t list -> 'a) *)
-  | BMCStmt_Assert ('ext_state_t bir_exp_t)
-  | BMCStmt_Assume ('ext_state_t bir_exp_t)
+  bir_stmt_basic_t =
+  | BMCStmt_Assign bir_var_t bir_exp_t
+  | BMCStmt_ExtPut  (bir_val_t -> 'ext_state_t -> 'ext_state_t option) bir_exp_t
+  | BMCStmt_Assert bir_exp_t
+  | BMCStmt_Assume bir_exp_t
 End
 
-Datatype: bir_stmt_end_t =
-  | BStmt_Jmp     ('ext_state_t bir_label_exp_t)
-  | BStmt_CJmp    ('ext_state_t bir_exp_t) ('ext_state_t bir_label_exp_t) ('ext_state_t bir_label_exp_t)
-  | BStmt_Halt    ('ext_state_t bir_exp_t)
+Datatype:
+  bmc_stmt_basic_t =
+  (* reg, address, cast, xcl, acq rel *)
+  | BMCStmt_Load bir_var_t bir_exp_t ((bir_cast_t # bir_immtype_t) option) bool bool bool
+  (* success reg, address, value, xcl, acq, rel *)
+  | BMCStmt_Store bir_var_t bir_exp_t bir_exp_t bool bool bool
+  (* success reg, address, value, acq, rel *)
+  | BMCStmt_Amo bir_exp_t bir_exp_t bir_exp_t bool bool
+  | BMCStmt_Assign bir_var_t bir_exp_t
+  | BMCStmt_Fence bir_memop_t bir_memop_t
+  (* TODO: Should take view of the input *)
+  | BMCStmt_ExtPut  (bir_val_t -> 'ext_state_t -> 'ext_state_t option) bir_exp_t
+  | BMCStmt_Assert bir_exp_t
+  | BMCStmt_Assume bir_exp_t
+End
+
+Datatype:
+  | BStmt_Jmp     bir_label_exp_t
+  | BStmt_CJmp    bir_exp_t bir_label_exp_t bir_label_exp_t
+  | BStmt_Halt    bir_exp_t
 End
 
 val _ = Datatype `bir_stmt_t =
-  | BStmtB ('ext_state_t bir_stmt_basic_t)
-  | BStmtE ('ext_state_t bir_stmt_end_t)
+  | BStmtB bir_stmt_basic_t
+  | BStmtE bir_stmt_end_t
 `;
 
 val _ = Datatype `bir_mc_tags_t = <|
@@ -73,13 +80,8 @@ val _ = Datatype `bir_mc_tags_t = <|
 val _ = Datatype `bir_generic_block_t = <|
   bb_label          : bir_label_t;
   bb_mc_tags        : bir_mc_tags_t option;
-<<<<<<< HEAD
   bb_statements     : 'a list;
   bb_last_statement : bir_stmt_end_t |>`;
-=======
-  bb_statements     : ('ext_state_t bir_stmt_basic_t) list;
-  bb_last_statement : ('ext_state_t bir_stmt_end_t) |>`;
->>>>>>> d34e6975 (Initial extern function experiments)
 
 Datatype:
   bir_generic_stmt_t =
@@ -100,6 +102,12 @@ Type bmc_block_t = `` :bmc_stmt_basic_t bir_generic_block_t``
 Type bir_program_t = ``:('a bir_stmt_basic_t) bir_generic_program_t``
 Type bmc_program_t = ``:bmc_stmt_basic_t bir_generic_program_t``
 
+=======
+  bb_statements     : bir_stmt_basic_t list;
+  bb_last_statement : bir_stmt_end_t |>`;
+
+val _ = Datatype `bir_program_t = BirProgram (bir_block_t list)`;
+>>>>>>> 4a08c78b (Removed Fence and Observe, added ExtPut and ExtGet: theory/bir now compiles)
 val _ = Datatype `bir_programcounter_t = <| bpc_label:bir_label_t; bpc_index:num |>`;
 
 val bir_pc_ss = rewrites (type_rws ``:bir_programcounter_t``);
@@ -113,7 +121,7 @@ val _ = Datatype `bir_status_t =
   | BST_Halted bir_val_t        (* Halt called *)
   | BST_JumpOutside bir_label_t (* Jump to unknown label *)`;
 
-val _ = Datatype `bir_inflight_stmt_t = BirInflight string ('a bir_stmt_t)`;
+val _ = Datatype `bir_inflight_stmt_t = BirInflight string bir_stmt_t`;
 
 (* forward buffer, part of the core-local state *)
 val fwdb_def = Datatype`
@@ -140,7 +148,7 @@ val _ = Datatype `bir_state_t = <|
   bst_prom     : num list;
   bst_fwdb     : bir_val_t -> fwdb_t;
   bst_xclb     : xclb_t option;
-  bst_inflight : (string bir_inflight_stmt_t) list;
+  bst_inflight : bir_inflight_stmt_t list;
   bst_counter  : num
 |>`;
 
@@ -158,7 +166,6 @@ val bir_varset_of_basic_stmt_def = Define`
 /\ bir_varset_of_basic_stmt (BStmt_Assert exp) = bir_varset_of_exp exp
 /\ bir_varset_of_basic_stmt (BStmt_Assume exp) = bir_varset_of_exp exp
 /\ bir_varset_of_basic_stmt (BStmt_ExtPut _ exp) = bir_varset_of_exp exp
-/\ bir_varset_of_basic_stmt (BStmt_Fence _ _) = {}
 `;
 
 val bir_varset_of_label_exp_def = Define`
@@ -182,8 +189,8 @@ val bir_programcounter_t_component_equality = DB.fetch "-" "bir_programcounter_t
 val bir_state_ss = rewrites (type_rws ``:bir_state_t``);
 val bir_status_ss = rewrites (type_rws ``:bir_status_t``);
 
-val bir_stmt_ss = rewrites ((type_rws ``:'ext_state_t bir_stmt_t``) @ (type_rws ``:'ext_state_t bir_stmt_end_t``) @
-                            (type_rws ``:'ext_state_t bir_stmt_basic_t``));
+val bir_stmt_ss = rewrites ((type_rws ``:bir_stmt_t``) @ (type_rws ``:bir_stmt_end_t``) @
+                            (type_rws ``:bir_stmt_basic_t``));
 
 (* ------------------------------------------------------------------------- *)
 (* Programs                                                                  *)
@@ -242,7 +249,7 @@ val bir_pc_next_def = Define `
 val bir_block_pc_def = Define `bir_block_pc l = <| bpc_label := l; bpc_index := 0 |>`
 
 val bir_block_pc_11 = store_thm ("bir_block_pc_11",
-``(bir_block_pc l1 = bir_block_pc l2) <=> (l1 = l2)``,
+``!l1 l2. (bir_block_pc l1 = bir_block_pc l2) <=> (l1 = l2)``,
 SIMP_TAC (std_ss++bir_pc_ss) [bir_block_pc_def, bir_programcounter_t_component_equality]);
 
 val bir_pc_first_def = Define
@@ -270,149 +277,156 @@ val bir_state_set_failed_def = Define `bir_state_set_failed st =
 (*  Semantics of statements                                                  *)
 (* ------------------------------------------------------------------------- *)
 
-val bir_exec_stmt_assign_def = Define `bir_exec_stmt_assign v ex (st : bir_state_t) =
-   case bir_eval_exp ex st.bst_environ of
+val bir_exec_stmt_assign_def = Define `bir_exec_stmt_assign ext_map v ex (st:bir_state_t, ext_st) =
+   case bir_eval_exp ext_map ex st.bst_environ ext_st of
      | SOME va => (case bir_env_write v va st.bst_environ of
                      | SOME env => (st with bst_environ := env)
                      | NONE => bir_state_set_typeerror st
                   )
      | NONE => bir_state_set_typeerror st`;
 
-val bir_exec_stmt_assert_def = Define `bir_exec_stmt_assert ex (st : bir_state_t) =
-  case (option_CASE (bir_eval_exp ex st.bst_environ) NONE bir_dest_bool_val) of
+val bir_exec_stmt_assert_def = Define `bir_exec_stmt_assert ext_map ex (st:bir_state_t, ext_st) =
+  case (option_CASE (bir_eval_exp ext_map ex st.bst_environ ext_st) NONE bir_dest_bool_val) of
     | SOME T => st
     | SOME F => (st with bst_status := BST_AssertionViolated)
     | NONE => bir_state_set_typeerror st`
 
-val bir_exec_stmt_assume_def = Define `bir_exec_stmt_assume ex (st : bir_state_t) =
-  case (option_CASE (bir_eval_exp ex st.bst_environ) NONE bir_dest_bool_val) of
+val bir_exec_stmt_assume_def = Define `bir_exec_stmt_assume ext_map ex (st:bir_state_t, ext_st) =
+  case (option_CASE (bir_eval_exp ext_map ex st.bst_environ ext_st) NONE bir_dest_bool_val) of
     | SOME T => st
     | SOME F => (st with bst_status := BST_AssumptionViolated)
     | NONE => bir_state_set_typeerror st`;
 
-val bir_exec_stmt_ext_put_def = Define `bir_exec_stmt_ext_put f ex (st : bir_state_t) (ext_st : 'ext_state_t) =
-  case bir_eval_exp ex st.bst_environ of
+val bir_exec_stmt_ext_put_def = Define `bir_exec_stmt_ext_put ext_map (ext_name:string) ex (st:bir_state_t, ext_st:'ext_state_t) =
+  case bir_eval_exp ext_map ex st.bst_environ ext_st of
     | SOME va =>
-      (case f va ext_st of
-        | SOME ext_st' => (ext_st', st)
-        | NONE => (ext_st, bir_state_set_typeerror st)
-      )
-    | NONE => (ext_st, bir_state_set_typeerror st)`;
+     (case FLOOKUP (SND ext_map) ext_name of
+      | SOME f =>
+       (case f va ext_st of
+         | SOME ext_st' => (st, ext_st')
+         | NONE => (bir_state_set_typeerror st, ext_st)
+       )
+      | NONE => (bir_state_set_typeerror st, ext_st)
+     )
+    | NONE => (bir_state_set_typeerror st, ext_st)`;
 
 (* In sequential semantics, the fence is a nop *)
 val bir_exec_stmt_fence_def = Define `bir_exec_stmt_fence mop mos (st : bir_state_t) = st`;
+(*
+val bir_exec_stmt_fence_state_def = Define `bir_exec_stmt_fence_state mop mos (st : bir_state_t) = st`;
+*)
 
 val bir_exec_stmtB_def = Define `
-  (bir_exec_stmtB (BStmt_Assert ex) st ext_st = (ext_st, bir_exec_stmt_assert ex st)) /\
-  (bir_exec_stmtB (BStmt_Assume ex) st ext_st = (ext_st, bir_exec_stmt_assume ex st)) /\
-  (bir_exec_stmtB (BStmt_Assign v ex) st ext_st = (ext_st, bir_exec_stmt_assign v ex st)) /\
-  (bir_exec_stmtB (BStmt_ExtPut f ex) st ext_st = bir_exec_stmt_ext_put f ex st ext_st) /\
-  (bir_exec_stmtB (BStmt_Fence mop mos) st ext_st = (ext_st, bir_exec_stmt_fence mop mos st))`;
-
-val bir_exec_stmtB_state_def = Define `bir_exec_stmtB_state stmt st ext_st =
-  SND (bir_exec_stmtB stmt st ext_st)`;
-
+  (bir_exec_stmtB ext_map (BStmt_Assert ex) (st, ext_st) = (bir_exec_stmt_assert ext_map ex (st, ext_st), ext_st)) /\
+  (bir_exec_stmtB ext_map (BStmt_Assume ex) (st, ext_st) = (bir_exec_stmt_assume ext_map ex (st, ext_st), ext_st)) /\
+  (bir_exec_stmtB ext_map (BStmt_Assign v ex) (st, ext_st) = (bir_exec_stmt_assign ext_map v ex (st, ext_st), ext_st)) /\
+  (bir_exec_stmtB ext_map (BStmt_ExtPut ext_name ex) (st, ext_st) = bir_exec_stmt_ext_put ext_map ext_name ex (st, ext_st))`;
+(*
+val bir_exec_stmtB_state_def = Define `bir_exec_stmtB_state ext_map stmt st ext_st =
+  SND (bir_exec_stmtB ext_map stmt st ext_st)`;
+*)
 
 val bir_exec_stmtB_exists =
   store_thm("bir_exec_stmtB_exists",
-  ``!h st ext_st.
-      ?ext_st' st'.
-        bir_exec_stmtB h st ext_st = (ext_st', st')``,
+  ``!ext_map h st ext_st.
+      ?st' ext_st'.
+        bir_exec_stmtB ext_map h (st, ext_st) = (st', ext_st')``,
 
 Cases_on `h` >> (
-  STRIP_TAC >>
+  rpt strip_tac >>
   fs [bir_exec_stmtB_def]
 ) >>
 fs [bir_exec_stmt_ext_put_def] >>
-Cases_on `bir_eval_exp b st.bst_environ` >> (
+Cases_on `bir_eval_exp ext_map b st.bst_environ ext_st` >> (
   fs []
 ) >>
-GEN_TAC >>
-Cases_on `f x ext_st` >> (
+Cases_on `FLOOKUP (SND ext_map) s` >> (
+  fs []
+) >>
+Cases_on `x' x ext_st` >> (
   fs []
 )
 );
 
-
+(*
 val bir_exec_stmtB_state_REWRS = store_thm ("bir_exec_stmtB_state_REWRS",
-``(!ex st. (bir_exec_stmtB_state (BStmt_Assert ex) st = (bir_exec_stmt_assert ex st))) /\
-  (!ex st. (bir_exec_stmtB_state (BStmt_Assume ex) st = (bir_exec_stmt_assume ex st))) /\
-  (!v ex st. (bir_exec_stmtB_state (BStmt_Assign v ex) st = (bir_exec_stmt_assign v ex st))) /\
-  (!oid ec el obf st. (bir_exec_stmtB_state (BStmt_Observe oid ec el obf) st = bir_exec_stmt_observe_state ec el st)) /\
-  (!st. (bir_exec_stmtB_state (BStmt_Fence mos mop) st = bir_exec_stmt_fence_state mos mop st))``,
+``(!ext_map ex st ext_st. bir_exec_stmtB_state ext_map (BStmt_Assert ex) st ext_st = (bir_exec_stmt_assert ex st)) /\
+  (!ext_map ex st ext_st. (bir_exec_stmtB_state ext_map (BStmt_Assume ex) st ext_st = (bir_exec_stmt_assume ex st))) /\
+  (!ext_map v ex st ext_st. (bir_exec_stmtB_state ext_map (BStmt_Assign v ex) st ext_st = (bir_exec_stmt_assign v ex st))) /\
+  (!ext_map ext_name ex st ext_st. (bir_exec_stmtB_state ext_map (BStmt_ExtPut ext_name ex) st ext_st = SND (bir_exec_stmt_ext_put ext_map ext_name ex st ext_st))) /\
+  (!ext_map mos mop st ext_st. (bir_exec_stmtB_state ext_map (BStmt_Fence mos mop) st ext_st = bir_exec_stmt_fence_state mos mop st))``,
 
-SIMP_TAC std_ss [bir_exec_stmtB_state_def, bir_exec_stmtB_def, bir_exec_stmt_observe_state_THM, bir_exec_stmt_fence_state_def, bir_exec_stmt_fence_def]);
+SIMP_TAC std_ss [bir_exec_stmtB_state_def, bir_exec_stmtB_def, bir_exec_stmt_fence_state_def, bir_exec_stmt_fence_def]);
+*)
 
-
-val bir_exec_stmt_halt_def = Define `bir_exec_stmt_halt ex (st : bir_state_t) =
-  case bir_eval_exp ex st.bst_environ of
+val bir_exec_stmt_halt_def = Define `bir_exec_stmt_halt ext_map ex (st, ext_st) =
+  case bir_eval_exp ext_map ex st.bst_environ ext_st of
     | NONE => bir_state_set_typeerror st
     | SOME v => st with bst_status := BST_Halted v`;
 
-val bir_exec_stmt_jmp_to_label_def = Define `bir_exec_stmt_jmp_to_label p
-   (l : bir_label_t) (st : bir_state_t) =
+val bir_exec_stmt_jmp_to_label_def = Define `bir_exec_stmt_jmp_to_label p l st =
     if (MEM l (bir_labels_of_program p)) then
       st with bst_pc := bir_block_pc l
     else (st with bst_status := (BST_JumpOutside l))`;
 
 val bir_eval_label_exp_def = Define `
-   (bir_eval_label_exp (BLE_Label l) env = SOME l) /\
-   (bir_eval_label_exp (BLE_Exp e) env = case bir_eval_exp e env of
+   (bir_eval_label_exp ext_map (BLE_Label l) env ext_st = SOME l) /\
+   (bir_eval_label_exp ext_map (BLE_Exp e) env ext_st = case bir_eval_exp ext_map e env ext_st of
       | SOME (BVal_Imm i) => SOME (BL_Address i)
       | _ => NONE
    )`;
 
-val bir_exec_stmt_jmp_def = Define `bir_exec_stmt_jmp p le (st : bir_state_t) =
-    case bir_eval_label_exp le st.bst_environ of
+val bir_exec_stmt_jmp_def = Define `bir_exec_stmt_jmp ext_map p le (st, ext_st) =
+    case bir_eval_label_exp ext_map le st.bst_environ ext_st of
       | NONE => bir_state_set_typeerror st
       | SOME l => bir_exec_stmt_jmp_to_label p l st`;
 
-val bir_exec_stmt_cjmp_def = Define `bir_exec_stmt_cjmp p ec l1 l2 (st : bir_state_t) =
+val bir_exec_stmt_cjmp_def = Define `bir_exec_stmt_cjmp ext_map p ec l1 l2 (st, ext_st) =
   let
-    vobc = option_CASE (bir_eval_exp ec st.bst_environ) NONE bir_dest_bool_val
+    vobc = option_CASE (bir_eval_exp ext_map ec st.bst_environ ext_st) NONE bir_dest_bool_val
   in
   case vobc of
-    | SOME T => bir_exec_stmt_jmp p l1 st
-    | SOME F => bir_exec_stmt_jmp p l2 st
+    | SOME T => bir_exec_stmt_jmp ext_map p l1 (st, ext_st)
+    | SOME F => bir_exec_stmt_jmp ext_map p l2 (st, ext_st)
     | NONE => bir_state_set_typeerror st`;
 
 
 val bir_exec_stmtE_def = Define `
-  (bir_exec_stmtE p (BStmt_Jmp l) st = bir_exec_stmt_jmp p l st) /\
-  (bir_exec_stmtE p (BStmt_CJmp e l1 l2) st = bir_exec_stmt_cjmp p e l1 l2 st) /\
-  (bir_exec_stmtE p (BStmt_Halt ex) st = bir_exec_stmt_halt ex st)`;
+  (bir_exec_stmtE ext_map p (BStmt_Jmp l) (st, ext_st) = bir_exec_stmt_jmp ext_map p l (st, ext_st)) /\
+  (bir_exec_stmtE ext_map p (BStmt_CJmp e l1 l2) (st, ext_st) = bir_exec_stmt_cjmp ext_map p e l1 l2 (st, ext_st)) /\
+  (bir_exec_stmtE ext_map p (BStmt_Halt ex) (st, ext_st) = bir_exec_stmt_halt ext_map ex (st, ext_st))`;
 
 
 val bir_exec_stmt_def = Define `
-  (bir_exec_stmt (p:'a bir_program_t) (BStmtB (bst:'a bir_stmt_basic_t)) st =
-     let (oo, st') = bir_exec_stmtB bst st in
-     if (bir_state_is_terminated st') then (oo, st') else (oo, st' with bst_pc updated_by bir_pc_next)) /\
-  (bir_exec_stmt p (BStmtE bst) st = (NONE, bir_exec_stmtE p bst st))`;
+  (bir_exec_stmt ext_map p (BStmtB (bst:bir_stmt_basic_t)) (st, ext_st) =
+     let (st', ext_st') = bir_exec_stmtB ext_map bst (st, ext_st) in
+     if (bir_state_is_terminated st') then (st', ext_st') else (st' with bst_pc updated_by bir_pc_next, ext_st')) /\
+  (bir_exec_stmt ext_map p (BStmtE bst) (st, ext_st) = (bir_exec_stmtE ext_map p bst (st, ext_st), ext_st))`;
 
-
-val bir_exec_stmt_state_def = Define `bir_exec_stmt_state p stmt state = SND (bir_exec_stmt p stmt state)`;
+(*
+val bir_exec_stmt_state_def = Define `bir_exec_stmt_state ext_map p stmt st ext_st = SND (bir_exec_stmt ext_map p stmt st ext_st)`;
 
 
 val bir_exec_stmt_state_REWRS = store_thm ("bir_exec_stmt_state_REWRS",
-``(!p bst st. (bir_exec_stmt_state p (BStmtB bst) st =
-     let st' = bir_exec_stmtB_state bst st in
+``(!ext_map p bst st ext_st. (bir_exec_stmt_state ext_map p (BStmtB bst) st ext_st =
+     let st' = bir_exec_stmtB_state ext_map bst st ext_st in
      if (bir_state_is_terminated st') then st' else (st' with bst_pc updated_by bir_pc_next))) /\
-  (!p est st. (bir_exec_stmt_state p (BStmtE est) st = bir_exec_stmtE p est st))``,
+  (!ext_map p est st ext_st. (bir_exec_stmt_state ext_map p (BStmtE est) st ext_st = bir_exec_stmtE p est st))``,
 
 SIMP_TAC (std_ss++pairSimps.gen_beta_ss) [bir_exec_stmt_state_def, bir_exec_stmt_def, LET_THM,
   bir_exec_stmtB_state_def] >>
 REPEAT GEN_TAC >> REPEAT CASE_TAC);
+*)
 
-
-val bir_exec_step_def = Define `bir_exec_step p state =
-  if (bir_state_is_terminated state) then (NONE, state) else
+val bir_exec_step_def = Define `bir_exec_step ext_map p (state, ext_st) =
+  if (bir_state_is_terminated state) then (state, ext_st) else
   case (bir_get_current_statement p state.bst_pc) of
-    | NONE => (NONE, bir_state_set_failed state)
-    | SOME stm => (bir_exec_stmt p stm state)
+    | NONE => (bir_state_set_failed state, ext_st)
+    | SOME stm => (bir_exec_stmt ext_map p stm (state, ext_st))
 `;
-
-val bir_exec_step_state_def = Define `bir_exec_step_state p state = SND (bir_exec_step p state)`;
-
+(*
+val bir_exec_step_state_def = Define `bir_exec_step_state ext_map p state ext_st = SND (bir_exec_step ext_map p state ext_st)`;
+*)
 (* ------------------------------------------------------------------------- *)
 (*  Executing multiple steps                                                 *)
 (* ------------------------------------------------------------------------- *)
@@ -427,18 +441,21 @@ val bir_exec_step_state_def = Define `bir_exec_step_state p state = SND (bir_exe
 (******************************)
 
 val bir_exec_infinite_steps_fun_def = Define `
-  (bir_exec_infinite_steps_fun p st n = FUNPOW (bir_exec_step_state p) n st)`;
+  (bir_exec_infinite_steps_fun ext_map p (st, ext_st) n = FUNPOW (bir_exec_step ext_map p) n (st,ext_st))`;
 
 
 val bir_exec_infinite_steps_fun_REWRS = store_thm ("bir_exec_infinite_steps_fun_REWRS",
-``(!p st. (bir_exec_infinite_steps_fun p st 0 = st)) /\
-  (!p st n. (bir_exec_infinite_steps_fun p st (SUC n) =
-     (bir_exec_infinite_steps_fun p (bir_exec_step_state p st) n)))``,
+``(!ext_map p st ext_st. (bir_exec_infinite_steps_fun ext_map p (st, ext_st) 0 = (st, ext_st))) /\
+  (!ext_map p st ext_st n. (bir_exec_infinite_steps_fun ext_map p (st, ext_st) (SUC n) =
+     (bir_exec_infinite_steps_fun ext_map p (bir_exec_step ext_map p (st, ext_st)) n)))``,
 
-SIMP_TAC std_ss [bir_exec_infinite_steps_fun_def, arithmeticTheory.FUNPOW]);
+SIMP_TAC std_ss [bir_exec_infinite_steps_fun_def, arithmeticTheory.FUNPOW] >>
+rpt strip_tac >>
+Cases_on `(bir_exec_step ext_map p (st,ext_st))` >>
+fs[bir_exec_infinite_steps_fun_def]);
 
 
-val bir_state_COUNT_PC_def = Define `bir_state_COUNT_PC (count_failing:bool, pc_cond) st =
+val bir_state_COUNT_PC_def = Define `bir_state_COUNT_PC (count_failing:bool, pc_cond) (st, ext_st) =
   case st.bst_status of
     | BST_JumpOutside l => pc_cond (bir_block_pc l)
     | BST_Running => pc_cond st.bst_pc
@@ -448,30 +465,30 @@ val bir_state_COUNT_PC_def = Define `bir_state_COUNT_PC (count_failing:bool, pc_
 
 (* How often was a PC with a certain property reached. *)
 val bir_exec_infinite_steps_fun_COUNT_PCs_def = Define
-  `(bir_exec_infinite_steps_fun_COUNT_PCs pc_cond p st 0 = 0) /\
-   (bir_exec_infinite_steps_fun_COUNT_PCs pc_cond p st (SUC n) =
-    let r = bir_exec_infinite_steps_fun_COUNT_PCs pc_cond p
-               (bir_exec_step_state p st) n in
-    if (bir_state_COUNT_PC pc_cond (bir_exec_step_state p st)) then SUC r else r)`
+  `(bir_exec_infinite_steps_fun_COUNT_PCs pc_cond ext_map p (st, ext_st) 0 = 0) /\
+   (bir_exec_infinite_steps_fun_COUNT_PCs pc_cond ext_map p (st, ext_st) (SUC n) =
+    let r = bir_exec_infinite_steps_fun_COUNT_PCs pc_cond ext_map p
+               (bir_exec_step ext_map p (st, ext_st)) n in
+    if (bir_state_COUNT_PC pc_cond (bir_exec_step ext_map p (st, ext_st))) then SUC r else r)`
 
 
 
 (* After how many steps do we terminate ? *)
 val bir_exec_infinite_steps_COUNT_STEPS_def = Define `
-  bir_exec_infinite_steps_COUNT_STEPS pc_cond max_steps_opt p st = (OLEAST i.
-     bir_state_is_terminated (bir_exec_infinite_steps_fun p st i) \/
-     (max_steps_opt = SOME (bir_exec_infinite_steps_fun_COUNT_PCs pc_cond p st i))
+  bir_exec_infinite_steps_COUNT_STEPS pc_cond max_steps_opt ext_map p (st, ext_st) = (OLEAST i.
+     bir_state_is_terminated $ FST (bir_exec_infinite_steps_fun ext_map p (st, ext_st) i) \/
+     (max_steps_opt = SOME (bir_exec_infinite_steps_fun_COUNT_PCs pc_cond ext_map p (st, ext_st) i))
 )`;
 
-
+(*
 (*************************)
 (* Observations produced *)
 (*************************)
 
 val bir_exec_steps_observe_llist_def = Define `
-  bir_exec_steps_observe_llist p st step_no = (
+  bir_exec_steps_observe_llist ext_map p (st, ext_st) step_no = (
      LMAP THE (LFILTER IS_SOME (LGENLIST
-        (\i. FST (bir_exec_step p (bir_exec_infinite_steps_fun p st i))) step_no)))`;
+        (\i. FST (bir_exec_step ext_map p (bir_exec_infinite_steps_fun ext_map p (st, ext_st) i))) step_no)))`;
 
 
 val bir_exec_steps_observe_llist_0 = store_thm ("bir_exec_steps_observe_llist_0",
@@ -494,7 +511,7 @@ ASM_SIMP_TAC bool_ss [bir_exec_steps_observe_llist_def, LGENLIST_UNFOLD_NEQ_SOME
   combinTheory.o_DEF, bir_exec_infinite_steps_fun_REWRS, bir_exec_step_state_def] >>
 ASM_SIMP_TAC std_ss [LFILTER_THM, LET_DEF] >>
 Cases_on `fe` >> ASM_SIMP_TAC list_ss [LMAP, OPT_LCONS_REWRS]);
-
+*)
 
 
 (*************************)
@@ -502,76 +519,74 @@ Cases_on `fe` >> ASM_SIMP_TAC list_ss [LMAP, OPT_LCONS_REWRS]);
 (*************************)
 
 val _ = Datatype `bir_execution_result_t =
-    (* The termination ends. "BER_Ended o_list step_count pc_count st" means
+    (* The termination ends. "BER_Ended step_count pc_count st" means
        that the execution ended after "step_count" steps in state "st". During
        execution "pc_count" pcs that satisfy the given predicate where encountered
-       (counting the pc of the final state st, but not the one of the initial state).
-       The list "o_list" of observations was observed during execution
-       (observations are produced from the observation_id and applying the observation_function). *)
-    BER_Ended   ((num # 'o) list) num num bir_state_t
+       (counting the pc of the final state st, but not the one of the initial state). *)
+    BER_Ended   num num (bir_state_t # 'ext_state_t)
 
     (* The execution does not terminate. Since the programs are finite, this means
-       it loops. Therefore there are no step counts and no final state. However a
-       potentially infinite lazy list of observations is returned. *)
-  | BER_Looping ((num # 'o) llist)
+       it loops. Therefore there are no step counts and no final state. *)
+  | BER_Looping 
 `;
 
-val bir_execution_result_ss = rewrites (type_rws ``:'a bir_execution_result_t``);
+val bir_execution_result_ss = rewrites (type_rws ``:'ext_state_t bir_execution_result_t``);
 
 val IS_BER_Ended_def = Define `
-   (IS_BER_Ended (BER_Ended _ _ _ _) = T) /\
-   (IS_BER_Ended (BER_Looping _) = F)`;
+   (IS_BER_Ended (BER_Ended _ _ _) = T) /\
+   (IS_BER_Ended (BER_Looping ) = F)`;
 
 
 val IS_BER_Ended_EXISTS = store_thm ("IS_BER_Ended_EXISTS",
-``!ber. IS_BER_Ended ber <=> (?ol step_count pc_count final_st.
-        ber = BER_Ended ol step_count pc_count final_st)``,
+``!ber. IS_BER_Ended ber <=> (?step_count pc_count final_st final_ext_st.
+        ber = BER_Ended step_count pc_count (final_st, final_ext_st))``,
 
-Cases_on `ber` >> SIMP_TAC (std_ss++bir_execution_result_ss) [IS_BER_Ended_def]);
+Cases_on `ber`
+>- (Cases_on `p` >> SIMP_TAC (std_ss++bir_execution_result_ss) [IS_BER_Ended_def])
+>> SIMP_TAC (std_ss++bir_execution_result_ss) [IS_BER_Ended_def]);
 
 
-val valOf_BER_Ended_def = Define `valOf_BER_Ended (BER_Ended ol step_count pc_count final_st) =
-  (ol, step_count, pc_count, final_st)`;
+val valOf_BER_Ended_def = Define `valOf_BER_Ended (BER_Ended step_count pc_count (final_st, final_ext_st)) =
+  (step_count, pc_count, (final_st, final_ext_st))`;
 
-val valOf_BER_Ended_steps_def = Define `valOf_BER_Ended_steps (BER_Ended ol step_count pc_count final_st) =
-  (ol, step_count, final_st)`;
+val valOf_BER_Ended_steps_def = Define `valOf_BER_Ended_steps (BER_Ended step_count pc_count (final_st, final_ext_st)) =
+  (step_count, (final_st, final_ext_st))`;
 
 
 (* Now real execution. This is a clear definition, which is not well suited for evalation
    though. More efficient versions are derived later. We compute the no of steps and
    then execute this number of steps, recomputing values multiple times. *)
-val bir_exec_steps_GEN_def = Define `bir_exec_steps_GEN pc_cond p state max_steps_opt =
-  let step_no = bir_exec_infinite_steps_COUNT_STEPS pc_cond max_steps_opt p state in
-  let ll = bir_exec_steps_observe_llist p state step_no in
+val bir_exec_steps_GEN_def = Define `bir_exec_steps_GEN pc_cond ext_map p (state, ext_st) max_steps_opt =
+  let step_no = bir_exec_infinite_steps_COUNT_STEPS pc_cond max_steps_opt ext_map p (state, ext_st) in
   (case step_no of
-    | NONE => BER_Looping ll
-    | SOME i => BER_Ended (THE (toList ll)) i
-                (bir_exec_infinite_steps_fun_COUNT_PCs pc_cond p state i)
-                (bir_exec_infinite_steps_fun p state i))`;
+    | NONE => BER_Looping
+    | SOME i => BER_Ended i
+                (bir_exec_infinite_steps_fun_COUNT_PCs pc_cond ext_map p (state, ext_st) i)
+                (bir_exec_infinite_steps_fun ext_map p (state, ext_st) i))`;
 
 
 (* A simple instance that just runs till termination. *)
 val bir_exec_steps_def = Define `
-  (bir_exec_steps p state = bir_exec_steps_GEN (T, (\_. T)) p state NONE)`;
+  (bir_exec_steps ext_map p (state, ext_st) = bir_exec_steps_GEN (T, (\_. T)) ext_map p (state, ext_st) NONE)`;
 
 (* A simple instance that counts all steps and has a fixed no of steps given.
    We are sure it terminates, therefore, the result is converted to a tuple. *)
 val bir_exec_step_n_def = Define `
-  bir_exec_step_n p state n =
-  valOf_BER_Ended_steps (bir_exec_steps_GEN (T, (\_. T)) p state (SOME n))`
+  bir_exec_step_n ext_map p state n =
+  valOf_BER_Ended_steps (bir_exec_steps_GEN (T, (\_. T)) ext_map p state (SOME n))`
 
 (* We might be interested in executing a certain no of blocks. *)
 val bir_exec_block_n_def = Define `
-  bir_exec_block_n p state n =
-  valOf_BER_Ended (bir_exec_steps_GEN (F, (\pc. pc.bpc_index = 0)) p state (SOME n))`
+  bir_exec_block_n ext_map p state n =
+  valOf_BER_Ended (bir_exec_steps_GEN (F, (\pc. pc.bpc_index = 0)) ext_map p state (SOME n))`
 
 (* Executing till a certain set of labels is useful as well. Since we might loop
    outside this set of labels, infinite runs are possible. *)
 val bir_exec_to_labels_n_def = Define `
-  bir_exec_to_labels_n ls p state n =
-  bir_exec_steps_GEN (F, \pc. (pc.bpc_index = 0) /\ (pc.bpc_label IN ls)) p state (SOME n)`
+  bir_exec_to_labels_n ls ext_map p state n =
+  bir_exec_steps_GEN (F, \pc. (pc.bpc_index = 0) /\ (pc.bpc_label IN ls)) ext_map p state (SOME n)`
 
 val bir_exec_to_labels_def = Define `
-  bir_exec_to_labels ls p state = bir_exec_to_labels_n ls p state 1`
+  bir_exec_to_labels ls ext_map p state = bir_exec_to_labels_n ls ext_map p state 1`
 
 val _ = export_theory();

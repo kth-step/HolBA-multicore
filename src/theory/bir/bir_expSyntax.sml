@@ -37,11 +37,12 @@ val (BExp_BinExp_tm, mk_BExp_BinExp, dest_BExp_BinExp, is_BExp_BinExp) = syntax_
 val (BExp_BinPred_tm, mk_BExp_BinPred, dest_BExp_BinPred, is_BExp_BinPred) = syntax_fns3 "BExp_BinPred";
 val (BExp_MemEq_tm, mk_BExp_MemEq, dest_BExp_MemEq, is_BExp_MemEq) = syntax_fns2 "BExp_MemEq";
 val (BExp_IfThenElse_tm, mk_BExp_IfThenElse, dest_BExp_IfThenElse, is_BExp_IfThenElse) = syntax_fns3 "BExp_IfThenElse";
+val (BExp_ExtGet_tm, mk_BExp_ExtGet, dest_BExp_ExtGet, is_BExp_ExtGet) = syntax_fns2 "BExp_ExtGet";
 val (BExp_Load_tm, mk_BExp_Load, dest_BExp_Load, is_BExp_Load) = syntax_fns4 "BExp_Load";
 val (BExp_Store_tm, mk_BExp_Store, dest_BExp_Store, is_BExp_Store) = syntax_fns4 "BExp_Store";
 
 
 
-val (bir_eval_exp_tm, mk_bir_eval_exp, dest_bir_eval_exp, is_bir_eval_exp) = syntax_fns2 "bir_eval_exp";
+val (bir_eval_exp_tm, mk_bir_eval_exp, dest_bir_eval_exp, is_bir_eval_exp) = syntax_fns4 "bir_eval_exp";
 
 end

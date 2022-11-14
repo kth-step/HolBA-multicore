@@ -32,7 +32,7 @@ val (BL_Address_tm,  mk_BL_Address, dest_BL_Address, is_BL_Address)  = syntax_fn
 val dest_BL_Label_string = stringSyntax.fromHOLstring o dest_BL_Label
 fun mk_BL_Label_string s = mk_BL_Label (stringSyntax.fromMLstring s)
 
-(* bir_label_t *)
+(* bir_label_exp_t *)
 
 val bir_label_exp_t_ty = mk_type ("bir_label_exp_t", []);
 
@@ -49,22 +49,12 @@ val (BM_ReadWrite_tm,  is_BM_ReadWrite)  = syntax_fns0 "BM_ReadWrite";
 
 (* bir_stmt_basic_t *)
 
-fun mk_bir_stmt_basic_t_ty ty = mk_type ("bir_stmt_basic_t", [ty]);
-
-fun dest_bir_stmt_basic_t_ty ty =
-   case total dest_thy_type ty
-    of SOME {Tyop="bir_stmt_basic_t", Thy="bir_program", Args=[ty]} => ty
-     | other => raise ERR "dest_bir_stmt_basic_t_ty" ""
-
-val is_bir_stmt_basic_t_ty = can dest_bir_stmt_basic_t_ty;
+val bir_stmt_basic_t_ty = mk_type ("bir_stmt_basic_t", []);
 
 val (BStmt_Assign_tm,  mk_BStmt_Assign, dest_BStmt_Assign, is_BStmt_Assign)  = syntax_fns2 "BStmt_Assign";
 val (BStmt_Assert_tm,  mk_BStmt_Assert, dest_BStmt_Assert, is_BStmt_Assert)  = syntax_fns1 "BStmt_Assert";
 val (BStmt_Assume_tm,  mk_BStmt_Assume, dest_BStmt_Assume, is_BStmt_Assume)  = syntax_fns1 "BStmt_Assume";
-val (BStmt_Observe_tm,  mk_BStmt_Observe, dest_BStmt_Observe, is_BStmt_Observe)  = syntax_fns4 "BStmt_Observe";
-val (BStmt_Fence_tm,  mk_BStmt_Fence, dest_BStmt_Fence, is_BStmt_Fence)  = syntax_fns2 "BStmt_Fence";
-
-
+val (BStmt_ExtPut_tm,  mk_BStmt_ExtPut, dest_BStmt_ExtPut, is_BStmt_ExtPut)  = syntax_fns2 "BStmt_ExtPut";
 
 (* bir_stmt_end_t *)
 
@@ -73,8 +63,6 @@ val bir_stmt_end_t_ty = mk_type ("bir_stmt_end_t", []);
 val (BStmt_Jmp_tm,  mk_BStmt_Jmp, dest_BStmt_Jmp, is_BStmt_Jmp)  = syntax_fns1 "BStmt_Jmp";
 val (BStmt_CJmp_tm,  mk_BStmt_CJmp, dest_BStmt_CJmp, is_BStmt_CJmp)  = syntax_fns3 "BStmt_CJmp";
 val (BStmt_Halt_tm,  mk_BStmt_Halt, dest_BStmt_Halt, is_BStmt_Halt)  = syntax_fns1 "BStmt_Halt";
-
-
 
 (* bir_stmt_t *)
 
@@ -91,6 +79,7 @@ fun dest_bir_stmt_t_ty ty =
     | other => raise ERR "dest_bir_stmt_t_ty" ""
 
 val is_bir_stmt_t_ty = can dest_bir_stmt_t_ty;
+val bir_stmt_t_ty = mk_type ("bir_stmt_t", []);
 
 val (BStmtB_tm,  mk_BStmtB, dest_BStmtB, is_BStmtB)  = syntax_fns1 "BStmtB";
 val (BStmtE_tm,  mk_BStmtE, dest_BStmtE, is_BStmtE)  = syntax_fns1 "BStmtE";
@@ -138,7 +127,7 @@ val is_bir_block_t_ty = can dest_bir_block_t_ty;
 
 fun dest_bir_block tm = let
   val (ty, l) = TypeBase.dest_record tm
-  val _ = if is_bir_block_t_ty ty then () else fail()
+  val _ = if ty = bir_block_t_ty then () else fail()
   val lbl = Lib.assoc "bb_label" l
   val mc_tags_opt = Lib.assoc1 "bb_mc_tags" l
   val stmts = Lib.assoc "bb_statements" l
@@ -149,29 +138,26 @@ end handle e => raise wrap_exn "dest_bir_block" e;
 
 val is_bir_block = can dest_bir_block;
 
-fun mk_bir_block (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt) = let
-  val ty0 = dest_bir_stmt_basic_t_ty (listSyntax.dest_list_type (type_of tm_stmts))
-  val ty = mk_bir_block_t_ty ty0
-
+fun mk_bir_block (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt) =
+let
   val l = [("bb_label", tm_lbl),
            ("bb_mc_tags", tm_mc_tags),
            ("bb_statements", tm_stmts),
            ("bb_last_statement", tm_last_stmt)];
 in
-  TypeBase.mk_record (ty, l)
+  TypeBase.mk_record (bir_block_t_ty, l)
 end handle e => raise wrap_exn "mk_bir_block" e;
 
 fun dest_bir_block_list tm = let
   val (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt) = dest_bir_block tm;
-  val (l_stmts, ty') = listSyntax.dest_list tm_stmts;
-  val ty'' = dest_bir_stmt_basic_t_ty ty'
+  val (l_stmts, ty) = listSyntax.dest_list tm_stmts;
+  val _ = if ty = bir_block_t_ty then () else fail()
 in
-  (ty'', tm_lbl, tm_mc_tags, l_stmts, tm_last_stmt)
+  (tm_lbl, tm_mc_tags, l_stmts, tm_last_stmt)
 end handle e => raise wrap_exn "dest_bir_block_list" e;
 
-fun mk_bir_block_list (ty, tm_lbl, tm_mc_tags, l_stmts, tm_last_stmt) = let
-  val ty' = mk_bir_stmt_basic_t_ty ty
-  val tm_stmts = listSyntax.mk_list (l_stmts, ty')
+fun mk_bir_block_list (tm_lbl, tm_mc_tags, l_stmts, tm_last_stmt) = let
+  val tm_stmts = listSyntax.mk_list (l_stmts, bir_block_t_ty)
 in
   mk_bir_block (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt)
 end handle e => raise wrap_exn "mk_bir_block_list" e;
@@ -194,18 +180,17 @@ val is_bir_program_t_ty = can dest_bir_program_t_ty;
 
 val (BirProgram_tm,  mk_BirProgram, dest_BirProgram, is_BirProgram)  = syntax_fns1 "BirProgram";
 
-val tm = ``BirProgram []``
+(* val tm = ``BirProgram []`` *)
 
 fun dest_BirProgram_list tm = let
   val l_tm = dest_BirProgram tm;
-  val (l, ty) = listSyntax.dest_list l_tm
+  val (l, _) = listSyntax.dest_list l_tm
 in
-  (dest_bir_block_t_ty ty, l)
+  l
 end handle e => raise wrap_exn "dest_BirProgram_list" e;
 
-fun mk_BirProgram_list (ty, tms) = let
-  val ty' = mk_bir_block_t_ty ty
-  val l_tm = listSyntax.mk_list (tms, ty')
+fun mk_BirProgram_list tms = let
+  val l_tm = listSyntax.mk_list (tms, bir_block_t_ty)
 in
   mk_BirProgram l_tm
 end handle e => raise wrap_exn "mk_BirProgram_list" e;
@@ -238,7 +223,6 @@ val (bir_block_pc_tm,  mk_bir_block_pc, dest_bir_block_pc, is_bir_block_pc)  = s
 val (bir_pc_first_tm,  mk_bir_pc_first, dest_bir_pc_first, is_bir_pc_first)  = syntax_fns1 "bir_pc_first";
 
 
-
 (* bir_status_t *)
 
 val bir_status_t_ty = mk_type ("bir_status_t", []);
@@ -248,24 +232,6 @@ val (BST_Failed_tm,  is_BST_Failed)  = syntax_fns0 "BST_Failed";
 val (BST_AssumptionViolated_tm,  is_BST_AssumptionViolated)  = syntax_fns0 "BST_AssumptionViolated";
 val (BST_Halted_tm,  mk_BST_Halted, dest_BST_Halted, is_BST_Halted)  = syntax_fns1 "BST_Halted";
 val (BST_JumpOutside_tm,  mk_BST_JumpOutside, dest_BST_JumpOutside, is_BST_JumpOutside)  = syntax_fns1 "BST_JumpOutside";
-
-
-
-
-(* bir_stmt_t *)
-
-fun mk_bir_stmt_t_ty ty = mk_type ("bir_stmt_t", [ty]);
-
-fun dest_bir_stmt_t_ty ty =
-   case total dest_thy_type ty
-    of SOME {Tyop="bir_stmt_t", Thy="bir_program", Args=[ty]} => ty
-     | other => raise ERR "dest_bir_stmt_t_ty" ""
-
-val is_bir_stmt_t_ty = can dest_bir_stmt_t_ty;
-
-val (BStmtB_tm,  mk_BStmtB, dest_BStmtB, is_BStmtB)  = syntax_fns1 "BStmtB";
-val (BStmtE_tm,  mk_BStmtE, dest_BStmtE, is_BStmtE)  = syntax_fns1 "BStmtE";
-
 
 
 (* bir_state_t *)
@@ -308,11 +274,11 @@ val (bir_state_is_terminated_tm,  mk_bir_state_is_terminated, dest_bir_state_is_
 
 
 (* various functions *)
-val (bir_exec_step_tm,  mk_bir_exec_step, dest_bir_exec_step, is_bir_exec_step)  = syntax_fns2 "bir_exec_step";
+val (bir_exec_step_tm,  mk_bir_exec_step, dest_bir_exec_step, is_bir_exec_step)  = syntax_fns3 "bir_exec_step";
 
-val (bir_exec_steps_tm,  mk_bir_exec_steps, dest_bir_exec_steps, is_bir_exec_steps)  = syntax_fns2 "bir_exec_steps";
+val (bir_exec_steps_tm,  mk_bir_exec_steps, dest_bir_exec_steps, is_bir_exec_steps)  = syntax_fns3 "bir_exec_steps";
 
-val (bir_exec_step_n_tm,  mk_bir_exec_step_n, dest_bir_exec_step_n, is_bir_exec_step_n)  = syntax_fns3 "bir_exec_step_n";
+val (bir_exec_step_n_tm,  mk_bir_exec_step_n, dest_bir_exec_step_n, is_bir_exec_step_n)  = syntax_fns4 "bir_exec_step_n";
 
 val (bir_get_program_block_info_by_label_tm,  mk_bir_get_program_block_info_by_label, dest_bir_get_program_block_info_by_label, is_bir_get_program_block_info_by_label)  = syntax_fns2 "bir_get_program_block_info_by_label";
 

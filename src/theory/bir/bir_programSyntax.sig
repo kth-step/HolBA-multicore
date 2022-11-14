@@ -59,9 +59,7 @@ sig
    (* bir_stmt_basic_t *)
    (********************)
 
-   val mk_bir_stmt_basic_t_ty   : hol_type -> hol_type
-   val dest_bir_stmt_basic_t_ty : hol_type -> hol_type
-   val is_bir_stmt_basic_t_ty   : hol_type -> bool
+   val bir_stmt_basic_t_ty   : hol_type
 
    val BStmt_Assign_tm   : term
    val dest_BStmt_Assign : term -> term * term
@@ -78,15 +76,10 @@ sig
    val is_BStmt_Assume   : term -> bool
    val mk_BStmt_Assume   : term -> term
 
-   val BStmt_Observe_tm   : term
-   val dest_BStmt_Observe : term -> term * term * term * term
-   val is_BStmt_Observe   : term -> bool
-   val mk_BStmt_Observe   : term * term * term * term -> term
-
-   val BStmt_Fence_tm   : term
-   val dest_BStmt_Fence : term -> term * term
-   val is_BStmt_Fence   : term -> bool
-   val mk_BStmt_Fence   : term * term -> term
+   val BStmt_ExtPut_tm   : term
+   val dest_BStmt_ExtPut : term -> term * term
+   val is_BStmt_ExtPut   : term -> bool
+   val mk_BStmt_ExtPut   : term * term -> term
 
 
    (******************)
@@ -116,9 +109,7 @@ sig
    (* bir_stmt_t *)
    (**************)
 
-   val mk_bir_stmt_t_ty   : hol_type -> hol_type
-   val dest_bir_stmt_t_ty : hol_type -> hol_type
-   val is_bir_stmt_t_ty   : hol_type -> bool
+   val bir_stmt_t_ty   : hol_type
 
    val BStmtB_tm   : term
    val dest_BStmtB : term -> term
@@ -141,10 +132,7 @@ sig
    val mk_bir_mc_tags : term * term * term -> term
    val bir_mc_tags_NONE : term
 
-   val mk_bir_block_t_ty   : hol_type -> hol_type
-   val dest_bir_block_t_ty : hol_type -> hol_type
-   val is_bir_block_t_ty   : hol_type -> bool
-
+   val bir_block_t_ty   : hol_type
 
    val dest_bir_block : term -> term * term * term * term
    val is_bir_block   : term -> bool
@@ -152,26 +140,23 @@ sig
 
    (* Often one is interested in the list of basic statements in a block.
       The following code splits the term containing a list of basic statements
-      into an SML list of terms. In case the empty list is used, thereby the
-      type ob observation is lost and therefore made explicit. *)
-   val dest_bir_block_list : term -> hol_type * term  * term * term list * term
-   val mk_bir_block_list   : hol_type * term  * term * term list * term -> term
+      into an SML list of terms. *)
+   val dest_bir_block_list : term -> term  * term * term list * term
+   val mk_bir_block_list   : term  * term * term list * term -> term
 
 
    (*****************)
    (* bir_program_t *)
    (*****************)
 
-   val mk_bir_program_t_ty   : hol_type -> hol_type
-   val dest_bir_program_t_ty : hol_type -> hol_type
-   val is_bir_program_t_ty   : hol_type -> bool
+   val bir_program_t_ty   : hol_type
 
    val BirProgram_tm        : term
    val dest_BirProgram      : term -> term
-   val dest_BirProgram_list : term -> hol_type * term list
+   val dest_BirProgram_list : term -> term list
    val is_BirProgram        : term -> bool
    val mk_BirProgram        : term -> term
-   val mk_BirProgram_list   : hol_type * term list -> term
+   val mk_BirProgram_list   : term list -> term
 
 
    (************************)
@@ -262,19 +247,19 @@ sig
    (***************************)
 
    val bir_exec_step_tm   : term
-   val dest_bir_exec_step : term -> term * term
+   val dest_bir_exec_step : term -> term * term * term
    val is_bir_exec_step   : term -> bool
-   val mk_bir_exec_step   : term * term -> term
+   val mk_bir_exec_step   : term * term * term -> term
 
    val bir_exec_steps_tm   : term
-   val dest_bir_exec_steps : term -> term * term
+   val dest_bir_exec_steps : term -> term * term * term
    val is_bir_exec_steps   : term -> bool
-   val mk_bir_exec_steps   : term * term -> term
+   val mk_bir_exec_steps   : term * term * term -> term
 
    val bir_exec_step_n_tm   : term
-   val dest_bir_exec_step_n : term -> term * term * term
+   val dest_bir_exec_step_n : term -> term * term * term * term
    val is_bir_exec_step_n   : term -> bool
-   val mk_bir_exec_step_n   : term * term * term -> term
+   val mk_bir_exec_step_n   : term * term * term * term -> term
 
    val bir_get_program_block_info_by_label_tm   : term
    val dest_bir_get_program_block_info_by_label : term -> term * term

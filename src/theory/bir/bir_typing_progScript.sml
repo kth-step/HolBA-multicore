@@ -40,58 +40,58 @@ Proof
 QED
 
 
-
-
 (* ------------------------------------------------------------------------- *)
 (*  Well-typed Programs                                                      *)
 (* ------------------------------------------------------------------------- *)
 
 val bir_is_well_typed_label_exp_def = Define `
-  (bir_is_well_typed_label_exp (BLE_Label _) = T) /\
-  (bir_is_well_typed_label_exp (BLE_Exp e) = (case (type_of_bir_exp e) of
+  (bir_is_well_typed_label_exp ext_map (BLE_Label _) = T) /\
+  (bir_is_well_typed_label_exp ext_map (BLE_Exp e) = (case (type_of_bir_exp ext_map e) of
       NONE => F
     | SOME ty => (bir_type_is_Imm ty)))`;
 
 val bir_is_well_typed_stmtE_def = Define `
-  (bir_is_well_typed_stmtE (BStmt_Jmp le) = bir_is_well_typed_label_exp le) /\
-  (bir_is_well_typed_stmtE (BStmt_CJmp c le1 le2) =
-       ((type_of_bir_exp c = SOME BType_Bool) /\
-       (bir_is_well_typed_label_exp le1) /\
-       (bir_is_well_typed_label_exp le2))) /\
-  (bir_is_well_typed_stmtE (BStmt_Halt e) = (type_of_bir_exp e <> NONE))`
+  (bir_is_well_typed_stmtE ext_map (BStmt_Jmp le) = bir_is_well_typed_label_exp ext_map le) /\
+  (bir_is_well_typed_stmtE ext_map (BStmt_CJmp c le1 le2) =
+       ((type_of_bir_exp ext_map c = SOME BType_Bool) /\
+       (bir_is_well_typed_label_exp ext_map le1) /\
+       (bir_is_well_typed_label_exp ext_map le2))) /\
+  (bir_is_well_typed_stmtE ext_map (BStmt_Halt e) = (type_of_bir_exp ext_map e <> NONE))`
 
 val bir_is_well_typed_stmtB_def = Define `
-  (bir_is_well_typed_stmtB (BStmt_Assign v e) = (type_of_bir_exp e = SOME (bir_var_type v))) /\
-  (bir_is_well_typed_stmtB (BStmt_Assert e) = (type_of_bir_exp e = SOME BType_Bool)) /\
-  (bir_is_well_typed_stmtB (BStmt_Assume e) = (type_of_bir_exp e = SOME BType_Bool)) /\
-  (bir_is_well_typed_stmtB (BStmt_Observe _ e el _) = ((type_of_bir_exp e = SOME BType_Bool) /\
-                                                     (EVERY (IS_SOME o type_of_bir_exp) el))) /\
-  (bir_is_well_typed_stmtB (BStmt_Fence _ _) = T)`;
+  (bir_is_well_typed_stmtB ext_map (BStmt_Assign v e) =
+    (type_of_bir_exp ext_map e = SOME (bir_var_type v))) /\
+  (bir_is_well_typed_stmtB ext_map (BStmt_Assert e) =
+    (type_of_bir_exp ext_map e = SOME BType_Bool)) /\
+  (bir_is_well_typed_stmtB ext_map (BStmt_Assume e) =
+    (type_of_bir_exp ext_map e = SOME BType_Bool)) /\
+  (bir_is_well_typed_stmtB ext_map (BStmt_ExtPut en e) =
+    (type_of_bir_exp ext_map e <> NONE /\ FLOOKUP (SND ext_map) en <> NONE))`;
 
 val bir_is_well_typed_stmt_def = Define `
-  (bir_is_well_typed_stmt (BStmtE s) = bir_is_well_typed_stmtE s) /\
-  (bir_is_well_typed_stmt (BStmtB s) = bir_is_well_typed_stmtB s)`;
+  (bir_is_well_typed_stmt ext_map (BStmtE s) = bir_is_well_typed_stmtE ext_map s) /\
+  (bir_is_well_typed_stmt ext_map (BStmtB s) = bir_is_well_typed_stmtB ext_map s)`;
 
-val bir_is_well_typed_block_def = Define `bir_is_well_typed_block bl <=>
-  ((EVERY bir_is_well_typed_stmtB bl.bb_statements) /\
-   (bir_is_well_typed_stmtE bl.bb_last_statement))`;
+val bir_is_well_typed_block_def = Define `bir_is_well_typed_block ext_map bl <=>
+  EVERY (bir_is_well_typed_stmtB ext_map) bl.bb_statements /\
+  bir_is_well_typed_stmtE ext_map bl.bb_last_statement`;
 
-val bir_is_well_typed_program_def = Define `bir_is_well_typed_program (BirProgram p) <=>
-  (EVERY bir_is_well_typed_block p)`;
+val bir_is_well_typed_program_def = Define `bir_is_well_typed_program ext_map (BirProgram p) <=>
+  (EVERY (bir_is_well_typed_block ext_map) p)`;
 
 val bir_is_well_typed_block_ALT_DEF = store_thm ("bir_is_well_typed_block_ALT_DEF",
-  ``!bl. bir_is_well_typed_block bl <=>
-    (!stmt. stmt IN bir_stmts_of_block bl ==> bir_is_well_typed_stmt stmt)``,
+  ``!ext_map bl. bir_is_well_typed_block ext_map bl <=>
+    (!stmt. stmt IN bir_stmts_of_block bl ==> bir_is_well_typed_stmt ext_map stmt)``,
 
 SIMP_TAC (std_ss++boolSimps.EQUIV_EXTRACT_ss) [bir_is_well_typed_block_def, bir_stmts_of_block_def,
   IN_INSERT, IN_IMAGE, DISJ_IMP_THM, PULL_EXISTS, FORALL_AND_THM,
   bir_is_well_typed_stmt_def, listTheory.EVERY_MEM]);
 
 val bir_is_well_typed_program_ALT_DEF = store_thm ("bir_is_well_typed_program_ALT_DEF",
-  ``!p. bir_is_well_typed_program p <=>
-    (!stmt. stmt IN bir_stmts_of_prog p ==> bir_is_well_typed_stmt stmt)``,
+  ``!ext_map p. bir_is_well_typed_program ext_map p <=>
+    (!stmt. stmt IN bir_stmts_of_prog p ==> bir_is_well_typed_stmt ext_map stmt)``,
 
-Cases >>
+GEN_TAC >> Cases >>
 SIMP_TAC std_ss [bir_is_well_typed_program_def,
   bir_stmts_of_prog_def, IN_BIGUNION, IN_IMAGE, PULL_EXISTS,
   listTheory.EVERY_MEM, bir_is_well_typed_block_ALT_DEF] >>
@@ -99,9 +99,9 @@ METIS_TAC[]);
 
 
 val bir_get_current_statement_well_typed = store_thm ("bir_get_current_statement_well_typed",
-  ``!p pc stmt. (bir_is_well_typed_program p /\
+  ``!ext_map p pc stmt. (bir_is_well_typed_program ext_map p /\
                 (bir_get_current_statement p pc = SOME stmt)) ==>
-                bir_is_well_typed_stmt stmt``,
+                bir_is_well_typed_stmt ext_map stmt``,
 METIS_TAC[bir_is_well_typed_program_ALT_DEF, bir_get_current_statement_stmts_of_prog]);
 
 
@@ -115,9 +115,7 @@ val bir_vars_of_stmtB_def = Define `
   (bir_vars_of_stmtB (BStmt_Assert ex) = bir_vars_of_exp ex) /\
   (bir_vars_of_stmtB (BStmt_Assume ex) = bir_vars_of_exp ex) /\
   (bir_vars_of_stmtB (BStmt_Assign v ex) = (v INSERT (bir_vars_of_exp ex))) /\
-  (bir_vars_of_stmtB (BStmt_Observe _ ec el obf) =
-     BIGUNION (IMAGE bir_vars_of_exp (LIST_TO_SET (ec::el)))) /\
-  (bir_vars_of_stmtB (BStmt_Fence _ _) = {})`;
+  (bir_vars_of_stmtB (BStmt_ExtPut _ ex) = bir_vars_of_exp ex)`;
 
 Definition bmc_vars_of_stmtB_def:
      bmc_vars_of_stmtB (BMCStmt_Load var exp _ _ _ _) = { var } UNION bir_varset_of_exp exp
@@ -187,8 +185,8 @@ METIS_TAC[bir_get_current_statement_stmts_of_prog]);
 
 
 val bir_vars_of_label_exp_THM_EQ_FOR_VARS = store_thm ("bir_vars_of_label_exp_THM_EQ_FOR_VARS",
-``!env1 env2 e. (bir_env_EQ_FOR_VARS (bir_vars_of_label_exp e) env1 env2) ==>
-                (bir_eval_label_exp e env1 = bir_eval_label_exp e env2)``,
+``!ext_map env1 env2 ext_st e. (bir_env_EQ_FOR_VARS (bir_vars_of_label_exp e) env1 env2) ==>
+                (bir_eval_label_exp ext_map e env1 ext_st = bir_eval_label_exp ext_map e env2 ext_st)``,
 Cases_on `e` >> (
   SIMP_TAC std_ss [bir_eval_label_exp_def, bir_vars_of_label_exp_def]
 ) >>
@@ -205,8 +203,7 @@ val bir_changed_vars_of_stmtB_def = Define `
   (bir_changed_vars_of_stmtB (BStmt_Assert ex) = {}) /\
   (bir_changed_vars_of_stmtB (BStmt_Assume ex) = {}) /\
   (bir_changed_vars_of_stmtB (BStmt_Assign v ex) = {v}) /\
-  (bir_changed_vars_of_stmtB (BStmt_Observe _ ec el obf) = {}) /\
-  (bir_changed_vars_of_stmtB (BStmt_Fence _ _) = {})`;
+  (bir_changed_vars_of_stmtB (BStmt_ExtPut _ _) = {})`;
 
 val bir_changed_vars_of_stmt_def = Define `
   (bir_changed_vars_of_stmt (BStmtE s) = {}) /\
@@ -293,8 +290,7 @@ val bir_exps_of_stmtB_def = Define `
   (bir_exps_of_stmtB (BStmt_Assert ex) = {ex}) /\
   (bir_exps_of_stmtB (BStmt_Assume ex) = {ex}) /\
   (bir_exps_of_stmtB (BStmt_Assign v ex) = {ex}) /\
-  (bir_exps_of_stmtB (BStmt_Observe _ ec el obf) = set (ec::el)) /\
-  (bir_exps_of_stmtB (BStmt_Fence _ _) = {})`;
+  (bir_exps_of_stmtB (BStmt_ExtPut en ex) = {ex})`;
 
 val bir_exps_of_label_exp_def = Define `
   (bir_exps_of_label_exp (BLE_Label l) = {}) /\

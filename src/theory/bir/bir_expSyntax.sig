@@ -17,6 +17,7 @@ sig
    val BExp_MemConst_tm     : term;
    val BExp_Den_tm          : term;
    val BExp_IfThenElse_tm   : term;
+   val BExp_ExtGet_tm       : term;
    val BExp_Load_tm         : term;
    val BExp_Store_tm        : term;
    val BExp_UnaryExp_tm     : term;
@@ -29,6 +30,7 @@ sig
    val dest_BExp_MemConst   : term -> term * term * term;
    val dest_BExp_Den        : term -> term;
    val dest_BExp_IfThenElse : term -> term * term * term;
+   val dest_BExp_ExtGet     : term -> term * term;
    val dest_BExp_Load       : term -> term * term * term * term;
    val dest_BExp_Store      : term -> term * term * term * term;
    val dest_BExp_UnaryExp   : term -> term * term;
@@ -41,6 +43,7 @@ sig
    val is_BExp_MemConst     : term -> bool;
    val is_BExp_Den          : term -> bool;
    val is_BExp_IfThenElse   : term -> bool;
+   val is_BExp_ExtGet       : term -> bool;
    val is_BExp_Load         : term -> bool;
    val is_BExp_Store        : term -> bool;
    val is_BExp_UnaryExp     : term -> bool;
@@ -53,13 +56,14 @@ sig
    val mk_BExp_MemConst     : term * term * term -> term;
    val mk_BExp_Den          : term -> term;
    val mk_BExp_IfThenElse   : term * term * term -> term;
+   val mk_BExp_ExtGet       : term * term -> term;
    val mk_BExp_Load         : term * term * term * term -> term;
    val mk_BExp_Store        : term * term * term * term -> term;
    val mk_BExp_UnaryExp     : term * term -> term;
 
    val bir_eval_exp_tm      : term;
-   val mk_bir_eval_exp      : term * term -> term;
-   val dest_bir_eval_exp    : term -> term * term;
+   val mk_bir_eval_exp      : term * term * term * term -> term;
+   val dest_bir_eval_exp    : term -> term * term * term * term;
    val is_bir_eval_exp      : term -> bool;
 
 end
