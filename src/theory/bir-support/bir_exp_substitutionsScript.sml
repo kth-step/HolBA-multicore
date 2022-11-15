@@ -52,6 +52,8 @@ val bir_exp_subst_def = Define `
       bir_exp_subst s (BExp_IfThenElse c et ef) =
       BExp_IfThenElse (bir_exp_subst s c) (bir_exp_subst s et)
         (bir_exp_subst s ef)) /\
+   (!s en ty.
+      bir_exp_subst s (BExp_ExtGet en ty) = (BExp_ExtGet en ty)) /\
    (!s mem_e a_e en ty.
       bir_exp_subst s (BExp_Load mem_e a_e en ty) =
       BExp_Load (bir_exp_subst s mem_e) (bir_exp_subst s a_e) en
@@ -72,10 +74,10 @@ Induct >> (
 
 (* Substitution preserves typing if done properly *)
 val bir_exp_subst_TYPE_EQ_GEN = store_thm ("bir_exp_subst_TYPE_EQ_GEN", ``
-  !s1 s2 e.
-  (!v. (type_of_bir_exp (bir_exp_subst_var s1 v) =
-        type_of_bir_exp (bir_exp_subst_var s2 v))) ==>
-  (type_of_bir_exp (bir_exp_subst s1 e) = type_of_bir_exp (bir_exp_subst s2 e))``,
+  !ext_map s1 s2 e.
+  (!v. (type_of_bir_exp ext_map (bir_exp_subst_var s1 v) =
+        type_of_bir_exp ext_map (bir_exp_subst_var s2 v))) ==>
+  (type_of_bir_exp ext_map (bir_exp_subst s1 e) = type_of_bir_exp ext_map (bir_exp_subst s2 e))``,
 
 REPEAT STRIP_TAC >>
 Induct_on `e` >> (
@@ -84,11 +86,11 @@ Induct_on `e` >> (
 
 
 val bir_exp_subst_TYPE_EQ = store_thm ("bir_exp_subst_TYPE_EQ",
-  ``!s. FEVERY (\ (v, e). (type_of_bir_exp e = SOME (bir_var_type v))) s ==>
-        (!e. (type_of_bir_exp (bir_exp_subst s e) = type_of_bir_exp e))``,
+  ``!ext_map s. FEVERY (\ (v, e). (type_of_bir_exp ext_map e = SOME (bir_var_type v))) s ==>
+        (!e. (type_of_bir_exp ext_map (bir_exp_subst s e) = type_of_bir_exp ext_map e))``,
 
 REPEAT STRIP_TAC >>
-MP_TAC (Q.SPECL [`s`, `FEMPTY`, `e`] bir_exp_subst_TYPE_EQ_GEN) >>
+MP_TAC (Q.SPECL [`ext_map`, `s`, `FEMPTY`, `e`] bir_exp_subst_TYPE_EQ_GEN) >>
 MATCH_MP_TAC (prove (``(A /\ (B ==> C)) ==> ((A ==> B) ==> C)``, PROVE_TAC[])) >>
 FULL_SIMP_TAC std_ss [bir_exp_subst_EMPTY, bir_exp_subst_var_def, FLOOKUP_EMPTY,
   FEVERY_ALL_FLOOKUP] >>
@@ -99,11 +101,11 @@ Cases_on `FLOOKUP s v` >> (
 
 (* Not well-typed sub-expressions always cause trouble *) 
 val bir_exp_subst_NO_TYPE = store_thm ("bir_exp_subst_NO_TYPE", ``
-  !s e v ve. (
+  !ext_map s e v ve. (
     (v IN bir_vars_of_exp e) /\
     (FLOOKUP s v = SOME ve) /\
-    (type_of_bir_exp ve = NONE)) ==>
-    (type_of_bir_exp (bir_exp_subst s e) = NONE)``,
+    (type_of_bir_exp ext_map ve = NONE)) ==>
+    (type_of_bir_exp ext_map (bir_exp_subst s e) = NONE)``,
 
 REPEAT STRIP_TAC >>
 Induct_on `e` >> (
@@ -118,10 +120,10 @@ Induct_on `e` >> (
 
 (* The evaluation is preserved if only substituting equivalent expressions. *)
 val bir_exp_subst_EVAL_EQ_GEN = store_thm ("bir_exp_subst_EVAL_EQ_GEN", ``
-  !env s1 s2 e.
-  (!v. (bir_eval_exp (bir_exp_subst_var s1 v) env =
-        bir_eval_exp (bir_exp_subst_var s2 v) env)) ==>
-  (bir_eval_exp (bir_exp_subst s1 e) env = bir_eval_exp (bir_exp_subst s2 e) env)``,
+  !ext_map env ext_st s1 s2 e.
+  (!v. (bir_eval_exp ext_map (bir_exp_subst_var s1 v) env ext_st =
+        bir_eval_exp ext_map (bir_exp_subst_var s2 v) env ext_st)) ==>
+  (bir_eval_exp ext_map (bir_exp_subst s1 e) env ext_st = bir_eval_exp ext_map (bir_exp_subst s2 e) env ext_st)``,
 
 REPEAT STRIP_TAC >>
 Induct_on `e` >> (
@@ -130,12 +132,12 @@ Induct_on `e` >> (
 
 
 val bir_exp_subst_EVAL_EQ = store_thm ("bir_exp_subst_EVAL_EQ", ``
-  !env s e.
-  FEVERY (\ (v, e). (bir_eval_exp e env = bir_env_read v env)) s ==>
-  (bir_eval_exp (bir_exp_subst s e) env = bir_eval_exp e env)``,
+  !ext_map env ext_st s e.
+  FEVERY (\ (v, e). (bir_eval_exp ext_map e env ext_st = bir_env_read v env)) s ==>
+  (bir_eval_exp ext_map (bir_exp_subst s e) env ext_st = bir_eval_exp ext_map e env ext_st)``,
 
 REPEAT STRIP_TAC >>
-MP_TAC (Q.SPECL [`env`, `s`, `FEMPTY`, `e`] bir_exp_subst_EVAL_EQ_GEN) >>
+MP_TAC (Q.SPECL [`ext_map`, `env`, `ext_st`, `s`, `FEMPTY`, `e`] bir_exp_subst_EVAL_EQ_GEN) >>
 MATCH_MP_TAC (prove (``(A /\ (B ==> C)) ==> ((A ==> B) ==> C)``, PROVE_TAC[])) >>
 FULL_SIMP_TAC std_ss [bir_exp_subst_EMPTY, bir_exp_subst_var_def, FLOOKUP_EMPTY,
   FEVERY_ALL_FLOOKUP] >>
@@ -165,7 +167,7 @@ CASE_TAC >> (
   FULL_SIMP_TAC (std_ss++pred_setSimps.PRED_SET_ss++boolSimps.EQUIV_EXTRACT_ss) [
     bir_vars_of_exp_def, flookup_thm] >>
   METIS_TAC[]
-))
+));
 
 
 
@@ -222,6 +224,8 @@ val bir_exp_subst1_REWRS = store_thm ("bir_exp_subst1_REWRS",
       bir_exp_subst1 v ve (BExp_IfThenElse c et ef) =
       BExp_IfThenElse (bir_exp_subst1 v ve c) (bir_exp_subst1 v ve et)
         (bir_exp_subst1 v ve ef)) /\
+   (!v ve en ty.
+      bir_exp_subst1 v ve (BExp_ExtGet en ty) = (BExp_ExtGet en ty)) /\
    (!v ve mem_e a_e en ty.
       bir_exp_subst1 v ve (BExp_Load mem_e a_e en ty) =
       BExp_Load (bir_exp_subst1 v ve mem_e) (bir_exp_subst1 v ve a_e) en
@@ -237,8 +241,8 @@ SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) []);
 
 
 val bir_exp_subst1_TYPE_EQ_GEN = store_thm ("bir_exp_subst1_TYPE_EQ_GEN",
-  ``!v ve ve' e. (type_of_bir_exp ve = type_of_bir_exp ve') ==>
-                 (type_of_bir_exp (bir_exp_subst1 v ve e) = type_of_bir_exp (bir_exp_subst1 v ve' e))``,
+  ``!ext_map v ve ve' e. (type_of_bir_exp ext_map ve = type_of_bir_exp ext_map ve') ==>
+                 (type_of_bir_exp ext_map (bir_exp_subst1 v ve e) = type_of_bir_exp ext_map (bir_exp_subst1 v ve' e))``,
 
 REPEAT STRIP_TAC >>
 SIMP_TAC std_ss [bir_exp_subst1_def] >>
@@ -247,8 +251,8 @@ ASM_SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) [bir_exp_subst_var_REWRS]);
 
 
 val bir_exp_subst1_TYPE_EQ = store_thm ("bir_exp_subst1_TYPE_EQ",
-  ``!v ve e. (type_of_bir_exp ve = SOME (bir_var_type v)) ==>
-             (type_of_bir_exp (bir_exp_subst1 v ve e) = type_of_bir_exp e)``,
+  ``!ext_map v ve e. (type_of_bir_exp ext_map ve = SOME (bir_var_type v)) ==>
+             (type_of_bir_exp ext_map (bir_exp_subst1 v ve e) = type_of_bir_exp ext_map e)``,
 
 REPEAT STRIP_TAC >>
 SIMP_TAC std_ss [bir_exp_subst1_def] >>
@@ -257,10 +261,10 @@ ASM_SIMP_TAC std_ss [FEVERY_FUPDATE, DRESTRICT_FEMPTY, FEVERY_FEMPTY]);
 
 
 val bir_exp_subst1_NO_TYPE = store_thm ("bir_exp_subst1_NO_TYPE", ``
-  !e v ve. (
+  !ext_map e v ve. (
     (v IN bir_vars_of_exp e) /\
-    (type_of_bir_exp ve = NONE)) ==>
-    (type_of_bir_exp (bir_exp_subst1 v ve e) = NONE)``,
+    (type_of_bir_exp ext_map ve = NONE)) ==>
+    (type_of_bir_exp ext_map (bir_exp_subst1 v ve e) = NONE)``,
 
 REPEAT STRIP_TAC >>
 SIMP_TAC std_ss [bir_exp_subst1_def] >>
@@ -269,20 +273,20 @@ ASM_SIMP_TAC std_ss [FLOOKUP_EMPTY, FLOOKUP_UPDATE]);
 
 
 val bir_exp_subst1_NO_TYPE_SOME = store_thm ("bir_exp_subst1_NO_TYPE_SOME", ``
-  !e v ve ty. (
+  !ext_map e v ve ty. (
     (v IN bir_vars_of_exp e) ==>
-    (type_of_bir_exp (bir_exp_subst1 v ve e) = SOME ty) ==>
-    (?ty. type_of_bir_exp ve = SOME ty))``,
+    (type_of_bir_exp ext_map (bir_exp_subst1 v ve e) = SOME ty) ==>
+    (?ty. type_of_bir_exp ext_map ve = SOME ty))``,
 
 REPEAT STRIP_TAC >>
-Cases_on `type_of_bir_exp ve` >> ASM_SIMP_TAC std_ss [] >>
+Cases_on `type_of_bir_exp ext_map ve` >> ASM_SIMP_TAC std_ss [] >>
 METIS_TAC[bir_exp_subst1_NO_TYPE, optionTheory.option_CLAUSES]);
 
 
 val bir_exp_subst1_EVAL_EQ_GEN = store_thm ("bir_exp_subst1_EVAL_EQ_GEN", ``
-  !env v ve ve' e.
-  (bir_eval_exp ve env = bir_eval_exp ve' env) ==>
-  (bir_eval_exp (bir_exp_subst1 v ve e) env = bir_eval_exp (bir_exp_subst1 v ve' e) env)``,
+  !ext_map env ext_st v ve ve' e.
+  (bir_eval_exp ext_map ve env ext_st = bir_eval_exp ext_map ve' env ext_st) ==>
+  (bir_eval_exp ext_map (bir_exp_subst1 v ve e) env ext_st = bir_eval_exp ext_map (bir_exp_subst1 v ve' e) env ext_st)``,
 
 REPEAT STRIP_TAC >>
 SIMP_TAC std_ss [bir_exp_subst1_def] >>
@@ -291,9 +295,9 @@ ASM_SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) [bir_exp_subst_var_REWRS]);
 
 
 val bir_exp_subst1_EVAL_EQ = store_thm ("bir_exp_subst1_EVAL_EQ", ``
-  !env v ve e.
-  (bir_eval_exp ve env = bir_env_read v env) ==>
-  (bir_eval_exp (bir_exp_subst1 v ve e) env = bir_eval_exp e env)``,
+  !ext_map env ext_st v ve e.
+  (bir_eval_exp ext_map ve env ext_st = bir_env_read v env) ==>
+  (bir_eval_exp ext_map (bir_exp_subst1 v ve e) env ext_st = bir_eval_exp ext_map e env ext_st)``,
 
 REPEAT STRIP_TAC >>
 SIMP_TAC std_ss [bir_exp_subst1_def] >>
@@ -325,14 +329,14 @@ ASM_SIMP_TAC std_ss [DRESTRICT_FUPDATE, DRESTRICT_FEMPTY,
 
 
 val bir_eval_exp_subst1_env = store_thm("bir_eval_exp_subst1_env",
-``!ex env varn ty e1 e1_va.
+``!ext_map ex env ext_st varn ty e1 e1_va.
     (bir_env_lookup_type varn (BEnv env) = SOME ty) ==>
-    (bir_eval_exp e1 (BEnv env) = SOME e1_va) ==>
+    (bir_eval_exp ext_map e1 (BEnv env) ext_st = SOME e1_va) ==>
     (type_of_bir_val e1_va = ty) ==>
-    (bir_eval_exp ex
-      (BEnv ((varn =+ SOME e1_va) env)) =
-        bir_eval_exp (bir_exp_subst1 (BVar varn ty) e1 ex)
-                     (BEnv env)
+    (bir_eval_exp ext_map ex
+      (BEnv ((varn =+ SOME e1_va) env)) ext_st =
+        bir_eval_exp ext_map (bir_exp_subst1 (BVar varn ty) e1 ex)
+                     (BEnv env) ext_st
     )``,
 
 REPEAT (GEN_TAC ORELSE DISCH_TAC) >>
