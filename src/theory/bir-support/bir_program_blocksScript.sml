@@ -494,26 +494,26 @@ SIMP_TAC (std_ss++holBACore_ss) [optionTheory.IS_SOME_EXISTS, bir_get_current_bl
 METIS_TAC[]);
 
 
-val bir_exec_stmtsB_SEMANTICS_WHOLE_BLOCK = store_thm ("bir_exec_stmtsB_SEMANTICS_WHOLE_BLOCK",
-``!p bl st n1 st1 l1 n2 st2 l2.
+Theorem bir_exec_stmtsB_SEMANTICS_WHOLE_BLOCK:
+!p bl st n1 st1 l1 n2 st2 l2.
     (bir_get_current_block p st.bst_pc = SOME bl) /\
-
     (bir_exec_stmtsB bl.bb_statements ([], 0, st) = (l1, n1, st1)) /\
     (bir_exec_step_n p st (LENGTH bl.bb_statements) = (l2, n2, st2)) ==>
-
     ((n2 = n1) /\ (l2 = l1) /\
     (bir_states_EQ_EXCEPT_PC st1 st2) /\
     (st1.bst_pc = st.bst_pc) /\
     (st2.bst_pc = st.bst_pc with bpc_index := (st.bst_pc.bpc_index +
        (if bir_state_is_terminated st2 then PRE n2 else n2))))
-``,
-
-REPEAT GEN_TAC >> STRIP_TAC >>
-FULL_SIMP_TAC std_ss [bir_get_current_block_SOME] >>
-rename1 `_ = SOME (i, bl)` >>
-MP_TAC (Q.SPECL [`p`, `i`, `bl`, `LENGTH bl.bb_statements`, `st`, `0`, `[]`] bir_exec_stmtsB_SEMANTICS) >>
-ASM_SIMP_TAC list_ss [rich_listTheory.SEG_LENGTH_ID]);
-
+Proof
+  REPEAT GEN_TAC >> STRIP_TAC >>
+  FULL_SIMP_TAC std_ss [bir_get_current_block_SOME] >>
+  rename1 `_ = SOME (i, bl)` >>
+  drule bir_exec_stmtsB_SEMANTICS >>
+  disch_then $ drule_at Any >>
+  fs[rich_listTheory.SEG_LENGTH_ID] >>
+  disch_then $ drule_at Any >>
+  fs[]
+QED
 
 val bir_exec_stmtsB_not_jumped = store_thm ("bir_exec_stmtsB_not_jumped",
 ``!stmts l c st ll l' c' st'.
@@ -873,8 +873,7 @@ val bir_exec_steps_block = store_thm ("bir_exec_steps_block",
 
 REPEAT STRIP_TAC >>
 `?l1 c1 st1. bir_exec_step_n p st (bir_block_size bl) = (l1, c1, st1)` by METIS_TAC[pairTheory.PAIR] >>
-
-MP_TAC (Q.SPECL [`p`, `st`, `bir_block_size bl`] bir_exec_steps_combine) >>
+drule bir_exec_steps_combine >>
 FULL_SIMP_TAC std_ss [bir_exec_block_SEMANTICS_step_n, LET_DEF]);
 
 
@@ -893,7 +892,7 @@ val bir_exec_steps_block_GUARD = store_thm ("bir_exec_steps_block_GUARD",
 
 REPEAT STRIP_TAC >>
 `?l1 c1 st1. bir_exec_step_n p st (bir_block_size bl) = (l1, c1, st1)` by METIS_TAC[pairTheory.PAIR] >>
-MP_TAC (Q.SPECL [`p`, `st`, `bir_block_size bl`] bir_exec_steps_combine_GUARD) >>
+drule bir_exec_steps_combine_GUARD >>
 FULL_SIMP_TAC std_ss [bir_exec_block_SEMANTICS_step_n, LET_DEF]);
 
 
@@ -912,9 +911,7 @@ val bir_exec_to_labels_n_block = store_thm ("bir_exec_to_labels_n_block",
 
 REPEAT STRIP_TAC >>
 SIMP_TAC std_ss [bir_exec_to_labels_n_block_1] >>
-MP_TAC (Q.SPECL [`p`, `bl`, `st`] bir_exec_block_SEMANTICS) >>
-ASM_SIMP_TAC std_ss [] >>
-DISCH_TAC >> POP_ASSUM (K ALL_TAC) >>
+drule bir_exec_block_SEMANTICS >>
 SIMP_TAC (std_ss++pairSimps.gen_beta_ss) [LET_DEF]);
 
 
@@ -936,9 +933,9 @@ val bir_exec_to_labels_block = store_thm ("bir_exec_to_labels_block",
 
 REPEAT STRIP_TAC >>
 SIMP_TAC std_ss [bir_exec_to_labels_def] >>
-MP_TAC (Q.SPECL [`ls`, `p`, `st`, `0`, `bl`] bir_exec_to_labels_n_block) >>
-ASM_SIMP_TAC std_ss [] >>
-DISCH_TAC >> POP_ASSUM (K ALL_TAC) >>
+qmatch_goalsub_abbrev_tac `bir_exec_to_labels_n ls p st` >>
+drule bir_exec_to_labels_n_block >>
+disch_then $ qspecl_then [`ls`,`0`] mp_tac >>
 SIMP_TAC (list_ss++boolSimps.LIFT_COND_ss++bir_TYPES_ss) [LET_DEF,
   bir_exec_to_labels_n_REWR_0]);
 
@@ -1038,13 +1035,11 @@ REPEAT STRIP_TAC >>
   FULL_SIMP_TAC std_ss [bir_vars_of_block_def, UNION_SUBSET, LET_THM]
 ) >>
 REPEAT BasicProvers.VAR_EQ_TAC >>
-
-MP_TAC (Q.SPECL [`st1'`, `st2'`, `vs`, `p`, `bl.bb_last_statement`] bir_vars_of_stmtE_THM) >>
 `bir_vars_of_stmtE bl.bb_last_statement SUBSET vs` by (
   FULL_SIMP_TAC std_ss [bir_vars_of_block_def, UNION_SUBSET]
 ) >>
-ASM_SIMP_TAC std_ss [] >>
-STRIP_TAC >>
+drule_all $ INST_TYPE [``:'a`` |-> ``:'a bir_stmt_basic_t``] bir_vars_of_stmtE_THM >>
+disch_then $ qspec_then `p` assume_tac >>
 FULL_SIMP_TAC std_ss [bir_state_EQ_FOR_VARS_ALT_DEF] >>
 ASM_SIMP_TAC (std_ss++bir_TYPES_ss++boolSimps.LIFT_COND_ss) [bir_exec_block_def, LET_THM,
   bir_state_COUNT_PC_def, bir_block_pc_def,

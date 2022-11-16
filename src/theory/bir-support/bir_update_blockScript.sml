@@ -1130,7 +1130,7 @@ val bir_update_assert_block_def = Define `bir_update_assert_block l al eup updat
 val bir_update_assert_block_ALT_def = store_thm ("bir_update_assert_block_ALT_def",
   ``((bir_update_assert_block l al eup updates):'a bir_block_t) =
     (bir_update_block l eup updates):'a bir_block_t with bb_statements := (bir_assert_block al ++ (bir_update_block l eup updates).bb_statements)``,
-SIMP_TAC (list_ss++bir_TYPES_ss) [bir_update_assert_block_def, bir_update_block_def, bir_block_t_component_equality]);
+SIMP_TAC (list_ss++bir_TYPES_ss) [bir_update_assert_block_def, bir_update_block_def, bir_generic_block_t_component_equality]);
 
 
 val bir_update_assert_block_SEM =

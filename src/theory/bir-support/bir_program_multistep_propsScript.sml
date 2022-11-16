@@ -389,53 +389,48 @@ METIS_TAC[FINITE_bir_exec_infinite_steps_fun_PC_COND_SET, prim_recTheory.LESS_SU
    The most important special case is that we count every beginning of blocks. Since
    all blocks are finite, we can only loop, if we execute infinitely many blocks. *)
 
-val bir_exec_infinite_steps_fun_block_starts_at_front = store_thm (
-  "bir_exec_infinite_steps_fun_block_starts_at_front",
-``!p st n st_n i.
+Theorem bir_exec_infinite_steps_fun_block_starts_at_front:
+  !p st n st_n i.
      (st_n = bir_exec_infinite_steps_fun p st n) ==>
      ((bir_exec_infinite_steps_fun p st n).bst_pc.bpc_index = i) ==>
      ~(bir_state_is_terminated st_n) ==>
      (i <= n) ==>
-
      ((bir_exec_infinite_steps_fun p st (n-i)).bst_pc =
-      (st_n.bst_pc with bpc_index := 0))``,
-
-GEN_TAC >> GEN_TAC >>
-Induct_on `i` >- (
-  SIMP_TAC (std_ss++bir_TYPES_ss) [bir_programTheory.bir_programcounter_t_component_equality]
-) >>
-
-FULL_SIMP_TAC std_ss [] >>
-REPEAT STRIP_TAC >>
-Cases_on `n` >> FULL_SIMP_TAC std_ss [] >>
-rename1 `i <= n'` >>
-Q.ABBREV_TAC `st_n' = (bir_exec_infinite_steps_fun p st n')` >>
-Q.PAT_X_ASSUM `!n'. _` (MP_TAC o Q.SPEC `n'`) >>
-FULL_SIMP_TAC std_ss [bir_exec_infinite_steps_fun_REWRS2] >>
-
-Cases_on `bir_state_is_terminated st_n'` >- (
-  FULL_SIMP_TAC std_ss [bir_exec_step_state_def, bir_exec_step_def]
-) >>
-
-Tactical.REVERSE (Cases_on `bir_is_valid_pc p st_n'.bst_pc`) >- (
-  FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_exec_step_state_def, bir_exec_step_def,
-    GSYM bir_get_current_statement_IS_SOME, bir_state_set_failed_def,
-    bir_state_is_terminated_def]
-) >>
-MP_TAC (Q.SPECL [`p`, `st_n'`] bir_exec_step_state_valid_THM) >>
-ASM_SIMP_TAC std_ss [] >>
-STRIP_TAC >>
-Tactical.REVERSE (Cases_on `stmt`) >- (
-  FULL_SIMP_TAC arith_ss [bir_exec_stmt_state_REWRS, bir_exec_stmtE_block_pc]
-) >>
-
-FULL_SIMP_TAC std_ss [bir_exec_stmt_state_REWRS, LET_DEF] >>
-Cases_on `bir_state_is_terminated (bir_exec_stmtB_state b st_n')` >> (
-  FULL_SIMP_TAC std_ss []
-) >>
-FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_pc_next_def,
-  bir_exec_stmtB_pc_unchanged]);
-
+      (st_n.bst_pc with bpc_index := 0))
+Proof
+  GEN_TAC >> GEN_TAC >>
+  Induct_on `i` >- (
+    SIMP_TAC (std_ss++bir_TYPES_ss) [bir_programTheory.bir_programcounter_t_component_equality]
+  ) >>
+  FULL_SIMP_TAC std_ss [] >>
+  REPEAT STRIP_TAC >>
+  Cases_on `n` >> FULL_SIMP_TAC std_ss [] >>
+  rename1 `i <= n'` >>
+  Q.ABBREV_TAC `st_n' = (bir_exec_infinite_steps_fun p st n')` >>
+  Q.PAT_X_ASSUM `!n'. _` (MP_TAC o Q.SPEC `n'`) >>
+  FULL_SIMP_TAC std_ss [bir_exec_infinite_steps_fun_REWRS2] >>
+  Cases_on `bir_state_is_terminated st_n'` >- (
+    FULL_SIMP_TAC std_ss [bir_exec_step_state_def, bir_exec_step_def]
+  ) >>
+  Tactical.REVERSE (Cases_on `bir_is_valid_pc p st_n'.bst_pc`) >- (
+    FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_exec_step_state_def, bir_exec_step_def,
+      GSYM bir_get_current_statement_IS_SOME, bir_state_set_failed_def,
+      bir_state_is_terminated_def]
+  ) >>
+  MP_TAC (Q.SPECL [`p`, `st_n'`] bir_exec_step_state_valid_THM) >>
+  drule_then assume_tac bir_exec_step_state_valid_THM >>
+  gs[] >>
+  Tactical.REVERSE (Cases_on `stmt`) >- (
+    FULL_SIMP_TAC arith_ss [bir_exec_stmt_state_REWRS, bir_exec_stmtE_block_pc]
+  ) >>
+  FULL_SIMP_TAC std_ss [bir_exec_stmt_state_REWRS, LET_DEF] >>
+  qmatch_goalsub_rename_tac `bir_exec_stmtB_state b st_n'` >>
+  Cases_on `bir_state_is_terminated (bir_exec_stmtB_state b st_n')` >> (
+    FULL_SIMP_TAC std_ss []
+  ) >>
+  FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_pc_next_def,
+    bir_exec_stmtB_pc_unchanged]
+QED
 
 
 val bir_is_valid_pc_FINITE = store_thm ("bir_is_valid_pc_FINITE",

@@ -78,12 +78,17 @@ val (BStmt_Halt_tm,  mk_BStmt_Halt, dest_BStmt_Halt, is_BStmt_Halt)  = syntax_fn
 
 (* bir_stmt_t *)
 
-fun mk_bir_stmt_t_ty ty = mk_type ("bir_stmt_t", [ty]);
+fun mk_bir_stmt_t_ty ty =
+  mk_type("bir_generic_stmt_t", [mk_type("bir_stmt_basic_t",[ty])]);
 
 fun dest_bir_stmt_t_ty ty =
    case total dest_thy_type ty
-    of SOME {Tyop="bir_stmt_t", Thy="bir_program", Args=[ty]} => ty
-     | other => raise ERR "dest_bir_stmt_t_ty" ""
+    of SOME {Tyop="bir_generic_stmt_t", Thy="bir_program", Args=[ty]}
+    => (case total dest_thy_type ty
+      of SOME {Tyop="bir_stmt_basic_t", Thy="bir_program", Args=[ty]}
+      => ty
+      | other => raise ERR "dest_bir_stmt_t_ty" "")
+    | other => raise ERR "dest_bir_stmt_t_ty" ""
 
 val is_bir_stmt_t_ty = can dest_bir_stmt_t_ty;
 
@@ -117,11 +122,16 @@ val bir_mc_tags_NONE = optionSyntax.mk_none bir_mc_tags_t_ty;
 
 (* bir_block_t *)
 
-fun mk_bir_block_t_ty ty = mk_type ("bir_block_t", [ty]);
+fun mk_bir_block_t_ty ty =
+  mk_type("bir_generic_block_t", [mk_type("bir_stmt_basic_t",[ty])]);
 
 fun dest_bir_block_t_ty ty =
    case total dest_thy_type ty
-    of SOME {Tyop="bir_block_t", Thy="bir_program", Args=[ty]} => ty
+    of SOME {Tyop="bir_generic_block_t", Thy="bir_program", Args=[ty]} =>
+      (case total dest_thy_type ty
+      of SOME {Tyop="bir_stmt_basic_t", Thy="bir_program", Args=[ty]} =>
+        ty
+      | other => raise ERR "dest_bir_block_t_ty" "")
      | other => raise ERR "dest_bir_block_t_ty" ""
 
 val is_bir_block_t_ty = can dest_bir_block_t_ty;
@@ -169,11 +179,15 @@ end handle e => raise wrap_exn "mk_bir_block_list" e;
 
 (* bir_program_t *)
 
-fun mk_bir_program_t_ty ty = mk_type ("bir_program_t", [ty]);
+fun mk_bir_program_t_ty ty =
+  mk_type ("bir_generic_program_t", [mk_type ("bir_stmt_basic_t", [ty])]);
 
 fun dest_bir_program_t_ty ty =
    case total dest_thy_type ty
-    of SOME {Tyop="bir_program_t", Thy="bir_program", Args=[ty]} => ty
+    of SOME {Tyop="bir_generic_program_t", Thy="bir_program", Args=[ty]} => 
+      (case total dest_thy_type ty
+        of SOME {Tyop="bir_stmt_basic_t", Thy="bir_program", Args=[ty]} => ty
+        | other => raise ERR "dest_bir_program_t_ty" "")
      | other => raise ERR "dest_bir_program_t_ty" ""
 
 val is_bir_program_t_ty = can dest_bir_program_t_ty;

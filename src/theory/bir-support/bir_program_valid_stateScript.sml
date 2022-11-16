@@ -20,17 +20,17 @@ val bir_is_valid_program_def = Define `bir_is_valid_program p <=>
 
 
 (* This allows some nice rewrites *)
-val bir_is_valid_labels_blocks_EQ_EL = store_thm ("bir_is_valid_labels_blocks_EQ_EL",
-  ``!p n1 n2. (bir_is_valid_labels (BirProgram p) /\ n1 < LENGTH p /\ n2 < LENGTH p /\
-                ((EL n1 p).bb_label = (EL n2 p).bb_label)) ==> (n1 = n2)``,
-
-SIMP_TAC list_ss [bir_is_valid_labels_def, bir_labels_of_program_def] >>
-REPEAT STRIP_TAC >>
-MP_TAC (Q.ISPEC `MAP (\bl. bl.bb_label) (p:('a bir_block_t) list)` listTheory.EL_ALL_DISTINCT_EL_EQ) >>
-ASM_SIMP_TAC list_ss [GSYM LEFT_EXISTS_IMP_THM] >>
-Q.EXISTS_TAC `n1` >> Q.EXISTS_TAC `n2` >>
-ASM_SIMP_TAC list_ss [listTheory.EL_MAP]);
-
+Theorem bir_is_valid_labels_blocks_EQ_EL:
+  !p n1 n2. (bir_is_valid_labels (BirProgram p) /\ n1 < LENGTH p /\ n2 < LENGTH p /\
+                ((EL n1 p).bb_label = (EL n2 p).bb_label)) ==> (n1 = n2)
+Proof
+  SIMP_TAC list_ss [bir_is_valid_labels_def, bir_labels_of_program_def] >>
+  REPEAT STRIP_TAC >>
+  MP_TAC (Q.ISPEC `MAP (\bl. bl.bb_label) (p:('a bir_generic_block_t) list)` listTheory.EL_ALL_DISTINCT_EL_EQ) >>
+  ASM_SIMP_TAC list_ss [GSYM LEFT_EXISTS_IMP_THM] >>
+  Q.EXISTS_TAC `n1` >> Q.EXISTS_TAC `n2` >>
+  ASM_SIMP_TAC list_ss [listTheory.EL_MAP]
+QED
 
 val bir_is_valid_labels_blocks_EQ = store_thm ("bir_is_valid_labels_blocks_EQ",
   ``!p bl1 bl2. (bir_is_valid_labels (BirProgram p) /\ MEM bl1 p /\ MEM bl2 p /\

@@ -223,13 +223,13 @@ val bir_exec_stmtE_not_assumviol =
   ]
 );
 
-val bir_block_not_assume_never_assumviol =
-  store_thm ("bir_block_not_assume_never_assumviol",
-  ``!prog bl st l' c' st'.
+Theorem bir_block_not_assume_never_assumviol:
+  !prog bl st l' c' st'.
     bir_block_has_no_assumes bl ==>
     (st.bst_status <> BST_AssumptionViolated) ==>
     (bir_exec_block prog bl st = (l', c', st')) ==>
-    (st'.bst_status <> BST_AssumptionViolated)``,
+    (st'.bst_status <> BST_AssumptionViolated)
+Proof
   FULL_SIMP_TAC std_ss [bir_block_has_no_assumes_def,
                         bir_exec_block_def] >>
   REPEAT STRIP_TAC >>
@@ -240,15 +240,12 @@ val bir_block_not_assume_never_assumviol =
     FULL_SIMP_TAC std_ss [bir_exec_stmtsB_exists]
   ) >>
   FULL_SIMP_TAC std_ss [LET_DEF] >>
-  PAT_X_ASSUM ``!st' l' l c' c. _``
-          (fn thm => ASSUME_TAC
-            (SPECL [``st'_test:bir_state_t``,
-                ``l_test: (num # 'a) list``,
-                        ``[]: (num # 'a) list``,
-                ``c_test:num``,
-                ``0:num``] thm
-            )
-          ) >>
+  PAT_X_ASSUM ``!st' l' l c' c. _`` $
+            Q.SPECL_THEN [`st'_test:bir_state_t`,
+                `l_test: (num # 'a) list`,
+                        `[]: (num # 'a) list`,
+                `c_test:num`,
+                `0:num`] assume_tac >>
   REV_FULL_SIMP_TAC std_ss [] >>
   Cases_on `bir_state_is_terminated st'_test` >| [
     Cases_on `st'_test` >>
@@ -266,11 +263,11 @@ val bir_block_not_assume_never_assumviol =
                    st'_test)` >> (
       FULL_SIMP_TAC (std_ss++holBACore_ss) [] >>
       Cases_on `st'` >>
-      ASSUME_TAC (SPECL [``prog:'a bir_program_t``,
-                         ``bl.bb_last_statement:bir_stmt_end_t``,
-                         ``st'_test:bir_state_t``]
-                        bir_exec_stmtE_not_assumviol
-                 ) >>
+      Q.SPECL_THEN [`prog:'a bir_program_t`,
+                         `bl.bb_last_statement:bir_stmt_end_t`,
+                         `st'_test:bir_state_t`] assume_tac
+                  $ INST_TYPE [``:'a`` |-> ``:'a bir_stmt_basic_t``]
+                        bir_exec_stmtE_not_assumviol >>
       Q.ABBREV_TAC `st' = bir_exec_stmtE prog bl.bb_last_statement
                                          st'_test` >>
       Cases_on `st'` >>
@@ -278,7 +275,7 @@ val bir_block_not_assume_never_assumviol =
                         [bir_state_t_fn_updates]
     )
   ]
-);
+QED
 
 val bir_prog_has_no_assumes_def = Define `
   (bir_prog_has_no_assumes (BirProgram []) = T) /\
