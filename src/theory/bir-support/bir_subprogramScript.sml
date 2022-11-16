@@ -46,7 +46,7 @@ val bir_is_subprogram_TRANS = store_thm ("bir_is_subprogram_TRANS",
 
 REPEAT Cases >>
 SIMP_TAC std_ss [bir_is_subprogram_def] >>
-`!(l1:'a bir_block_t list) l2 l3 l4 l5.
+`!(l1:'a bir_generic_block_t list) l2 l3 l4 l5.
    PERM (l1 ++ l2) l3 ==>
    PERM (l3 ++ l4) l5 ==>
    PERM (l1 ++ (l2 ++ l4)) l5` suffices_by METIS_TAC[] >>
@@ -467,8 +467,7 @@ val bir_exec_stmtE_SUBPROGRAM = store_thm ("bir_exec_stmtE_SUBPROGRAM",
    (st1 = st2))``,
 
 REPEAT GEN_TAC >> STRIP_TAC >>
-MP_TAC (Q.SPECL [`p1`, `p2`] bir_labels_of_program_SUBPROGRAM)  >>
-ASM_REWRITE_TAC [] >> STRIP_TAC >>
+drule_then assume_tac bir_labels_of_program_SUBPROGRAM >>
 Cases_on `stmt` >> (
   FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_exec_stmtE_def, bir_jumped_outside_termination_cond_def,
     bir_exec_stmt_jmp_def, LET_THM, bir_exec_stmt_jmp_to_label_def, bir_state_is_terminated_def,
@@ -481,8 +480,8 @@ Cases_on `stmt` >> (
 
 
 (* Lifting to executing a step *)
-val bir_exec_step_SUBPROGRAM = store_thm ("bir_exec_step_SUBPROGRAM",
-``!p1 p2 st st1 st2 fe1 fe2.
+Theorem bir_exec_step_SUBPROGRAM:
+!p1 p2 st st1 st2 fe1 fe2.
   bir_is_subprogram p1 p2 ==>
   bir_is_valid_labels p2 ==>
   bir_is_valid_pc p1 st.bst_pc ==>
@@ -493,41 +492,39 @@ val bir_exec_step_SUBPROGRAM = store_thm ("bir_exec_step_SUBPROGRAM",
   ((bir_jumped_outside_termination_cond p1 p2 st1 st2) \/
   ((!l. (st1.bst_status = BST_JumpOutside l) ==>
        ~(MEM l (bir_labels_of_program p2))) /\
-   (st1 = st2))))``,
-
-
-REPEAT GEN_TAC >> REPEAT DISCH_TAC >>
-`?stmt. bir_get_current_statement p1 st.bst_pc = SOME stmt` by
-  METIS_TAC[bir_get_current_statement_IS_SOME, optionTheory.IS_SOME_EXISTS] >>
-`bir_get_current_statement p2 st.bst_pc = SOME stmt` by
-  METIS_TAC[bir_get_current_statement_SUBPROGRAM] >>
-FULL_SIMP_TAC std_ss [bir_exec_step_def] >>
-REV_FULL_SIMP_TAC std_ss [] >>
-
-Tactical.REVERSE (Cases_on `stmt`) >- (
-  FULL_SIMP_TAC std_ss [bir_exec_stmt_def] >>
-  REPEAT BasicProvers.VAR_EQ_TAC >>
-  METIS_TAC[bir_exec_stmtE_SUBPROGRAM]
-) >>
-
-FULL_SIMP_TAC std_ss [bir_exec_stmt_def] >>
-`!l. st1.bst_status <> BST_JumpOutside l` suffices_by METIS_TAC[] >>
-REPEAT STRIP_TAC >>
-`?oo st'. bir_exec_stmtB b st = (oo, st')` by METIS_TAC[pairTheory.PAIR] >>
-`st'.bst_status = BST_JumpOutside l` by (
-  Cases_on `bir_state_is_terminated st'` >> (
-    FULL_SIMP_TAC std_ss [LET_THM] >>
+   (st1 = st2))))
+Proof
+  REPEAT GEN_TAC >> REPEAT DISCH_TAC >>
+  `?stmt. bir_get_current_statement p1 st.bst_pc = SOME stmt` by
+    METIS_TAC[bir_get_current_statement_IS_SOME, optionTheory.IS_SOME_EXISTS] >>
+  `bir_get_current_statement p2 st.bst_pc = SOME stmt` by
+    METIS_TAC[bir_get_current_statement_SUBPROGRAM] >>
+  FULL_SIMP_TAC std_ss [bir_exec_step_def] >>
+  REV_FULL_SIMP_TAC std_ss [] >>
+  Tactical.REVERSE (Cases_on `stmt`) >- (
+    FULL_SIMP_TAC std_ss [bir_exec_stmt_def] >>
     REPEAT BasicProvers.VAR_EQ_TAC >>
-    FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [LET_THM]
-  )
-) >>
-POP_ASSUM MP_TAC >>
-FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_state_is_terminated_def, LET_THM] >>
-REPEAT BasicProvers.VAR_EQ_TAC >>
-rename1 `bir_exec_stmtB stmtB st` >>
-MP_TAC (Q.SPECL [`st`, `stmtB`] bir_exec_stmtB_status_not_jumped) >>
-ASM_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_exec_stmtB_state_def]);
-
+    METIS_TAC[bir_exec_stmtE_SUBPROGRAM]
+  ) >>
+  FULL_SIMP_TAC std_ss [bir_exec_stmt_def] >>
+  `!l. st1.bst_status <> BST_JumpOutside l` suffices_by METIS_TAC[] >>
+  REPEAT STRIP_TAC >>
+  qmatch_asmsub_rename_tac `bir_exec_stmtB b st` >>
+  `?oo st'. bir_exec_stmtB b st = (oo, st')` by METIS_TAC[pairTheory.PAIR] >>
+  `st'.bst_status = BST_JumpOutside l` by (
+    Cases_on `bir_state_is_terminated st'` >> (
+      FULL_SIMP_TAC std_ss [LET_THM] >>
+      REPEAT BasicProvers.VAR_EQ_TAC >>
+      FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [LET_THM]
+    )
+  ) >>
+  POP_ASSUM MP_TAC >>
+  FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_state_is_terminated_def, LET_THM] >>
+  REPEAT BasicProvers.VAR_EQ_TAC >>
+  rename1 `bir_exec_stmtB stmtB st` >>
+  MP_TAC (Q.SPECL [`st`, `stmtB`] bir_exec_stmtB_status_not_jumped) >>
+  ASM_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_exec_stmtB_state_def]
+QED
 
 
 val bir_exec_step_PROGRAM_EQ = store_thm ("bir_exec_step_PROGRAM_EQ",

@@ -18,26 +18,26 @@ val bir_stmts_of_block_def = Define `bir_stmts_of_block bl =
 val bir_stmts_of_prog_def = Define `bir_stmts_of_prog (BirProgram p) =
   BIGUNION (IMAGE bir_stmts_of_block (set p))`;
 
-val bir_get_current_statement_stmts_of_prog = store_thm ("bir_get_current_statement_stmts_of_prog",
-  ``!p pc stmt. (bir_get_current_statement p pc = SOME stmt) ==>
-                stmt IN (bir_stmts_of_prog p)``,
-
-Cases >> rename1 `BirProgram p` >>
-SIMP_TAC std_ss [bir_get_current_statement_def, bir_stmts_of_prog_def,
-  IN_BIGUNION, IN_IMAGE, PULL_EXISTS, bir_stmts_of_block_def,
-  IN_INSERT, IN_IMAGE] >>
-REPEAT GEN_TAC >>
-Cases_on `(bir_get_program_block_info_by_label (BirProgram p) pc.bpc_label)` >- (
-  ASM_SIMP_TAC std_ss []
-) >>
-rename1 `_ = SOME xy` >> Cases_on `xy` >>
-rename1 `_ = SOME (i, bl)` >>
-ASM_SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) [] >>
-CASE_TAC >> STRIP_TAC >> REPEAT BasicProvers.VAR_EQ_TAC >> (
-  FULL_SIMP_TAC std_ss [bir_get_program_block_info_by_label_THM,
-    bir_stmt_t_11, bir_stmt_t_distinct] >>
-  METIS_TAC[rich_listTheory.EL_MEM]
-));
+Theorem bir_get_current_statement_stmts_of_prog:
+  !p pc stmt. (bir_get_current_statement p pc = SOME stmt) ==>
+                stmt IN (bir_stmts_of_prog p)
+Proof
+  Cases >> rename1 `BirProgram p` >>
+  SIMP_TAC std_ss [bir_get_current_statement_def, bir_stmts_of_prog_def,
+    IN_BIGUNION, IN_IMAGE, PULL_EXISTS, bir_stmts_of_block_def,
+    IN_INSERT, IN_IMAGE] >>
+  REPEAT GEN_TAC >>
+  Cases_on `(bir_get_program_block_info_by_label (BirProgram p) pc.bpc_label)` >- (
+    ASM_SIMP_TAC std_ss []
+  ) >>
+  rename1 `_ = SOME xy` >> Cases_on `xy` >>
+  rename1 `_ = SOME (i, bl)` >>
+  ASM_SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) [] >>
+  CASE_TAC >> STRIP_TAC >> REPEAT BasicProvers.VAR_EQ_TAC >> (
+    FULL_SIMP_TAC std_ss [bir_get_program_block_info_by_label_THM] >>
+    METIS_TAC[rich_listTheory.EL_MEM]
+  )
+QED
 
 
 

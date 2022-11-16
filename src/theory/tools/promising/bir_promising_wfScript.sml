@@ -7,12 +7,6 @@ open finite_mapTheory;
 
 val _ = new_theory "bir_promising_wf";
 
-Theorem MAX_LE:
-  MAX a b <= c <=> a <= c /\ b <= c
-Proof
-  rw[arithmeticTheory.MAX_DEF,EQ_IMP_THM]
-QED
-
 Theorem bir_exec_stmt_jmp_bst_eq:
   !s p lbl.
      (bir_exec_stmt_jmp p lbl s).bst_v_rNew = s.bst_v_rNew
@@ -244,7 +238,7 @@ Proof
   rpt strip_tac
   >> fs[clstep_cases]
   >> fs[well_formed_fwdb_def, latest_def]
-  >~ [`BirStmt_Read`]
+  >~ [`BMCStmt_Load`]
   >- (
     Cases_on ‘l = l'’ >> fs[]
     >> ‘(s.bst_fwdb l').fwdb_time ≤ latest l' (s.bst_coh l') M’ by fs[]
@@ -259,7 +253,7 @@ Proof
                           (mem_read_view (s.bst_fwdb l') t))) M” >- fs[]
     >> fs[latest_max]
   )
-  >~ [`BirStmt_Write`]
+  >~ [`BMCStmt_Store`]
   >- (
     Cases_on ‘l = l'’ >> fs[combinTheory.APPLY_UPDATE_THM]
     >> drule_then (assume_tac o GSYM) latest_exact
@@ -267,7 +261,7 @@ Proof
     >> ‘latest l' v_post M <= latest l' v_post M’ suffices_by fs[]
     >> fs[latest_max]
   )
-  >~ [`BirStmt_Amo`]
+  >~ [`BMCStmt_Amo`]
   >- (
     Cases_on ‘l = l'’
     >- (
@@ -286,10 +280,10 @@ Proof
     >> ‘?m. mem_get M l (s.bst_fwdb l).fwdb_time = SOME m /\ m.val = v’ by fs[mem_get_mem_read]
     >> fs[]
   )
-  >~ [`BirStmt_Branch`]
-  >- drule_then (fs o single) bir_exec_stmt_mc_invar
-  >~ [`BirStmt_Generic`]
-  >- drule_then (fs o single) bir_exec_stmt_mc_invar
+  >~ [`BStmt_CJmp`]
+  >- fs[bir_exec_stmt_cjmp_mc_invar]
+  >~ [`bmc_exec_general_stmt`]
+  >- drule_then (fs o single) bmc_exec_general_stmt_mc_invar
 QED
 
 Theorem well_formed_fwdb_coh:
@@ -386,11 +380,11 @@ Theorem clstep_preserves_wf_xclb:
     ==> (!xclb. s'.bst_xclb = SOME xclb ==> well_formed_xclb M s'.bst_coh xclb)
 Proof
   rw[clstep_cases] >> fs[]
-  >~ [`BirStmt_Branch`]
-  >- (drule_then strip_assume_tac bir_exec_stmt_mc_invar >> fs[])
-  >~ [`BirStmt_Generic`]
-  >- (drule_then strip_assume_tac bir_exec_stmt_mc_invar >> fs[])
-  >~ [`BirStmt_Read`]
+  >~ [`BStmt_CJmp`]
+  >- fs[bir_exec_stmt_cjmp_mc_invar]
+  >~ [`bmc_exec_general_stmt`]
+  >- drule_then (fs o single) bmc_exec_general_stmt_mc_invar
+  >~ [`BMCStmt_Load`]
   >- (
     qmatch_asmsub_abbrev_tac `<|xclb_time:=_;xclb_view:=v_post|>`
     >> Cases_on `xcl` >> gvs[]
@@ -423,9 +417,9 @@ Proof
     >> goal_assum drule
     >> fs[latest_max]
   )
-  >~ [`BirStmt_Write`]
+  >~ [`BMCStmt_Store`]
   >- (rpt strip_tac >> fs[well_formed_xclb_bst_coh_update])
-  >~ [`BirStmt_Amo`]
+  >~ [`BMCStmt_Amo`]
   >- (rpt strip_tac >> fs[well_formed_xclb_bst_coh_update])
 QED
 
@@ -443,7 +437,7 @@ Proof
   >> gs[]
   >> disch_then kall_tac (* removes wf_xclb *)
   >> fs[clstep_cases]
-  >~ [`BirStmt_Read`]
+  >~ [`BMCStmt_Load`]
   >- (
     ‘v_addr <= LENGTH M’
      by (fs[bir_eval_exp_view_def]
@@ -482,12 +476,12 @@ Proof
     >> ntac 2 $ first_x_assum $ qspec_then `l` mp_tac
     >> gvs[well_formed_fwdb_def]
   )
-  >~ [`BirStmt_Write`,`xclfail_update_env`]
+  >~ [`BMCStmt_Store`,`xclfail_update_env`]
   >- (
     gvs[xclfail_update_env_def,xclfail_update_viewenv_def,AllCaseEqs(),well_formed_viewenv_def,FLOOKUP_UPDATE]
     >> rw[] >> gvs[] >> metis_tac[]
   )
-  >~ [`BirStmt_Write`]
+  >~ [`BMCStmt_Store`]
   >- (
     conj_tac
     >- (
@@ -531,7 +525,7 @@ Proof
     >> Cases_on `v_post`
     >> gs[mem_read_def,mem_get_def]
   )
-  >~ [`BirStmt_Amo`]
+  >~ [`BMCStmt_Amo`]
   >- (
     irule_at Any mem_read_view_wf_fwdb
     >> map_every qexists_tac [‘l’,‘s.bst_coh l’]
@@ -556,19 +550,16 @@ Proof
     >> Cases_on `t_w`
     >> gs[mem_read_def,mem_get_def]
   )
-  >~ [`BirStmt_Fence`]
+  >~ [`BMCStmt_Fence`]
   >- rw[]
-  >~ [`BirStmt_Branch`]
+  >~ [`BStmt_CJmp`]
   >- (
     drule_then (rev_drule_then assume_tac) bir_eval_exp_view_bound
-    >> gvs[bir_exec_stmt_def,bir_exec_stmtE_def,bir_exec_stmt_cjmp_def,AllCaseEqs(),bir_state_set_typeerror_def,GSYM bir_exec_stmt_jmp_bst_prom,bir_exec_stmt_jmp_bst_eq]
+    >> fs[bir_exec_stmt_cjmp_mc_invar]
   )
-  >~ [`BirStmt_Generic`]
-  >- (
-    drule_then strip_assume_tac bir_exec_stmt_mc_invar
-    >> gvs[]
-  )
-  >~ [`BirStmt_Expr`]
+  >~ [`bmc_exec_general_stmt`]
+  >- drule_then (fs o single) bmc_exec_general_stmt_mc_invar
+  >~ [`BMCStmt_Assign`]
   >- (
     drule_then irule well_formed_viewenv_UPDATE
     >> drule_all bir_eval_exp_view_bound
@@ -696,13 +687,13 @@ Proof
 QED
 
 Theorem cstep_seq_rtc_preserves_wf:
-  !(p : 'a bir_program_t) cid s M s' M'.
+  !p cid s M s' M'.
   well_formed cid M s
   /\ cstep_seq_rtc p cid (s,M) (s',M')
   ==> well_formed cid M' s'
 Proof
   qsuff_tac `
-    !(p : 'a bir_program_t) cid sM sM'.
+    !p cid sM sM'.
     cstep_seq_rtc p cid sM sM'
     ==> well_formed cid (SND sM) (FST sM)
     ==> well_formed cid (SND sM') (FST sM')
@@ -713,7 +704,7 @@ Proof
   )
   >> ntac 2 gen_tac
   >> REWRITE_TAC[cstep_seq_rtc_def]
-  >> ho_match_mp_tac  relationTheory.RTC_INDUCT
+  >> ho_match_mp_tac relationTheory.RTC_INDUCT
   >> fs[pairTheory.FORALL_PROD,pairTheory.LAMBDA_PROD,pairTheory.ELIM_UNCURRY]
   >> rpt strip_tac
   >> drule_all_then assume_tac cstep_seq_preserves_wf
@@ -740,15 +731,15 @@ QED
 (* init state *)
 
 Theorem wf_init_state:
-  !cid p. well_formed cid [] $ bir_state_init p
+  !cid p. well_formed cid [] $ bmc_state_init p
 Proof
-  fs[bir_programTheory.bir_state_init_def,well_formed_def,well_formed_viewenv_def,well_formed_fwdb_def,mem_read_def,listTheory.oEL_THM,mem_get_def]
+  fs[bir_programTheory.bmc_state_init_def,well_formed_def,well_formed_viewenv_def,well_formed_fwdb_def,mem_read_def,listTheory.oEL_THM,mem_get_def]
 QED
 
 Definition init_def:
   init cores =
     !cid p s. FLOOKUP cores cid = SOME $ Core cid p s
-    ==> s = bir_state_init p
+    ==> s = bmc_state_init p
 End
 
 Theorem wf_init:

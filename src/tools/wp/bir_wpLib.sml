@@ -295,12 +295,13 @@ open bir_inst_liftingHelpersLib;
 
       (* FIXME: This seems to take some time, is that normal? *)
       val wps_eval_restrict_consts = !bir_wp_comp_wps_iter_step2_consts;
-      val prog_obs_ty = (hd o snd o dest_type o type_of) program;
+      val prog_obs_ty = (hd o snd o dest_type o hd o snd o dest_type o type_of) program;
 
       val bir_wp_exec_of_block_eval_thm =
         ((computeLib.RESTR_EVAL_CONV wps_eval_restrict_consts) THENC
          (REWRITE_CONV [pred_setTheory.IN_APP]) THENC
          (computeLib.RESTR_EVAL_CONV wps_eval_restrict_consts))
+
           (list_mk_comb
             (* TODO: Add to bir_wpSyntax *)
             (inst [Type `:'a` |-> prog_obs_ty] ``bir_wp_exec_of_block:'a bir_program_t ->

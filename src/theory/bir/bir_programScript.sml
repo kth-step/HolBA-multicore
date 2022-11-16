@@ -37,37 +37,68 @@ val _ = Datatype `bir_memop_t =
   Assume expression
   Observe observation_id condition_expression expression_list observation_function
 *)
-val _ = Datatype `bir_stmt_basic_t =
+Datatype: bir_stmt_basic_t =
   | BStmt_Assign  bir_var_t bir_exp_t
   | BStmt_Assert  bir_exp_t
   | BStmt_Assume  bir_exp_t
   | BStmt_Observe num bir_exp_t (bir_exp_t list) (bir_val_t list -> 'a)
   | BStmt_Fence   bir_memop_t bir_memop_t
-`;
+End
 
-val _ = Datatype `bir_stmt_end_t =
+(* bir multicore statements *)
+Datatype:
+  bmc_stmt_basic_t =
+  (* reg, address, cast, xcl, acq rel *)
+  | BMCStmt_Load bir_var_t bir_exp_t ((bir_cast_t # bir_immtype_t) option) bool bool bool
+  (* success reg, address, value, xcl, acq, rel *)
+  | BMCStmt_Store bir_var_t bir_exp_t bir_exp_t bool bool bool
+  (* success reg, address, value, acq, rel *)
+  | BMCStmt_Amo bir_var_t bir_exp_t bir_exp_t bool bool
+  | BMCStmt_Assign bir_var_t bir_exp_t
+  | BMCStmt_Fence bir_memop_t bir_memop_t
+(*
+  | BMCStmt_Put       (* takes view of the input *)
+*)
+  | BMCStmt_Assert bir_exp_t
+  | BMCStmt_Assume bir_exp_t
+End
+
+Datatype: bir_stmt_end_t =
   | BStmt_Jmp     bir_label_exp_t
   | BStmt_CJmp    bir_exp_t bir_label_exp_t bir_label_exp_t
   | BStmt_Halt    bir_exp_t
-`;
-
-val _ = Datatype `bir_stmt_t =
-  | BStmtB ('a bir_stmt_basic_t)
-  | BStmtE bir_stmt_end_t
-`;
+End
 
 val _ = Datatype `bir_mc_tags_t = <|
   mc_acq            : bool;
   mc_rel            : bool;
   mc_atomic         : bool |>`;
 
-val _ = Datatype `bir_block_t = <|
+val _ = Datatype `bir_generic_block_t = <|
   bb_label          : bir_label_t;
   bb_mc_tags        : bir_mc_tags_t option;
-  bb_statements     : ('a bir_stmt_basic_t) list;
+  bb_statements     : 'a list;
   bb_last_statement : bir_stmt_end_t |>`;
 
-val _ = Datatype `bir_program_t = BirProgram (('a bir_block_t) list)`;
+Datatype:
+  bir_generic_stmt_t =
+  | BStmtB 'a
+  | BStmtE bir_stmt_end_t
+End
+
+Type bir_stmt_t = ``:('a bir_stmt_basic_t) bir_generic_stmt_t``
+Type bmc_stmt_t = ``:bmc_stmt_basic_t bir_generic_stmt_t``
+
+Datatype:
+  bir_generic_program_t = BirProgram (('a bir_generic_block_t) list)
+End
+
+Type bir_block_t = `` :('a bir_stmt_basic_t) bir_generic_block_t``
+Type bmc_block_t = `` :bmc_stmt_basic_t bir_generic_block_t``
+
+Type bir_program_t = ``:('a bir_stmt_basic_t) bir_generic_program_t``
+Type bmc_program_t = ``:bmc_stmt_basic_t bir_generic_program_t``
+
 val _ = Datatype `bir_programcounter_t = <| bpc_label:bir_label_t; bpc_index:num |>`;
 
 val bir_pc_ss = rewrites (type_rws ``:bir_programcounter_t``);
@@ -170,7 +201,7 @@ FOLDR (\a b. a UNION b) {}
 `;
 
 val bir_get_program_block_info_by_label_def = Define `bir_get_program_block_info_by_label
-  (BirProgram p) l = INDEX_FIND 0 (\(x:'a bir_block_t). x.bb_label = l) p
+  (BirProgram p) l = INDEX_FIND 0 (\ x. x.bb_label = l) p
 `;
 
 val bir_get_program_block_info_by_label_THM = store_thm ("bir_get_program_block_info_by_label_THM",

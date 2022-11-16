@@ -39,12 +39,12 @@ val tests = [
     ``BirProgram [
         <|bb_label := BL_Label "prologue";
           bb_mc_tags := NONE;
-          bb_statements := [];
+          bb_statements := [] : ('a bir_stmt_basic_t) list;
           bb_last_statement := BStmt_Jmp (BLE_Label (BL_Label "epilogue"))
         |>;
         <|bb_label := BL_Label "epilogue";
           bb_mc_tags := NONE;
-          bb_statements := [];
+          bb_statements := []: ('a bir_stmt_basic_t) list;
           bb_last_statement := BStmt_Halt (BExp_Const (Imm32 0w))
         |>
       ]``),

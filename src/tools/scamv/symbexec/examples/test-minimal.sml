@@ -147,7 +147,7 @@ val prog = ``BirProgram
 val prog2 = ``BirProgram
   [<|bb_label :=
        BL_Address_HC (Imm64 0w) "3649DFA1 (tbz w1, #9, 3bf4 <.text+0x3bf4>)";
-     bb_statements := [];
+     bb_statements := []: ('a bir_stmt_basic_t) list;
      bb_last_statement :=
        BStmt_CJmp
          (BExp_word_bit Bit32
@@ -156,7 +156,7 @@ val prog2 = ``BirProgram
          (BLE_Label (BL_Address (Imm64 15348w)))|>;
    <|bb_label :=
        BL_Address_HC (Imm64 4w) "B5010034 (cbnz x20, 2008 <.text+0x2008>)";
-     bb_statements := [];
+     bb_statements := []: ('a bir_stmt_basic_t) list;
      bb_last_statement :=
        BStmt_CJmp
          (BExp_BinPred BIExp_Equal (BExp_Den (BVar "R20" (BType_Imm Bit64)))
@@ -167,7 +167,7 @@ val prog2 = ``BirProgram
 val prog3 = ``BirProgram
   [<|bb_label :=
    BL_Address_HC (Imm64 0w) "3649DFA1 (tbz w1, #9, 3bf4 <.text+0x3bf4>)";
-   bb_statements := [];
+   bb_statements := []: ('a bir_stmt_basic_t) list;
    bb_last_statement :=
    BStmt_CJmp
        (BExp_word_bit Bit32
@@ -178,7 +178,7 @@ val prog3 = ``BirProgram
 val prog4 = ``BirProgram
   [<|bb_label :=
    BL_Address_HC (Imm64 4w) "B5010034 (cbnz x20, 2008 <.text+0x2008>)";
-   bb_statements := [];
+   bb_statements := []: ('a bir_stmt_basic_t) list;
    bb_last_statement :=
    BStmt_CJmp
        (BExp_BinPred BIExp_Equal (BExp_Den (BVar "R20" (BType_Imm Bit64)))
@@ -197,7 +197,7 @@ val leafs_prog4 = leafs_of prog4;
 val prog5 = ``BirProgram
   [<|bb_label :=
    BL_Address_HC (Imm64 4w) "B5010034 (cbnz x20, 2008 <.text+0x2008>)";
-   bb_statements := [];
+   bb_statements := [] : ('a bir_stmt_basic_t) list;
    bb_last_statement :=
    BStmt_CJmp
        (BExp_BinPred BIExp_Equal (BExp_Den (BVar "R20*" (BType_Imm Bit64)))
