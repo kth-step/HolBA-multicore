@@ -54,4 +54,8 @@ sig
    val dest_bir_env_read    : term -> term * term;
    val is_bir_env_read      : term -> bool;
 
+   val mk_bir_ext_map_t_ty   : hol_type -> hol_type;
+   val dest_bir_ext_map_t_ty : hol_type -> hol_type;
+   val is_bir_ext_map_t_ty   : hol_type -> bool;
+
 end

@@ -5,6 +5,18 @@ open bir_auxiliaryTheory bir_immTheory bir_valuesTheory;
 
 val _ = new_theory "bir_env";
 
+val _ = Datatype `bir_ext_map_t = BExtMap (string |-> ('ext_state_t -> bir_val_t option)) (string |-> (bir_val_t -> 'ext_state_t -> 'ext_state_t option))`;
+
+val bir_lookup_get_def = Define `
+  bir_lookup_get ((BExtMap get_map put_map):'ext_state_t bir_ext_map_t) ext_name =
+    FLOOKUP get_map ext_name
+`;
+
+val bir_lookup_put_def = Define `
+  bir_lookup_put ((BExtMap get_map put_map):'ext_state_t bir_ext_map_t) ext_name =
+    FLOOKUP put_map ext_name
+`;
+
 val _ = Datatype `bir_var_t = BVar string bir_type_t`;
 
 val bir_var_name_def = Define `bir_var_name (BVar n _) = n`;
@@ -339,6 +351,75 @@ val bir_envty_includes_vs_SUBSET = store_thm("bir_envty_includes_vs_SUBSET", ``
 
 (* ===================== *)
 
+val _ = Datatype `bir_var_ext_env_typing_t = BExtEnvTy (string -> (bir_type_t option))`;
+
+val bir_ext_env_satisfies_ext_envty_def = Define `
+  bir_ext_env_satisfies_ext_envty (ext_map, ext_st:'ext_state_t) (BExtEnvTy ext_envty) <=>
+    !ext_name ty.
+      ext_envty ext_name = SOME ty ==>
+      ?f_get v. bir_lookup_get ext_map ext_name = SOME f_get /\
+          f_get ext_st = SOME v /\ type_of_bir_val v = ty`;
+
+val bir_ext_envty_includes_ext_def = Define `
+  bir_ext_envty_includes_ext (BExtEnvTy ext_envty) (ext_name, ext_ty) <=>
+  ext_envty ext_name = SOME ext_ty`;
+
+val bir_ext_envty_includes_exts_def = Define `
+  (bir_ext_envty_includes_exts ext_envty exts =
+  !ext. ext IN exts ==> bir_ext_envty_includes_ext ext_envty ext)`;
+
+val bir_eval_extget_def = Define `
+  (bir_eval_extget (ext_map:'ext_state_t bir_ext_map_t) ext_name ty ext_st =
+    case bir_lookup_get ext_map ext_name of
+    | SOME f_get =>
+      (case f_get ext_st of
+       | SOME v =>
+        if type_of_bir_val v <> ty
+        then NONE
+        else SOME v
+       | NONE => NONE)
+    | NONE => NONE)`;
+
+val bir_ext_in_ext_envty_ext_env_IMP = store_thm ("bir_ext_in_ext_envty_ext_env_IMP",
+``!ext_envty ext_map (ext_st:'ext_state_t) ext_name ext_ty.
+        bir_ext_envty_includes_ext ext_envty (ext_name, ext_ty) ==>
+        bir_ext_env_satisfies_ext_envty (ext_map, ext_st) ext_envty ==>
+        ?va.
+          bir_eval_extget ext_map ext_name ext_ty ext_st = SOME va /\ type_of_bir_val va = ext_ty``,
+
+  rpt strip_tac >>
+  Cases_on `ext_envty` >>
+  fs[bir_ext_envty_includes_ext_def, bir_ext_env_satisfies_ext_envty_def, bir_eval_extget_def] >>
+  RES_TAC >>
+  fs[]
+);
+
+val bir_ext_envty_includes_exts_EMPTY = store_thm("bir_ext_envty_includes_exts_EMPTY", ``
+  !ext_envty. (bir_ext_envty_includes_exts ext_envty EMPTY)
+``,
+  Cases_on `ext_envty` >>
+  SIMP_TAC std_ss [bir_ext_envty_includes_exts_def, bir_ext_envty_includes_ext_def, NOT_IN_EMPTY]
+);
+
+val bir_ext_envty_includes_exts_INSERT = store_thm("bir_ext_envty_includes_exts_INSERT", ``
+  !ext_envty ext exts. (bir_ext_envty_includes_exts ext_envty (ext INSERT exts)) <=>
+               ((bir_ext_envty_includes_ext ext_envty ext) /\ (bir_ext_envty_includes_exts ext_envty exts))
+``,
+  Cases_on `ext_envty` >>
+  SIMP_TAC std_ss [bir_ext_envty_includes_exts_def, IN_INSERT] >>
+  METIS_TAC[]
+);
+
+val bir_ext_envty_includes_exts_UNION = store_thm("bir_ext_envty_includes_exts_UNION", ``
+  !ext_envty exts1 exts2. (bir_ext_envty_includes_exts ext_envty (exts1 UNION exts2)) <=>
+                  ((bir_ext_envty_includes_exts ext_envty exts1) /\ (bir_ext_envty_includes_exts ext_envty exts2))
+``,
+  Cases_on `ext_envty` >>
+  SIMP_TAC std_ss [bir_ext_envty_includes_exts_def, IN_UNION] >>
+  METIS_TAC[]
+);
+
+(* ===================== *)
 
 (* Equivalence for sets of vars *)
 val bir_env_EQ_FOR_VARS_def = Define `

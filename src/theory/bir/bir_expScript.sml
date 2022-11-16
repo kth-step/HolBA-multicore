@@ -1,7 +1,7 @@
 open HolKernel Parse boolLib bossLib;
 open wordsTheory bitstringTheory;
 open bir_auxiliaryTheory bir_immTheory bir_valuesTheory;
-open bir_exp_immTheory bir_exp_memTheory bir_envTheory;
+open bir_exp_immTheory bir_exp_memTheory bir_envTheory bir_envSyntax;
 open finite_mapTheory;
 
 val _ = new_theory "bir_exp";
@@ -28,118 +28,12 @@ val _ = Datatype `bir_exp_t =
 
   | BExp_IfThenElse        bir_exp_t bir_exp_t bir_exp_t
 
-  | BExp_ExtGet            string bir_type_t (* string should map to a ('ext_state_t -> bir_val_t option) somewhere *)
+  | BExp_ExtGet            string bir_type_t (* string maps to a ('ext_state_t -> bir_val_t option) in the ext_map *)
 
   | BExp_Load              bir_exp_t bir_exp_t bir_endian_t bir_immtype_t
   | BExp_Store             bir_exp_t bir_exp_t bir_endian_t bir_exp_t
 `;
 
-(* TODO: Update these? Or use bir_vars_of_exp instead? *)
-val _ = Datatype `bir_exp_algebra_t =
-  <| bexp_const : bir_imm_t -> 'carrier_t;
-     bexp_memconst : bir_immtype_t -> bir_immtype_t -> (num |-> num) -> 'carrier_t;
-     bexp_den : bir_var_t -> 'carrier_t;
-     bexp_cast : bir_cast_t -> 'carrier_t -> bir_immtype_t -> 'carrier_t;
-     bexp_unaryexp : bir_unary_exp_t -> 'carrier_t -> 'carrier_t;
-     bexp_binexp : bir_bin_exp_t -> 'carrier_t -> 'carrier_t -> 'carrier_t;
-     bexp_binpred : bir_bin_pred_t -> 'carrier_t -> 'carrier_t -> 'carrier_t;
-     bexp_memeq : 'carrier_t -> 'carrier_t -> 'carrier_t;
-     bexp_ifthenelse : 'carrier_t -> 'carrier_t -> 'carrier_t -> 'carrier_t;
-     bexp_load : 'carrier_t -> 'carrier_t -> bir_endian_t -> bir_immtype_t -> 'carrier_t;
-     bexp_store : 'carrier_t -> 'carrier_t -> bir_endian_t -> 'carrier_t -> 'carrier_t
-  |>
-`;
-
-val bir_exp_initial_alg_def = Define`
-  bir_exp_initial_alg = <|
-    bexp_const := BExp_Const;
-    bexp_memconst := BExp_MemConst;
-    bexp_den := BExp_Den;
-    bexp_cast := BExp_Cast;
-    bexp_unaryexp := BExp_UnaryExp;
-    bexp_binexp := BExp_BinExp;
-    bexp_binpred := BExp_BinPred;
-    bexp_memeq := BExp_MemEq;
-    bexp_ifthenelse := BExp_IfThenElse;
-    bexp_load := BExp_Load;
-    bexp_store := BExp_Store |>`;
-
-val bir_exp_constant_alg_def = Define`
- bir_exp_constant_alg k = <|
-  bexp_const := \x.k;
-  bexp_memconst := \a b c.k;
-  bexp_den := \x.k;
-  bexp_cast := \a b c.k;
-  bexp_unaryexp := \a b.k;
-  bexp_binexp := \a b c.k;
-  bexp_binpred := \a b c.k;
-  bexp_memeq := \a b.k;
-  bexp_ifthenelse := \a b c.k;
-  bexp_load := \a b c d.k;
-  bexp_store := \a b c d.k; |>`;
-
-val bir_exp_homo_bin_alg_def = Define`
-  bir_exp_homo_bin_alg f = <|
-    bexp_cast := \a b c. b;
-    bexp_unaryexp := \a b.b;
-    bexp_binexp := \a b c. f b c;
-    bexp_binpred := \a b c. f b c;
-    bexp_memeq := \a b. f a b;
-    bexp_ifthenelse := \a b c. f a (f b c);
-    bexp_load := \a b _ _. f a b;
-    bexp_store := \a b _ c. f a (f b c)
-    |>
-`;
-
-val bir_fold_exp_def = Define`
-  bir_fold_exp (alg: 'a bir_exp_algebra_t) exp =
-   case exp of
-      BExp_Const imm => alg.bexp_const imm
-    | BExp_MemConst addr_ty val_ty mapping => alg.bexp_memconst addr_ty val_ty mapping
-    | BExp_Den var => alg.bexp_den var
-    | BExp_Cast cast_kind cast_exp type =>
-       alg.bexp_cast cast_kind (bir_fold_exp alg cast_exp) type
-    | BExp_UnaryExp uexp_kind exp1 => alg.bexp_unaryexp uexp_kind (bir_fold_exp alg exp1)
-    | BExp_BinExp binexp_kind exp1 exp2 =>
-       alg.bexp_binexp binexp_kind (bir_fold_exp alg exp1) (bir_fold_exp alg exp2)
-    | BExp_BinPred binpred_kind exp1 exp2 =>
-       alg.bexp_binpred binpred_kind (bir_fold_exp alg exp1) (bir_fold_exp alg exp2)
-    | BExp_MemEq exp1 exp2 => alg.bexp_memeq (bir_fold_exp alg exp1) (bir_fold_exp alg exp2)
-    | BExp_IfThenElse exp1 exp2 exp3 =>
-      alg.bexp_ifthenelse (bir_fold_exp alg exp1) (bir_fold_exp alg exp2) (bir_fold_exp alg exp3)
-    | BExp_Load exp1 exp2 endianness type =>
-      alg.bexp_load (bir_fold_exp alg exp1) (bir_fold_exp alg exp2) endianness type
-    | BExp_Store exp1 exp2 endianness exp3 =>
-      alg.bexp_store (bir_fold_exp alg exp1) (bir_fold_exp alg exp2) endianness (bir_fold_exp alg exp3)
-`;
-
-val bir_map_vars_exp_def = Define`
-  bir_map_vars_exp (vmap:bir_var_t -> bir_var_t) =
-    bir_fold_exp (bir_exp_initial_alg
-                  with <| bexp_den := \v. BExp_Den (vmap v) |>)
-`;
-
-val bir_bind_exp_def = Define`
-  bir_bind_exp f = bir_fold_exp
-   (bir_exp_initial_alg
-     with <| bexp_den := f |>)
-`;
-
-val bir_varset_of_exp_def = Define`
-   bir_varset_of_exp = bir_fold_exp
-                       (bir_exp_homo_bin_alg (\a b. a UNION b)
-                         with <| bexp_den := \v.{v};
-                                 bexp_const := \_.{};
-                                 bexp_memconst := \_ _ _.{} |>
-                               )`;
-
-val test_exp1 = ``(BExp_BinExp BIExp_Plus (BExp_Den (BVar "A" (BType_Imm Bit64)))
-                  (BExp_Den (BVar "B" (BType_Imm Bit64))))``;
-val test_exp2 = ``BExp_Const (Imm64 1w)``;
-val test_varset = (rhs o concl) (EVAL ``bir_varset_of_exp ^test_exp1``);
-val test_mapvar = (rhs o concl) (EVAL ``bir_map_vars_exp
-  (\ var. case var of BVar name ty => BVar (name++"'") ty) ^test_exp1``);
-val test_subst = (rhs o concl) (EVAL ``bir_bind_exp (\v. if bir_var_name v = "A" then ^test_exp2 else BExp_Den v) ^test_exp1``);
 
 (* ------------------------------------------------------------------------- *)
 (*  Semantics of expressions                                                 *)
@@ -177,15 +71,6 @@ val bir_eval_ifthenelse_def = Define `
        if (cw = 1w) then SOME v1 else SOME v2) /\
   (bir_eval_ifthenelse _ _ _ = NONE)`;
 
-val bir_eval_extget_def = Define `
-  (bir_eval_extget ext_map ext_name ty =
-    case FLOOKUP (FST ext_map) ext_name of
-    | SOME v =>
-      if type_of_bir_val v <> ty
-      then NONE
-      else SOME v
-    | NONE => NONE)`;
-
 val bir_eval_load_def = Define `
   (bir_eval_load (SOME (BVal_Mem ta tv mmap)) (SOME (BVal_Imm a)) en t =
      if ((type_of_bir_imm a) = ta) then
@@ -206,7 +91,7 @@ val bir_eval_store_def = Define `
 
 
 val bir_eval_exp_def = Define `
-  (bir_eval_exp ext_map (BExp_Const n) env ext_st = SOME (BVal_Imm n)) /\
+  (bir_eval_exp (ext_map:'ext_state_t bir_ext_map_t) (BExp_Const n) env ext_st = SOME (BVal_Imm n)) /\
 
   (bir_eval_exp ext_map (BExp_MemConst aty vty mmap) env ext_st = SOME (BVal_Mem aty vty mmap)) /\
 
@@ -232,7 +117,7 @@ val bir_eval_exp_def = Define `
   ) /\
 
   (bir_eval_exp ext_map (BExp_ExtGet ext_name ty) env ext_st =
-     bir_eval_extget ext_map ext_name ty) /\
+     bir_eval_extget ext_map ext_name ty ext_st) /\
 
   (bir_eval_exp ext_map (BExp_Load mem_e a_e en ty) env ext_st =
      bir_eval_load (bir_eval_exp ext_map mem_e env ext_st) (bir_eval_exp ext_map a_e env ext_st) en ty) /\
@@ -346,9 +231,9 @@ Cases_on `c` >> Cases_on `b` >> Cases_on `v` >> (
 ));
 
 val bir_eval_extget_NONE_REWR = prove (
-  ``(!ext_put_map ext_name ty. bir_eval_extget (FEMPTY, ext_put_map) ext_name ty = NONE)``,
+  ``(!ext_put_map ext_name ty ext_st. bir_eval_extget ((BExtMap FEMPTY ext_put_map):'ext_state_t bir_ext_map_t) ext_name ty ext_st = NONE)``,
 
-fs [bir_eval_extget_def]);
+fs [bir_eval_extget_def, bir_lookup_get_def]);
 
 val bir_eval_load_NONE_REWRS1 = prove (
   ``(!mem en t. bir_eval_load mem NONE en t = NONE) /\

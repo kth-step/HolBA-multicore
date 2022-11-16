@@ -52,6 +52,14 @@ val (bir_env_write_tm, mk_bir_env_write, dest_bir_env_write, is_bir_env_write) =
 
 val (bir_env_read_tm, mk_bir_env_read, dest_bir_env_read, is_bir_env_read) = syntax_fns2 "bir_env_read";
 
+fun mk_bir_ext_map_t_ty ty = mk_type ("bir_ext_map_t", [ty]);
+
+fun dest_bir_ext_map_t_ty ty =
+   case total dest_thy_type ty
+    of SOME {Tyop="bir_ext_map_t", Thy="bir_env", Args=[ty]} => ty
+     | other => raise ERR "dest_bir_ext_map_t_ty" ""
+
+val is_bir_ext_map_t_ty = can dest_bir_ext_map_t_ty;
 
 
 end

@@ -25,8 +25,8 @@ val _ = new_theory "bir_exp_congruences";
    simplification. *)
 
 val bir_eval_exp_EQUIV_def = Define `
-  bir_eval_exp_EQUIV e1 e2 <=> (!env.
-    (bir_eval_exp e1 env = bir_eval_exp e2 env))`;
+  bir_eval_exp_EQUIV e1 e2 <=> (!ext_map env ext_st.
+    (bir_eval_exp ext_map e1 env ext_st = bir_eval_exp ext_map e2 env ext_st))`;
 
 
 val bir_eval_exp_EQUIV_IS_EQUIV = store_thm ("bir_eval_exp_EQUIV_IS_EQUIV",

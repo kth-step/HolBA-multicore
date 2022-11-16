@@ -105,8 +105,6 @@ val bir_get_current_statement_well_typed = store_thm ("bir_get_current_statement
 METIS_TAC[bir_is_well_typed_program_ALT_DEF, bir_get_current_statement_stmts_of_prog]);
 
 
-
-
 (* ------------------------------------------------------------------------- *)
 (*  Variables of statements and programs                                     *)
 (* ------------------------------------------------------------------------- *)
@@ -193,11 +191,9 @@ Cases_on `e` >> (
 METIS_TAC[bir_vars_of_exp_THM_EQ_FOR_VARS]);
 
 
-
 (* ------------------------------- *)
 (*  Variables modified by program  *)
 (* ------------------------------- *)
-
 
 val bir_changed_vars_of_stmtB_def = Define `
   (bir_changed_vars_of_stmtB (BStmt_Assert ex) = {}) /\
@@ -280,11 +276,9 @@ SIMP_TAC std_ss [bir_changed_vars_of_program_ALT_DEF, SUBSET_DEF, IN_BIGUNION,
 METIS_TAC[bir_get_current_statement_stmts_of_prog]);
 
 
-
 (* ------------------------ *)
 (*  Expressions of program  *)
 (* ------------------------ *)
-
 
 val bir_exps_of_stmtB_def = Define `
   (bir_exps_of_stmtB (BStmt_Assert ex) = {ex}) /\
@@ -411,6 +405,29 @@ SIMP_TAC std_ss [bir_exps_of_program_def,
   bir_vars_of_program_def, SUBSET_DEF, IN_UNION,
   IN_BIGUNION, PULL_EXISTS, IN_IMAGE] >>
 METIS_TAC[]);
+
+(* ------------------- *)
+(*  Initial BIR state  *)
+(* ------------------- *)
+
+val bir_state_init_def = Define `bir_state_init p = <|
+    bst_pc       := bir_pc_first p
+  ; bst_environ  := bir_env_default (bir_envty_of_vs (bir_varset_of_program p))
+  ; bst_status := BST_Running
+  ; bst_viewenv := FEMPTY
+  ; bst_coh := \x.0
+  ; bst_v_rOld := 0
+  ; bst_v_CAP := 0
+  ; bst_v_rNew := 0
+  ; bst_v_wNew := 0
+  ; bst_v_wOld := 0
+  ; bst_v_Rel := 0
+  ; bst_prom := []
+  ; bst_inflight := []
+  ; bst_counter := 0
+  ; bst_fwdb := (\l. <| fwdb_time:= 0; fwdb_view:=0; fwdb_xcl:=F |>)
+  ; bst_xclb := NONE
+|>`;
 
 
 val _ = export_theory();
