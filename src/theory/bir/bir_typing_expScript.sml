@@ -776,12 +776,16 @@ NTAC 5 GEN_TAC >> Induct >> (
   ASM_SIMP_TAC (std_ss++bir_val_ss) []
 ));
 
-(* TODO: needs bir_env_oldTheory *)
+(* TODO: needs bir_env_oldTheory, due to involvement of bir_env_vars_are_initialised *)
 val type_of_bir_exp_THM_with_init_vars = store_thm ("type_of_bir_exp_THM_with_init_vars",
-  ``!ext_map env e ty ext_st. (type_of_bir_exp e = SOME ty) ==>
-               (bir_env_vars_are_initialised env (bir_vars_of_exp e)) ==>
-               (?va. (bir_eval_exp ext_map e env ext_st = SOME va) /\ (type_of_bir_val va = ty))``,
-  METIS_TAC [type_of_bir_exp_THM_with_envty, bir_env_vars_are_initialised_EQ_envty, bir_env_satisfies_envty_of_env]
+  ``!ext_map env e ty ext_st:'ext_state_t.
+    type_of_bir_exp e = SOME ty ==>
+    bir_env_vars_are_initialised env (bir_vars_of_exp e) ==>
+    bir_ext_env_exts_are_valid (ext_map, ext_st) (bir_exts_of_exp e) ==>
+    ?va. bir_eval_exp ext_map e env ext_st = SOME va /\ type_of_bir_val va = ty``,
+  METIS_TAC [type_of_bir_exp_THM_with_envty, bir_env_vars_are_initialised_EQ_envty,
+             bir_env_satisfies_envty_of_env, bir_ext_env_exts_are_valid_EQ_ext_envty,
+             bir_ext_env_satisfies_ext_envty_of_ext_env]
 );
 
 
@@ -789,14 +793,17 @@ val type_of_bir_exp_THM_with_init_vars = store_thm ("type_of_bir_exp_THM_with_in
  * of expressions in assumptions *)
 val bir_eval_exp_IS_SOME_IMPLIES_INIT =
   store_thm("bir_eval_exp_IS_SOME_IMPLIES_INIT",
-  ``!ext_map env e ext_st va.
+  ``!ext_map env e ext_st:'ext_state_t va.
     (bir_eval_exp ext_map e env ext_st = SOME va) ==>
-    bir_env_vars_are_initialised env (bir_vars_of_exp e)``,
+    bir_env_vars_are_initialised env (bir_vars_of_exp e) /\
+    bir_ext_env_exts_are_valid (ext_map, ext_st) (bir_exts_of_exp e)``,
 
 Induct_on `e` >> (
-  REPEAT STRIP_TAC >>
-  FULL_SIMP_TAC std_ss [bir_eval_exp_def, bir_vars_of_exp_def,
-                        bir_env_oldTheory.bir_env_vars_are_initialised_EMPTY]
+  REPEAT GEN_TAC >>
+  DISCH_TAC >>
+  FULL_SIMP_TAC std_ss [bir_eval_exp_def, bir_vars_of_exp_def, bir_exts_of_exp_def,
+                        bir_env_oldTheory.bir_env_vars_are_initialised_EMPTY,
+                        bir_env_oldTheory.bir_ext_env_exts_are_valid_EMPTY]
 ) >| [
   (* Den *)
   subgoal `type_of_bir_val va = bir_var_type b` >- (
@@ -825,7 +832,8 @@ Induct_on `e` >> (
   Cases_on `bir_eval_exp ext_map e' env ext_st` >- (
     FULL_SIMP_TAC std_ss [bir_eval_bin_exp_REWRS]
   ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION],
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
 
   (* BinPred *)
   Cases_on `bir_eval_exp ext_map e env ext_st` >- (
@@ -834,7 +842,8 @@ Induct_on `e` >> (
   Cases_on `bir_eval_exp ext_map e' env ext_st` >- (
     FULL_SIMP_TAC std_ss [bir_eval_bin_pred_REWRS]
   ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION],
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
 
   (* MemEq *)
   Cases_on `bir_eval_exp ext_map e env ext_st` >- (
@@ -845,7 +854,8 @@ Induct_on `e` >> (
       FULL_SIMP_TAC std_ss [bir_eval_memeq_REWRS]
     )
   ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION],
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
 
   (* IfThenElse *)
   Cases_on `bir_eval_exp ext_map e env ext_st` >- (
@@ -857,7 +867,15 @@ Induct_on `e` >> (
   Cases_on `bir_eval_exp ext_map e'' env ext_st` >- (
     FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
   ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION],
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
+
+  (* ExtGet *)
+  REWRITE_TAC[bir_ext_env_exts_are_valid_def] >>
+  rpt strip_tac >>
+  fs[bir_ext_env_ext_is_valid_def] >>
+  irule bir_eval_extget_type >>
+  metis_tac[],
 
   (* Load *)
   Cases_on `bir_eval_exp ext_map e env ext_st` >- (
@@ -868,7 +886,8 @@ Induct_on `e` >> (
       FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS]
     )
   ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION],
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
 
   (* Store *)
   Cases_on `bir_eval_exp ext_map e env ext_st` >- (
@@ -880,11 +899,10 @@ Induct_on `e` >> (
   Cases_on `bir_eval_exp ext_map e'' env ext_st` >- (
     FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
   ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION]
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION]
 ]
 );
-
-
 
 (* -------------------- *)
 (* Sensible expressions *)
@@ -896,12 +914,12 @@ Induct_on `e` >> (
 
    More subtly, one needs also make sure that variables occuring in the expression
    are having consistent type annotations. This is expressed as follows: *)
+(* TODO: This should be updated to also take externs into account, but since it's
+ * never used in the rest of HolBA, this has been left to future efforts *)
 
 val bir_exp_is_well_typed_def = Define `bir_exp_is_well_typed e <=>
   (IS_SOME (type_of_bir_exp e) /\
    bir_vs_consistent (bir_vars_of_exp e))`
-
-
 
 
 val _ = export_theory();

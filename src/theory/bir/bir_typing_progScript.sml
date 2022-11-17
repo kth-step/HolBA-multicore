@@ -43,33 +43,34 @@ QED
 (* ------------------------------------------------------------------------- *)
 (*  Well-typed Programs                                                      *)
 (* ------------------------------------------------------------------------- *)
+(* These properties are used in the WP generator, as well as in the concrete execution *)
 
 val bir_is_well_typed_label_exp_def = Define `
-  (bir_is_well_typed_label_exp ext_map (BLE_Label _) = T) /\
-  (bir_is_well_typed_label_exp ext_map (BLE_Exp e) = (case (type_of_bir_exp ext_map e) of
+  (bir_is_well_typed_label_exp (BLE_Label _) = T) /\
+  (bir_is_well_typed_label_exp (BLE_Exp e) = (case (type_of_bir_exp e) of
       NONE => F
     | SOME ty => (bir_type_is_Imm ty)))`;
 
 val bir_is_well_typed_stmtE_def = Define `
-  (bir_is_well_typed_stmtE ext_map (BStmt_Jmp le) = bir_is_well_typed_label_exp ext_map le) /\
-  (bir_is_well_typed_stmtE ext_map (BStmt_CJmp c le1 le2) =
-       ((type_of_bir_exp ext_map c = SOME BType_Bool) /\
-       (bir_is_well_typed_label_exp ext_map le1) /\
-       (bir_is_well_typed_label_exp ext_map le2))) /\
-  (bir_is_well_typed_stmtE ext_map (BStmt_Halt e) = (type_of_bir_exp ext_map e <> NONE))`
+  (bir_is_well_typed_stmtE (BStmt_Jmp le) = bir_is_well_typed_label_exp le) /\
+  (bir_is_well_typed_stmtE (BStmt_CJmp c le1 le2) =
+       ((type_of_bir_exp c = SOME BType_Bool) /\
+       (bir_is_well_typed_label_exp le1) /\
+       (bir_is_well_typed_label_exp le2))) /\
+  (bir_is_well_typed_stmtE (BStmt_Halt e) = (type_of_bir_exp e <> NONE))`;
 
 val bir_is_well_typed_stmtB_def = Define `
-  (bir_is_well_typed_stmtB ext_map (BStmt_Assign v e) =
-    (type_of_bir_exp ext_map e = SOME (bir_var_type v))) /\
+  (bir_is_well_typed_stmtB (ext_map:'ext_state_t bir_ext_map_t) (BStmt_Assign v e) =
+    (type_of_bir_exp e = SOME (bir_var_type v))) /\
   (bir_is_well_typed_stmtB ext_map (BStmt_Assert e) =
-    (type_of_bir_exp ext_map e = SOME BType_Bool)) /\
+    (type_of_bir_exp e = SOME BType_Bool)) /\
   (bir_is_well_typed_stmtB ext_map (BStmt_Assume e) =
-    (type_of_bir_exp ext_map e = SOME BType_Bool)) /\
+    (type_of_bir_exp e = SOME BType_Bool)) /\
   (bir_is_well_typed_stmtB ext_map (BStmt_ExtPut en e) =
-    (type_of_bir_exp ext_map e <> NONE /\ FLOOKUP (SND ext_map) en <> NONE))`;
+    (type_of_bir_exp e <> NONE /\ bir_lookup_put ext_map en <> NONE))`;
 
 val bir_is_well_typed_stmt_def = Define `
-  (bir_is_well_typed_stmt ext_map (BStmtE s) = bir_is_well_typed_stmtE ext_map s) /\
+  (bir_is_well_typed_stmt (ext_map:'ext_state_t bir_ext_map_t) (BStmtE s) = bir_is_well_typed_stmtE ext_map s) /\
   (bir_is_well_typed_stmt ext_map (BStmtB s) = bir_is_well_typed_stmtB ext_map s)`;
 
 val bir_is_well_typed_block_def = Define `bir_is_well_typed_block ext_map bl <=>

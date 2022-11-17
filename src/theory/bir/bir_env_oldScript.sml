@@ -37,13 +37,7 @@ val bir_env_var_is_declared_DEF_bir_env_check_type = store_thm ("bir_env_var_is_
 SIMP_TAC std_ss [bir_env_check_type_def, bir_env_var_is_declared_def]);
 
 
-
-
-
 (* ===================== *)
-
-
-
 
 (* bir_env_satisfies_envty + types not contained in envty don't matter *)
 val bir_is_well_typed_env_def = Define `
@@ -87,10 +81,48 @@ val bir_env_vars_are_initialised_EQ_envty = store_thm("bir_env_vars_are_initiali
 
 (* ===================== *)
 
+val bir_ext_env_ext_is_valid_def = Define `
+  (bir_ext_env_ext_is_valid (ext_map, ext_st:'ext_state_t) (ext_name, ext_ty) <=>
+  (?v. (bir_eval_extget ext_map ext_name ext_ty ext_st = SOME v) /\
+       (type_of_bir_val v = ext_ty)))`;
+
+val bir_ext_env_ext_is_valid_EQ_ext_envty = store_thm("bir_ext_env_ext_is_valid_EQ_ext_envty", ``
+  !(ext_map:'ext_state_t bir_ext_map_t) ext_st ext. bir_ext_env_ext_is_valid (ext_map, ext_st) ext <=> bir_ext_envty_includes_ext (bir_ext_envty_of_ext_env (ext_map, ext_st)) ext
+``,
+  Cases_on `ext_map` >> Cases_on `ext` >>
+  REWRITE_TAC [bir_ext_envty_of_ext_env_def, bir_ext_env_ext_is_valid_def, bir_ext_envty_includes_ext_def, bir_eval_extget_def] >>
+  SIMP_TAC std_ss [bir_lookup_get_def] >>
+  rpt strip_tac >>
+  Cases_on `FLOOKUP f q` >- (
+    fs[]
+  ) >>
+  fs[] >>
+  rpt strip_tac >>
+  eq_tac >> (
+    rpt strip_tac
+  ) >- (
+    Cases_on `x ext_st` >> (
+      fs[]
+    )
+  ) >>
+  Cases_on `x ext_st` >> (
+    fs[]
+  )
+);
+
+val bir_ext_env_exts_are_valid_def = Define `
+  bir_ext_env_exts_are_valid (ext_map, ext_st:'ext_state_t) exts <=>
+  (!ext. ext IN exts ==> bir_ext_env_ext_is_valid (ext_map, ext_st) ext)`;
 
 
+val bir_ext_env_exts_are_valid_EQ_ext_envty = store_thm("bir_ext_env_exts_are_valid_EQ_ext_envty", ``
+  !ext_env exts. bir_ext_env_exts_are_valid ext_env exts <=> bir_ext_envty_includes_exts (bir_ext_envty_of_ext_env ext_env) exts
+``,
+  Cases_on `ext_env` >>
+  REWRITE_TAC [bir_ext_env_exts_are_valid_def, bir_ext_envty_includes_exts_def, bir_ext_env_ext_is_valid_EQ_ext_envty]
+);
 
-
+(* ===================== *)
 
 val bir_env_var_is_initialised_weaken = store_thm ("bir_env_var_is_initialised_weaken",
   ``!v env. bir_env_var_is_initialised env v ==> bir_env_var_is_declared env v``,
@@ -246,8 +278,20 @@ REWRITE_TAC [bir_is_well_typed_env_THM]
 );
 
 
+(* ===================== *)
+
+val bir_ext_env_exts_are_valid_EMPTY = store_thm ("bir_ext_env_exts_are_valid_EMPTY",
+  ``!ext_map ext_st:'ext_state_t. bir_ext_env_exts_are_valid (ext_map, ext_st) {}``,
+SIMP_TAC std_ss [bir_ext_env_exts_are_valid_EQ_ext_envty, bir_ext_envty_includes_exts_EMPTY]);
+
+val bir_ext_env_exts_are_valid_UNION = store_thm ("bir_ext_env_exts_are_valid_UNION",
+  ``!ext_map ext_st:'ext_state_t exts1 exts2. bir_ext_env_exts_are_valid (ext_map, ext_st) (exts1 UNION exts2) <=>
+                  (bir_ext_env_exts_are_valid (ext_map, ext_st) exts1 /\
+                   bir_ext_env_exts_are_valid (ext_map, ext_st) exts2) ``,
+SIMP_TAC std_ss [bir_ext_env_exts_are_valid_EQ_ext_envty, bir_ext_env_ext_is_valid_EQ_ext_envty, bir_ext_envty_includes_exts_UNION]);
 
 (* ===================== *)
+
 val bir_var_set_is_well_typed_def = Define `bir_var_set_is_well_typed vs <=>
   (!v1 v2. (v1 IN vs /\ v2 IN vs /\ (bir_var_name v1 = bir_var_name v2)) ==>
            (bir_var_type v1 = bir_var_type v2))`;
