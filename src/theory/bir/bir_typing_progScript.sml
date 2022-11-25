@@ -119,6 +119,16 @@ val bir_vars_of_stmtB_def = Define `
      BIGUNION (IMAGE bir_vars_of_exp (LIST_TO_SET (ec::el)))) /\
   (bir_vars_of_stmtB (BStmt_Fence _ _) = {})`;
 
+Definition bmc_vars_of_stmtB_def:
+     bmc_vars_of_stmtB (BMCStmt_Load var exp _ _ _ _) = { var } UNION bir_varset_of_exp exp
+  /\ bmc_vars_of_stmtB (BMCStmt_Store var exp exp' _ _ _) = { var } UNION bir_varset_of_exp exp UNION bir_varset_of_exp exp'
+  /\ bmc_vars_of_stmtB (BMCStmt_Amo var exp exp' _ _) = { var } UNION bir_varset_of_exp exp UNION bir_varset_of_exp exp'
+  /\ bmc_vars_of_stmtB (BMCStmt_Assign var exp) = { var } UNION bir_varset_of_exp exp
+  /\ bmc_vars_of_stmtB (BMCStmt_Fence _ _) = {}
+  /\ bmc_vars_of_stmtB (BMCStmt_Assert exp) = bir_varset_of_exp exp
+  /\ bmc_vars_of_stmtB (BMCStmt_Assume exp) = bir_varset_of_exp exp
+End
+
 val bir_vars_of_label_exp_def = Define `
   (bir_vars_of_label_exp (BLE_Label l) = {}) /\
   (bir_vars_of_label_exp (BLE_Exp e) = bir_vars_of_exp e)`;
@@ -137,8 +147,15 @@ val bir_vars_of_block_def = Define `bir_vars_of_block bl <=>
   ((BIGUNION (IMAGE bir_vars_of_stmtB (LIST_TO_SET bl.bb_statements))) UNION
    (bir_vars_of_stmtE bl.bb_last_statement))`;
 
+val bmc_vars_of_block_def = Define `bmc_vars_of_block bl <=>
+  ((BIGUNION (IMAGE bmc_vars_of_stmtB (LIST_TO_SET bl.bb_statements))) UNION
+   (bir_vars_of_stmtE bl.bb_last_statement))`;
+
 val bir_vars_of_program_def = Define `bir_vars_of_program (BirProgram p) <=>
   (BIGUNION (IMAGE bir_vars_of_block (LIST_TO_SET p)))`;
+
+val bmc_vars_of_program_def = Define `bmc_vars_of_program (BirProgram p) <=>
+  (BIGUNION (IMAGE bmc_vars_of_block (LIST_TO_SET p)))`;
 
 val bir_vars_of_block_ALT_DEF = store_thm ("bir_vars_of_block_ALT_DEF",
   ``!bl. bir_vars_of_block bl = BIGUNION (IMAGE bir_vars_of_stmt (bir_stmts_of_block bl))``,

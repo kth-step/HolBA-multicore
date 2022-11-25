@@ -1,7 +1,7 @@
 open HolKernel Parse boolLib bossLib;
 open bir_auxiliaryTheory
 open bir_envTheory bir_valuesTheory
-open bir_programTheory HolBACoreSimps;
+open bir_programTheory HolBACoreSimps bir_init_progTheory;
 
 val _ = new_theory "bir_program_valid_state";
 

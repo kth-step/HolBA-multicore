@@ -733,7 +733,7 @@ QED
 Theorem wf_init_state:
   !cid p. well_formed cid [] $ bmc_state_init p
 Proof
-  fs[bir_programTheory.bmc_state_init_def,well_formed_def,well_formed_viewenv_def,well_formed_fwdb_def,mem_read_def,listTheory.oEL_THM,mem_get_def]
+  fs[bir_init_progTheory.bmc_state_init_def,well_formed_def,well_formed_viewenv_def,well_formed_fwdb_def,mem_read_def,listTheory.oEL_THM,mem_get_def]
 QED
 
 Definition init_def:
