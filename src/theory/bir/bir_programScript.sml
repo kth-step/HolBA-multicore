@@ -192,14 +192,6 @@ val bir_stmt_ss = rewrites ((type_rws ``:'a bir_stmt_t``) @ (type_rws ``:bir_stm
 val bir_labels_of_program_def = Define `bir_labels_of_program (BirProgram p) =
   MAP (\bl. bl.bb_label) p`;
 
-val bir_varset_of_program_def =  Define `bir_varset_of_program (BirProgram p) =
-FOLDR (\a b. a UNION b) {}
-  (MAP (\bl. FOLDR (\a b. a UNION b) {}
-        (MAP bir_varset_of_basic_stmt bl.bb_statements)
-        UNION bir_varset_of_end_stmt bl.bb_last_statement)
-        p)
-`;
-
 val bir_get_program_block_info_by_label_def = Define `bir_get_program_block_info_by_label
   (BirProgram p) l = INDEX_FIND 0 (\ x. x.bb_label = l) p
 `;
@@ -273,25 +265,6 @@ val bir_state_set_typeerror_def = Define `bir_state_set_typeerror st =
   (st with bst_status := BST_TypeError)`;
 val bir_state_set_failed_def = Define `bir_state_set_failed st =
   (st with bst_status := BST_Failed)`;
-
-val bir_state_init_def = Define `bir_state_init p = <|
-    bst_pc       := bir_pc_first p
-  ; bst_environ  := bir_env_default (bir_envty_of_vs (bir_varset_of_program p))
-  ; bst_status := BST_Running
-  ; bst_viewenv := FEMPTY
-  ; bst_coh := \x.0
-  ; bst_v_rOld := 0
-  ; bst_v_CAP := 0
-  ; bst_v_rNew := 0
-  ; bst_v_wNew := 0
-  ; bst_v_wOld := 0
-  ; bst_v_Rel := 0
-  ; bst_prom := []
-  ; bst_inflight := []
-  ; bst_counter := 0
-  ; bst_fwdb := (\l. <| fwdb_time:= 0; fwdb_view:=0; fwdb_xcl:=F |>)
-  ; bst_xclb := NONE
-|>`;
 
 (* ------------------------------------------------------------------------- *)
 (*  Semantics of statements                                                  *)
