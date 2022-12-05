@@ -59,40 +59,41 @@ val bir_is_well_typed_stmtE_def = Define `
        (bir_is_well_typed_label_exp le2))) /\
   (bir_is_well_typed_stmtE (BStmt_Halt e) = (type_of_bir_exp e <> NONE))`;
 
+(* TODO: Should this also take into account the ext_map for *)
 val bir_is_well_typed_stmtB_def = Define `
-  (bir_is_well_typed_stmtB (ext_map:'ext_state_t bir_ext_map_t) (BStmt_Assign v e) =
+  (bir_is_well_typed_stmtB (BStmt_Assign v e) =
     (type_of_bir_exp e = SOME (bir_var_type v))) /\
-  (bir_is_well_typed_stmtB ext_map (BStmt_Assert e) =
+  (bir_is_well_typed_stmtB (BStmt_Assert e) =
     (type_of_bir_exp e = SOME BType_Bool)) /\
-  (bir_is_well_typed_stmtB ext_map (BStmt_Assume e) =
+  (bir_is_well_typed_stmtB (BStmt_Assume e) =
     (type_of_bir_exp e = SOME BType_Bool)) /\
-  (bir_is_well_typed_stmtB ext_map (BStmt_ExtPut en e) =
-    (type_of_bir_exp e <> NONE /\ bir_lookup_put ext_map en <> NONE))`;
+  (bir_is_well_typed_stmtB (BStmt_ExtPut en e) =
+    (type_of_bir_exp e <> NONE))`;
 
 val bir_is_well_typed_stmt_def = Define `
-  (bir_is_well_typed_stmt (ext_map:'ext_state_t bir_ext_map_t) (BStmtE s) = bir_is_well_typed_stmtE ext_map s) /\
-  (bir_is_well_typed_stmt ext_map (BStmtB s) = bir_is_well_typed_stmtB ext_map s)`;
+  (bir_is_well_typed_stmt (BStmtE s) = bir_is_well_typed_stmtE s) /\
+  (bir_is_well_typed_stmt (BStmtB s) = bir_is_well_typed_stmtB s)`;
 
-val bir_is_well_typed_block_def = Define `bir_is_well_typed_block ext_map bl <=>
-  EVERY (bir_is_well_typed_stmtB ext_map) bl.bb_statements /\
-  bir_is_well_typed_stmtE ext_map bl.bb_last_statement`;
+val bir_is_well_typed_block_def = Define `bir_is_well_typed_block bl <=>
+  EVERY bir_is_well_typed_stmtB bl.bb_statements /\
+  bir_is_well_typed_stmtE bl.bb_last_statement`;
 
-val bir_is_well_typed_program_def = Define `bir_is_well_typed_program ext_map (BirProgram p) <=>
-  (EVERY (bir_is_well_typed_block ext_map) p)`;
+val bir_is_well_typed_program_def = Define `bir_is_well_typed_program (BirProgram p) <=>
+  (EVERY bir_is_well_typed_block p)`;
 
 val bir_is_well_typed_block_ALT_DEF = store_thm ("bir_is_well_typed_block_ALT_DEF",
-  ``!ext_map bl. bir_is_well_typed_block ext_map bl <=>
-    (!stmt. stmt IN bir_stmts_of_block bl ==> bir_is_well_typed_stmt ext_map stmt)``,
+  ``!bl. bir_is_well_typed_block bl <=>
+    (!stmt. stmt IN bir_stmts_of_block bl ==> bir_is_well_typed_stmt stmt)``,
 
 SIMP_TAC (std_ss++boolSimps.EQUIV_EXTRACT_ss) [bir_is_well_typed_block_def, bir_stmts_of_block_def,
   IN_INSERT, IN_IMAGE, DISJ_IMP_THM, PULL_EXISTS, FORALL_AND_THM,
   bir_is_well_typed_stmt_def, listTheory.EVERY_MEM]);
 
 val bir_is_well_typed_program_ALT_DEF = store_thm ("bir_is_well_typed_program_ALT_DEF",
-  ``!ext_map p. bir_is_well_typed_program ext_map p <=>
-    (!stmt. stmt IN bir_stmts_of_prog p ==> bir_is_well_typed_stmt ext_map stmt)``,
+  ``!p. bir_is_well_typed_program p <=>
+    (!stmt. stmt IN bir_stmts_of_prog p ==> bir_is_well_typed_stmt stmt)``,
 
-GEN_TAC >> Cases >>
+Cases >>
 SIMP_TAC std_ss [bir_is_well_typed_program_def,
   bir_stmts_of_prog_def, IN_BIGUNION, IN_IMAGE, PULL_EXISTS,
   listTheory.EVERY_MEM, bir_is_well_typed_block_ALT_DEF] >>
@@ -100,9 +101,9 @@ METIS_TAC[]);
 
 
 val bir_get_current_statement_well_typed = store_thm ("bir_get_current_statement_well_typed",
-  ``!ext_map p pc stmt. (bir_is_well_typed_program ext_map p /\
+  ``!p pc stmt. (bir_is_well_typed_program p /\
                 (bir_get_current_statement p pc = SOME stmt)) ==>
-                bir_is_well_typed_stmt ext_map stmt``,
+                bir_is_well_typed_stmt stmt``,
 METIS_TAC[bir_is_well_typed_program_ALT_DEF, bir_get_current_statement_stmts_of_prog]);
 
 
@@ -184,7 +185,7 @@ METIS_TAC[bir_get_current_statement_stmts_of_prog]);
 
 
 val bir_vars_of_label_exp_THM_EQ_FOR_VARS = store_thm ("bir_vars_of_label_exp_THM_EQ_FOR_VARS",
-``!ext_map env1 env2 ext_st e. (bir_env_EQ_FOR_VARS (bir_vars_of_label_exp e) env1 env2) ==>
+``!ext_map env1 env2 (ext_st:'ext_state_t) e. (bir_env_EQ_FOR_VARS (bir_vars_of_label_exp e) env1 env2) ==>
                 (bir_eval_label_exp ext_map e env1 ext_st = bir_eval_label_exp ext_map e env2 ext_st)``,
 Cases_on `e` >> (
   SIMP_TAC std_ss [bir_eval_label_exp_def, bir_vars_of_label_exp_def]
@@ -336,7 +337,6 @@ SIMP_TAC std_ss [bir_exps_of_program_ALT_DEF, SUBSET_DEF, IN_BIGUNION,
 METIS_TAC[bir_get_current_statement_stmts_of_prog]);
 
 
-
 val bir_exp_vars_of_stmtB = store_thm ("bir_exp_vars_of_stmtB",
 ``!stmt. BIGUNION (IMAGE bir_vars_of_exp (bir_exps_of_stmtB stmt)) SUBSET
          bir_vars_of_stmtB stmt``,
@@ -413,7 +413,7 @@ METIS_TAC[]);
 
 val bir_state_init_def = Define `bir_state_init p = <|
     bst_pc       := bir_pc_first p
-  ; bst_environ  := bir_env_default (bir_envty_of_vs (bir_varset_of_program p))
+  ; bst_environ  := bir_env_default (bir_envty_of_vs (bir_vars_of_program p))
   ; bst_status := BST_Running
   ; bst_viewenv := FEMPTY
   ; bst_coh := \x.0
