@@ -52,7 +52,7 @@ Datatype:
   (* success reg, address, value, xcl, acq, rel *)
   | BMCStmt_Store bir_var_t bir_exp_t bir_exp_t bool bool bool
   (* success reg, address, value, acq, rel *)
-  | BMCStmt_Amo bir_exp_t bir_exp_t bir_exp_t bool bool
+  | BMCStmt_Amo bir_var_t bir_exp_t bir_exp_t bool bool
   | BMCStmt_Assign bir_var_t bir_exp_t
   | BMCStmt_Fence bir_memop_t bir_memop_t
   (* TODO: Should take view of the input *)
@@ -62,15 +62,11 @@ Datatype:
 End
 
 Datatype:
+  bir_stmt_end_t =
   | BStmt_Jmp     bir_label_exp_t
   | BStmt_CJmp    bir_exp_t bir_label_exp_t bir_label_exp_t
   | BStmt_Halt    bir_exp_t
 End
-
-val _ = Datatype `bir_stmt_t =
-  | BStmtB bir_stmt_basic_t
-  | BStmtE bir_stmt_end_t
-`;
 
 val _ = Datatype `bir_mc_tags_t = <|
   mc_acq            : bool;
@@ -89,25 +85,19 @@ Datatype:
   | BStmtE bir_stmt_end_t
 End
 
-Type bir_stmt_t = ``:('a bir_stmt_basic_t) bir_generic_stmt_t``
+Type bir_stmt_t = ``:bir_stmt_basic_t bir_generic_stmt_t``
 Type bmc_stmt_t = ``:bmc_stmt_basic_t bir_generic_stmt_t``
 
 Datatype:
   bir_generic_program_t = BirProgram (('a bir_generic_block_t) list)
 End
 
-Type bir_block_t = `` :('a bir_stmt_basic_t) bir_generic_block_t``
+Type bir_block_t = `` :bir_stmt_basic_t bir_generic_block_t``
 Type bmc_block_t = `` :bmc_stmt_basic_t bir_generic_block_t``
 
-Type bir_program_t = ``:('a bir_stmt_basic_t) bir_generic_program_t``
+Type bir_program_t = ``:bir_stmt_basic_t bir_generic_program_t``
 Type bmc_program_t = ``:bmc_stmt_basic_t bir_generic_program_t``
 
-=======
-  bb_statements     : bir_stmt_basic_t list;
-  bb_last_statement : bir_stmt_end_t |>`;
-
-val _ = Datatype `bir_program_t = BirProgram (bir_block_t list)`;
->>>>>>> 4a08c78b (Removed Fence and Observe, added ExtPut and ExtGet: theory/bir now compiles)
 val _ = Datatype `bir_programcounter_t = <| bpc_label:bir_label_t; bpc_index:num |>`;
 
 val bir_pc_ss = rewrites (type_rws ``:bir_programcounter_t``);

@@ -118,13 +118,13 @@ val bir_vars_of_stmtB_def = Define `
   (bir_vars_of_stmtB (BStmt_ExtPut _ ex) = bir_vars_of_exp ex)`;
 
 Definition bmc_vars_of_stmtB_def:
-     bmc_vars_of_stmtB (BMCStmt_Load var exp _ _ _ _) = { var } UNION bir_varset_of_exp exp
-  /\ bmc_vars_of_stmtB (BMCStmt_Store var exp exp' _ _ _) = { var } UNION bir_varset_of_exp exp UNION bir_varset_of_exp exp'
-  /\ bmc_vars_of_stmtB (BMCStmt_Amo var exp exp' _ _) = { var } UNION bir_varset_of_exp exp UNION bir_varset_of_exp exp'
-  /\ bmc_vars_of_stmtB (BMCStmt_Assign var exp) = { var } UNION bir_varset_of_exp exp
+     bmc_vars_of_stmtB (BMCStmt_Load var exp _ _ _ _) = { var } UNION bir_vars_of_exp exp
+  /\ bmc_vars_of_stmtB (BMCStmt_Store var exp exp' _ _ _) = { var } UNION bir_vars_of_exp exp UNION bir_vars_of_exp exp'
+  /\ bmc_vars_of_stmtB (BMCStmt_Amo var exp exp' _ _) = { var } UNION bir_vars_of_exp exp UNION bir_vars_of_exp exp'
+  /\ bmc_vars_of_stmtB (BMCStmt_Assign var exp) = { var } UNION bir_vars_of_exp exp
   /\ bmc_vars_of_stmtB (BMCStmt_Fence _ _) = {}
-  /\ bmc_vars_of_stmtB (BMCStmt_Assert exp) = bir_varset_of_exp exp
-  /\ bmc_vars_of_stmtB (BMCStmt_Assume exp) = bir_varset_of_exp exp
+  /\ bmc_vars_of_stmtB (BMCStmt_Assert exp) = bir_vars_of_exp exp
+  /\ bmc_vars_of_stmtB (BMCStmt_Assume exp) = bir_vars_of_exp exp
 End
 
 val bir_vars_of_label_exp_def = Define `

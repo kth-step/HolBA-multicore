@@ -132,31 +132,35 @@ sig
    val mk_bir_mc_tags : term * term * term -> term
    val bir_mc_tags_NONE : term
 
-   val bir_block_t_ty   : hol_type
+   val mk_bir_block_t_ty   : hol_type -> hol_type
+   val dest_bir_block_t_ty : hol_type -> hol_type
+   val is_bir_block_t_ty   : hol_type -> bool
 
-   val dest_bir_block : term -> term * term * term * term
+   val dest_bir_block : term -> term * term * term * term * hol_type
    val is_bir_block   : term -> bool
-   val mk_bir_block   : term * term * term * term -> term
+   val mk_bir_block   : term * term * term * term * hol_type -> term
 
    (* Often one is interested in the list of basic statements in a block.
       The following code splits the term containing a list of basic statements
       into an SML list of terms. *)
-   val dest_bir_block_list : term -> term  * term * term list * term
-   val mk_bir_block_list   : term  * term * term list * term -> term
+   val dest_bir_block_list : term -> term  * term * term list * term * hol_type
+   val mk_bir_block_list   : term  * term * term list * term * hol_type -> term
 
 
    (*****************)
    (* bir_program_t *)
    (*****************)
 
-   val bir_program_t_ty   : hol_type
+   val mk_bir_program_t_ty   : hol_type -> hol_type
+   val dest_bir_program_t_ty : hol_type -> hol_type
+   val is_bir_program_t_ty   : hol_type -> bool
 
    val BirProgram_tm        : term
    val dest_BirProgram      : term -> term
-   val dest_BirProgram_list : term -> term list
+   val dest_BirProgram_list : term -> term list * hol_type
    val is_BirProgram        : term -> bool
    val mk_BirProgram        : term -> term
-   val mk_BirProgram_list   : term list -> term
+   val mk_BirProgram_list   : term list * hol_type -> term
 
 
    (************************)

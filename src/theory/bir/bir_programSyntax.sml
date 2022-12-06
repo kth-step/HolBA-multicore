@@ -79,7 +79,6 @@ fun dest_bir_stmt_t_ty ty =
     | other => raise ERR "dest_bir_stmt_t_ty" ""
 
 val is_bir_stmt_t_ty = can dest_bir_stmt_t_ty;
-val bir_stmt_t_ty = mk_type ("bir_stmt_t", []);
 
 val (BStmtB_tm,  mk_BStmtB, dest_BStmtB, is_BStmtB)  = syntax_fns1 "BStmtB";
 val (BStmtE_tm,  mk_BStmtE, dest_BStmtE, is_BStmtE)  = syntax_fns1 "BStmtE";
@@ -127,39 +126,39 @@ val is_bir_block_t_ty = can dest_bir_block_t_ty;
 
 fun dest_bir_block tm = let
   val (ty, l) = TypeBase.dest_record tm
-  val _ = if ty = bir_block_t_ty then () else fail()
+  val _ = if is_bir_block_t_ty ty then () else fail()
   val lbl = Lib.assoc "bb_label" l
   val mc_tags_opt = Lib.assoc1 "bb_mc_tags" l
   val stmts = Lib.assoc "bb_statements" l
   val last_stmt = Lib.assoc "bb_last_statement" l
 in
-  (lbl, if isSome mc_tags_opt then snd $ valOf mc_tags_opt else bir_mc_tags_NONE, stmts, last_stmt)
+  (lbl, if isSome mc_tags_opt then snd $ valOf mc_tags_opt else bir_mc_tags_NONE, stmts, last_stmt, dest_bir_block_t_ty ty)
 end handle e => raise wrap_exn "dest_bir_block" e;
 
 val is_bir_block = can dest_bir_block;
 
-fun mk_bir_block (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt) =
+fun mk_bir_block (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt, ty) =
 let
   val l = [("bb_label", tm_lbl),
            ("bb_mc_tags", tm_mc_tags),
            ("bb_statements", tm_stmts),
            ("bb_last_statement", tm_last_stmt)];
 in
-  TypeBase.mk_record (bir_block_t_ty, l)
+  TypeBase.mk_record (mk_bir_block_t_ty ty, l)
 end handle e => raise wrap_exn "mk_bir_block" e;
 
 fun dest_bir_block_list tm = let
-  val (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt) = dest_bir_block tm;
-  val (l_stmts, ty) = listSyntax.dest_list tm_stmts;
-  val _ = if ty = bir_block_t_ty then () else fail()
+  val (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt, ty) = dest_bir_block tm;
+  val (l_stmts, ty') = listSyntax.dest_list tm_stmts;
+  val _ = if is_bir_block_t_ty ty' then () else fail()
 in
-  (tm_lbl, tm_mc_tags, l_stmts, tm_last_stmt)
+  (tm_lbl, tm_mc_tags, l_stmts, tm_last_stmt, ty)
 end handle e => raise wrap_exn "dest_bir_block_list" e;
 
-fun mk_bir_block_list (tm_lbl, tm_mc_tags, l_stmts, tm_last_stmt) = let
-  val tm_stmts = listSyntax.mk_list (l_stmts, bir_block_t_ty)
+fun mk_bir_block_list (tm_lbl, tm_mc_tags, l_stmts, tm_last_stmt, ty) = let
+  val tm_stmts = listSyntax.mk_list (l_stmts, mk_bir_block_t_ty ty)
 in
-  mk_bir_block (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt)
+  mk_bir_block (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt, ty)
 end handle e => raise wrap_exn "mk_bir_block_list" e;
 
 
@@ -184,13 +183,14 @@ val (BirProgram_tm,  mk_BirProgram, dest_BirProgram, is_BirProgram)  = syntax_fn
 
 fun dest_BirProgram_list tm = let
   val l_tm = dest_BirProgram tm;
-  val (l, _) = listSyntax.dest_list l_tm
+  val (l, ty) = listSyntax.dest_list l_tm
+  val _ = if is_bir_block_t_ty ty then () else fail()
 in
-  l
+  (l, dest_bir_block_t_ty ty)
 end handle e => raise wrap_exn "dest_BirProgram_list" e;
 
-fun mk_BirProgram_list tms = let
-  val l_tm = listSyntax.mk_list (tms, bir_block_t_ty)
+fun mk_BirProgram_list (tms, ty) = let
+  val l_tm = listSyntax.mk_list (tms, mk_bir_block_t_ty ty)
 in
   mk_BirProgram l_tm
 end handle e => raise wrap_exn "mk_BirProgram_list" e;
