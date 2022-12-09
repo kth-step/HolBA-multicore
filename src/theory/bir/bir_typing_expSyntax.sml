@@ -22,10 +22,10 @@ val syntax_fns1_set = syntax_fns 2 HolKernel.dest_monop HolKernel.mk_monop;
 
 (* constants*)
 
-val (bir_exp_is_well_typed_tm,  mk_bir_exp_is_well_typed, dest_bir_exp_is_well_typed, is_bir_exp_is_well_typed)  = syntax_fns2 "bir_exp_is_well_typed";
+val (bir_exp_is_well_typed_tm,  mk_bir_exp_is_well_typed, dest_bir_exp_is_well_typed, is_bir_exp_is_well_typed)  = syntax_fns1 "bir_exp_is_well_typed";
 
 val (bir_vars_of_exp_tm,  mk_bir_vars_of_exp, dest_bir_vars_of_exp, is_bir_vars_of_exp)  = syntax_fns1_set "bir_vars_of_exp";
 
-val (type_of_bir_exp_tm,  mk_type_of_bir_exp, dest_type_of_bir_exp, is_type_of_bir_exp)  = syntax_fns2 "type_of_bir_exp";
+val (type_of_bir_exp_tm,  mk_type_of_bir_exp, dest_type_of_bir_exp, is_type_of_bir_exp)  = syntax_fns1 "type_of_bir_exp";
 
 end

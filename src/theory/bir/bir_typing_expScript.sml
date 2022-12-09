@@ -19,56 +19,56 @@ val bir_val_ss = rewrites (type_rws ``:bir_val_t``);
 val bir_type_ss = rewrites (type_rws ``:bir_type_t``);
 
 
-val type_of_bir_exp_def = Define `
-  (type_of_bir_exp (BExp_Const i) = SOME (BType_Imm (type_of_bir_imm i))) /\
+Definition type_of_bir_exp_def:
+  type_of_bir_exp (BExp_Const i) = SOME (BType_Imm (type_of_bir_imm i)) /\
 
-  (type_of_bir_exp (BExp_MemConst aty vty mmap) = SOME (BType_Mem aty vty)) /\
+  type_of_bir_exp (BExp_MemConst aty vty mmap) = SOME (BType_Mem aty vty) /\
 
-  (type_of_bir_exp (BExp_Den v) = SOME (bir_var_type v)) /\
+  type_of_bir_exp (BExp_Den v) = SOME (bir_var_type v) /\
 
-  (type_of_bir_exp (BExp_Cast ct e rty) = (case (type_of_bir_exp e) of
+  type_of_bir_exp (BExp_Cast ct e rty) = (case (type_of_bir_exp e) of
       NONE => NONE
-    | SOME ty => (if (bir_type_is_Imm ty) then SOME (BType_Imm rty) else NONE))) /\
+    | SOME ty => (if (bir_type_is_Imm ty) then SOME (BType_Imm rty) else NONE)) /\
 
-  (type_of_bir_exp (BExp_UnaryExp et e) = (case (type_of_bir_exp e) of
+  type_of_bir_exp (BExp_UnaryExp et e) = (case (type_of_bir_exp e) of
       NONE => NONE
     | SOME ty => (if (bir_type_is_Imm ty) then
-        SOME ty else NONE))) /\
+        SOME ty else NONE)) /\
 
-  (type_of_bir_exp (BExp_BinExp et e1 e2) = (case (type_of_bir_exp e1,
+  type_of_bir_exp (BExp_BinExp et e1 e2) = (case (type_of_bir_exp e1,
        type_of_bir_exp e2) of
        (SOME ty1, SOME ty2) => (if ((bir_type_is_Imm ty1) /\ (ty2 = ty1)) then SOME ty1 else NONE)
-       | _, _ => NONE)) /\
+       | _, _ => NONE) /\
 
-  (type_of_bir_exp (BExp_BinPred pt e1 e2) = (case (type_of_bir_exp e1,
+  type_of_bir_exp (BExp_BinPred pt e1 e2) = (case (type_of_bir_exp e1,
        type_of_bir_exp e2) of
        (SOME ty1, SOME ty2) => (if ((bir_type_is_Imm ty1) /\ (ty2 = ty1)) then SOME BType_Bool else NONE)
-       | _, _ => NONE)) /\
+       | _, _ => NONE) /\
 
-  (type_of_bir_exp (BExp_MemEq e1 e2) = (case (type_of_bir_exp e1,
+  type_of_bir_exp (BExp_MemEq e1 e2) = (case (type_of_bir_exp e1,
        type_of_bir_exp e2) of
        (SOME (BType_Mem aty1 vty1), SOME (BType_Mem aty2 vty2)) => (if ((aty2 = aty1) /\ (vty2 = vty1)) then SOME BType_Bool else NONE)
-       | _, _ => NONE)) /\
+       | _, _ => NONE) /\
 
-  (type_of_bir_exp (BExp_IfThenElse ec e1 e2) = (case (type_of_bir_exp ec, type_of_bir_exp e1,
+  type_of_bir_exp (BExp_IfThenElse ec e1 e2) = (case (type_of_bir_exp ec, type_of_bir_exp e1,
        type_of_bir_exp e2) of
        (SOME ect, SOME ty1, SOME ty2) => (if ((ect = BType_Bool) /\ (ty2 = ty1)) then SOME ty1 else NONE)
-       | _, _, _ => NONE)) /\
+       | _, _, _ => NONE) /\
 
-  (type_of_bir_exp (BExp_ExtGet ext_name ty) = SOME ty) /\
+  type_of_bir_exp (BExp_ExtGet ext_name ty) = SOME ty /\
 
-  (type_of_bir_exp (BExp_Load me ae en rty) = (case (type_of_bir_exp me, type_of_bir_exp ae) of
+  type_of_bir_exp (BExp_Load me ae en rty) = (case (type_of_bir_exp me, type_of_bir_exp ae) of
        (SOME (BType_Mem aty vty), SOME (BType_Imm aty')) => (if (
             (aty = aty') /\ (if en = BEnd_NoEndian then (vty = rty) else (bir_number_of_mem_splits vty rty aty <> NONE))
            ) then SOME (BType_Imm rty) else NONE)
-       | _, _ => NONE)) /\
+       | _, _ => NONE) /\
 
-  (type_of_bir_exp (BExp_Store me ae en v) = (case (type_of_bir_exp me, type_of_bir_exp ae, type_of_bir_exp v) of
+  type_of_bir_exp (BExp_Store me ae en v) = (case (type_of_bir_exp me, type_of_bir_exp ae, type_of_bir_exp v) of
        (SOME (BType_Mem aty vty), SOME (BType_Imm aty'), SOME (BType_Imm rty)) => (if (
             (aty = aty') /\ (if en = BEnd_NoEndian then (vty = rty) else (bir_number_of_mem_splits vty rty aty <> NONE))
            ) then SOME (BType_Mem aty vty) else NONE)
-                                               | _, _, _ => NONE))
-  `;
+                                               | _, _, _ => NONE)
+End
 
 
 val type_of_bir_exp_THM = store_thm ("type_of_bir_exp_THM",

@@ -109,7 +109,9 @@ sig
    (* bir_stmt_t *)
    (**************)
 
-   val bir_stmt_t_ty   : hol_type
+   val mk_bir_stmt_t_ty   : hol_type -> hol_type
+   val dest_bir_stmt_t_ty : hol_type -> hol_type
+   val is_bir_stmt_t_ty   :  hol_type -> bool
 
    val BStmtB_tm   : term
    val dest_BStmtB : term -> term

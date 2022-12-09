@@ -71,41 +71,42 @@ Induct >> (
   ASM_SIMP_TAC std_ss [bir_exp_subst_def, FLOOKUP_EMPTY, bir_exp_subst_var_def]
 ));
 
-
 (* Substitution preserves typing if done properly *)
-val bir_exp_subst_TYPE_EQ_GEN = store_thm ("bir_exp_subst_TYPE_EQ_GEN", ``
+Theorem bir_exp_subst_TYPE_EQ_GEN:
   !ext_map s1 s2 e.
-  (!v. (type_of_bir_exp ext_map (bir_exp_subst_var s1 v) =
-        type_of_bir_exp ext_map (bir_exp_subst_var s2 v))) ==>
-  (type_of_bir_exp ext_map (bir_exp_subst s1 e) = type_of_bir_exp ext_map (bir_exp_subst s2 e))``,
+  (!v. type_of_bir_exp (bir_exp_subst_var s1 v) =
+        type_of_bir_exp (bir_exp_subst_var s2 v)) ==>
+  type_of_bir_exp (bir_exp_subst s1 e)
+  = type_of_bir_exp (bir_exp_subst s2 e)
+Proof
+  REPEAT STRIP_TAC >>
+  Induct_on `e` >>
+    ASM_SIMP_TAC std_ss [type_of_bir_exp_def, bir_exp_subst_def]
+QED
 
-REPEAT STRIP_TAC >>
-Induct_on `e` >> (
-  ASM_SIMP_TAC std_ss [type_of_bir_exp_def, bir_exp_subst_def]
-));
+Theorem bir_exp_subst_TYPE_EQ:
+  !ext_map s e.
+  FEVERY (\ (v, e). type_of_bir_exp e = SOME (bir_var_type v)) s ==>
+    type_of_bir_exp (bir_exp_subst s e) = type_of_bir_exp e
+Proof
+  REPEAT STRIP_TAC >>
+  MP_TAC (Q.SPECL [`ext_map`, `s`, `FEMPTY`, `e`] bir_exp_subst_TYPE_EQ_GEN) >>
+  MATCH_MP_TAC (prove (``(A /\ (B ==> C)) ==> ((A ==> B) ==> C)``, PROVE_TAC[])) >>
+  FULL_SIMP_TAC std_ss [bir_exp_subst_EMPTY, bir_exp_subst_var_def, FLOOKUP_EMPTY,
+    FEVERY_ALL_FLOOKUP] >>
+  GEN_TAC >>
+  Cases_on `FLOOKUP s v` >>
+    ASM_SIMP_TAC std_ss [type_of_bir_exp_def]
 
+QED
 
-val bir_exp_subst_TYPE_EQ = store_thm ("bir_exp_subst_TYPE_EQ",
-  ``!ext_map s. FEVERY (\ (v, e). (type_of_bir_exp ext_map e = SOME (bir_var_type v))) s ==>
-        (!e. (type_of_bir_exp ext_map (bir_exp_subst s e) = type_of_bir_exp ext_map e))``,
-
-REPEAT STRIP_TAC >>
-MP_TAC (Q.SPECL [`ext_map`, `s`, `FEMPTY`, `e`] bir_exp_subst_TYPE_EQ_GEN) >>
-MATCH_MP_TAC (prove (``(A /\ (B ==> C)) ==> ((A ==> B) ==> C)``, PROVE_TAC[])) >>
-FULL_SIMP_TAC std_ss [bir_exp_subst_EMPTY, bir_exp_subst_var_def, FLOOKUP_EMPTY,
-  FEVERY_ALL_FLOOKUP] >>
-GEN_TAC >>
-Cases_on `FLOOKUP s v` >> (
-  ASM_SIMP_TAC std_ss [type_of_bir_exp_def]
-));
-
-(* Not well-typed sub-expressions always cause trouble *) 
+(* Not well-typed sub-expressions always cause trouble *)
 val bir_exp_subst_NO_TYPE = store_thm ("bir_exp_subst_NO_TYPE", ``
   !ext_map s e v ve. (
     (v IN bir_vars_of_exp e) /\
     (FLOOKUP s v = SOME ve) /\
-    (type_of_bir_exp ext_map ve = NONE)) ==>
-    (type_of_bir_exp ext_map (bir_exp_subst s e) = NONE)``,
+    (type_of_bir_exp ve = NONE)) ==>
+    (type_of_bir_exp (bir_exp_subst s e) = NONE)``,
 
 REPEAT STRIP_TAC >>
 Induct_on `e` >> (
@@ -240,19 +241,20 @@ SIMP_TAC std_ss [bir_exp_subst1_def, bir_exp_subst_def, FLOOKUP_UPDATE,
 SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) []);
 
 
-val bir_exp_subst1_TYPE_EQ_GEN = store_thm ("bir_exp_subst1_TYPE_EQ_GEN",
-  ``!ext_map v ve ve' e. (type_of_bir_exp ext_map ve = type_of_bir_exp ext_map ve') ==>
-                 (type_of_bir_exp ext_map (bir_exp_subst1 v ve e) = type_of_bir_exp ext_map (bir_exp_subst1 v ve' e))``,
-
-REPEAT STRIP_TAC >>
-SIMP_TAC std_ss [bir_exp_subst1_def] >>
-MATCH_MP_TAC bir_exp_subst_TYPE_EQ_GEN >>
-ASM_SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) [bir_exp_subst_var_REWRS]);
-
+Theorem bir_exp_subst1_TYPE_EQ_GEN:
+  !ext_map v ve ve' e. type_of_bir_exp ve = type_of_bir_exp ve'
+  ==> type_of_bir_exp (bir_exp_subst1 v ve e)
+    = type_of_bir_exp (bir_exp_subst1 v ve' e)
+Proof
+  REPEAT STRIP_TAC >>
+  SIMP_TAC std_ss [bir_exp_subst1_def] >>
+  MATCH_MP_TAC bir_exp_subst_TYPE_EQ_GEN >>
+  ASM_SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) [bir_exp_subst_var_REWRS]
+QED
 
 val bir_exp_subst1_TYPE_EQ = store_thm ("bir_exp_subst1_TYPE_EQ",
-  ``!ext_map v ve e. (type_of_bir_exp ext_map ve = SOME (bir_var_type v)) ==>
-             (type_of_bir_exp ext_map (bir_exp_subst1 v ve e) = type_of_bir_exp ext_map e)``,
+  ``!ext_map v ve e. (type_of_bir_exp ve = SOME (bir_var_type v)) ==>
+             (type_of_bir_exp (bir_exp_subst1 v ve e) = type_of_bir_exp e)``,
 
 REPEAT STRIP_TAC >>
 SIMP_TAC std_ss [bir_exp_subst1_def] >>
@@ -263,8 +265,8 @@ ASM_SIMP_TAC std_ss [FEVERY_FUPDATE, DRESTRICT_FEMPTY, FEVERY_FEMPTY]);
 val bir_exp_subst1_NO_TYPE = store_thm ("bir_exp_subst1_NO_TYPE", ``
   !ext_map e v ve. (
     (v IN bir_vars_of_exp e) /\
-    (type_of_bir_exp ext_map ve = NONE)) ==>
-    (type_of_bir_exp ext_map (bir_exp_subst1 v ve e) = NONE)``,
+    (type_of_bir_exp ve = NONE)) ==>
+    (type_of_bir_exp (bir_exp_subst1 v ve e) = NONE)``,
 
 REPEAT STRIP_TAC >>
 SIMP_TAC std_ss [bir_exp_subst1_def] >>
@@ -272,16 +274,16 @@ MATCH_MP_TAC bir_exp_subst_NO_TYPE >>
 ASM_SIMP_TAC std_ss [FLOOKUP_EMPTY, FLOOKUP_UPDATE]);
 
 
-val bir_exp_subst1_NO_TYPE_SOME = store_thm ("bir_exp_subst1_NO_TYPE_SOME", ``
-  !ext_map e v ve ty. (
+Theorem bir_exp_subst1_NO_TYPE_SOME:
+  !e v ve ty. (
     (v IN bir_vars_of_exp e) ==>
-    (type_of_bir_exp ext_map (bir_exp_subst1 v ve e) = SOME ty) ==>
-    (?ty. type_of_bir_exp ext_map ve = SOME ty))``,
-
-REPEAT STRIP_TAC >>
-Cases_on `type_of_bir_exp ext_map ve` >> ASM_SIMP_TAC std_ss [] >>
-METIS_TAC[bir_exp_subst1_NO_TYPE, optionTheory.option_CLAUSES]);
-
+    (type_of_bir_exp (bir_exp_subst1 v ve e) = SOME ty) ==>
+    (?ty. type_of_bir_exp ve = SOME ty))
+Proof
+  REPEAT STRIP_TAC >>
+  Cases_on `type_of_bir_exp ve` >> ASM_SIMP_TAC std_ss [] >>
+  METIS_TAC[bir_exp_subst1_NO_TYPE, optionTheory.option_CLAUSES]
+QED
 
 val bir_exp_subst1_EVAL_EQ_GEN = store_thm ("bir_exp_subst1_EVAL_EQ_GEN", ``
   !ext_map env ext_st v ve ve' e.
