@@ -42,7 +42,7 @@ Datatype:
   | BStmt_Assign bir_var_t bir_exp_t
   | BStmt_Assert bir_exp_t
   | BStmt_Assume bir_exp_t
-  | BStmt_ExtPut string bir_exp_t (* string should be looked up as a (bir_val_t -> 'ext_state_t -> 'ext_state_t option) *)
+(*  | BStmt_ExtPut string bir_exp_t (* string should be looked up as a (bir_val_t -> 'ext_state_t -> 'ext_state_t option) *) *)
 End
 
 Datatype:
@@ -56,7 +56,7 @@ Datatype:
   | BMCStmt_Assign bir_var_t bir_exp_t
   | BMCStmt_Fence bir_memop_t bir_memop_t
   (* TODO: Should take view of the input *)
-  | BMCStmt_ExtPut string bir_exp_t
+(*  | BMCStmt_ExtPut string bir_exp_t *)
   | BMCStmt_Assert bir_exp_t
   | BMCStmt_Assume bir_exp_t
 End
@@ -68,17 +68,6 @@ Datatype:
   | BStmt_Halt    bir_exp_t
 End
 
-val _ = Datatype `bir_mc_tags_t = <|
-  mc_acq            : bool;
-  mc_rel            : bool;
-  mc_atomic         : bool |>`;
-
-val _ = Datatype `bir_generic_block_t = <|
-  bb_label          : bir_label_t;
-  bb_mc_tags        : bir_mc_tags_t option;
-  bb_statements     : 'a list;
-  bb_last_statement : bir_stmt_end_t |>`;
-
 Datatype:
   bir_generic_stmt_t =
   | BStmtB 'a
@@ -88,15 +77,10 @@ End
 Type bir_stmt_t = ``:bir_stmt_basic_t bir_generic_stmt_t``
 Type bmc_stmt_t = ``:bmc_stmt_basic_t bir_generic_stmt_t``
 
-Datatype:
-  bir_generic_program_t = BirProgram (('a bir_generic_block_t) list)
-End
-
-Type bir_block_t = `` :bir_stmt_basic_t bir_generic_block_t``
-Type bmc_block_t = `` :bmc_stmt_basic_t bir_generic_block_t``
-
-Type bir_program_t = ``:bir_stmt_basic_t bir_generic_program_t``
-Type bmc_program_t = ``:bmc_stmt_basic_t bir_generic_program_t``
+val _ = Datatype `bir_mc_tags_t = <|
+  mc_acq            : bool;
+  mc_rel            : bool;
+  mc_atomic         : bool |>`;
 
 val _ = Datatype `bir_programcounter_t = <| bpc_label:bir_label_t; bpc_index:num |>`;
 
@@ -142,6 +126,31 @@ val _ = Datatype `bir_state_t = <|
   bst_counter  : num
 |>`;
 
+val _ = Datatype `bir_generic_stmt_block_t = <|
+  bb_label          : bir_label_t;
+  bb_mc_tags        : bir_mc_tags_t option;
+  bb_statements     : 'a list;
+  bb_last_statement : bir_stmt_end_t |>`;
+
+val _ = Datatype `bir_ext_block_t = <|
+  beb_label          : bir_label_t;
+  (* TODO: If this relation also has the BIR program on LHS, we can model block-relative jumps (i.e. "next block") *)
+  beb_relation     : ((bir_state_t # (bir_state_t -> bool) # 'ext_state_t) -> (bir_state_t # 'ext_state_t) -> bool) |>`;
+
+val _ = Datatype `bir_generic_block_t =
+  | BBlock_Stmts ('a bir_generic_stmt_block_t)
+  | BBlock_Ext ('ext_state_t bir_ext_block_t)`;
+
+Datatype:
+  bir_generic_program_t = BirProgram ((('a, 'ext_state_t) bir_generic_block_t) list)
+End
+
+Type bir_block_t = `` :(bir_stmt_basic_t, 'ext_state_t) bir_generic_block_t``
+Type bmc_block_t = `` :(bmc_stmt_basic_t, 'ext_state_t) bir_generic_block_t``
+
+Type bir_program_t = ``:(bir_stmt_basic_t, 'ext_state_t) bir_generic_program_t``
+Type bmc_program_t = ``:(bmc_stmt_basic_t, 'ext_state_t) bir_generic_program_t``
+
 val remove_inflight_def = Define`
 remove_inflight t l =
     FILTER (\bi . case bi of BirInflight t0 _ => (t <> t0)) l
@@ -164,20 +173,25 @@ val bir_stmt_ss = rewrites ((type_rws ``:bir_stmt_t``) @ (type_rws ``:bir_stmt_e
 (* Programs                                                                  *)
 (* ------------------------------------------------------------------------- *)
 
+val bir_label_of_block_def = Define `bir_label_of_block bl =
+  case bl of
+  | BBlock_Stmts stmts_bl => stmts_bl.bb_label
+  | BBlock_Ext ext_bl => ext_bl.beb_label`;
+
 val bir_labels_of_program_def = Define `bir_labels_of_program (BirProgram p) =
-  MAP (\bl. bl.bb_label) p`;
+  MAP (\bl. bir_label_of_block bl) p`;
 
 val bir_get_program_block_info_by_label_def = Define `bir_get_program_block_info_by_label
-  (BirProgram p) l = INDEX_FIND 0 (\ x. x.bb_label = l) p
+  (BirProgram p) l = INDEX_FIND 0 (\ x. bir_label_of_block x = l) p
 `;
 
 val bir_get_program_block_info_by_label_THM = store_thm ("bir_get_program_block_info_by_label_THM",
-  ``(!p l. ((bir_get_program_block_info_by_label (BirProgram p) l = NONE) <=> (!bl. MEM bl p ==> (bl.bb_label <> l)))) /\
+  ``(!p l. ((bir_get_program_block_info_by_label (BirProgram p) l = NONE) <=> (!bl. MEM bl p ==> (bir_label_of_block bl <> l)))) /\
 
     (!p l i bl.
           (bir_get_program_block_info_by_label (BirProgram p) l = SOME (i, bl)) <=>
-          ((((i:num) < LENGTH p) /\ (EL i p = bl) /\ (bl.bb_label = l) /\
-             (!j'. j' < i ==> (EL j' p).bb_label <> l))))``,
+          ((((i:num) < LENGTH p) /\ (EL i p = bl) /\ (bir_label_of_block bl = l) /\
+             (!j'. j' < i ==> bir_label_of_block (EL j' p) <> l))))``,
 
 SIMP_TAC list_ss [bir_get_program_block_info_by_label_def, INDEX_FIND_EQ_NONE,
   listTheory.EVERY_MEM, INDEX_FIND_EQ_SOME_0]);
@@ -208,7 +222,19 @@ Cases_on `bir_get_program_block_info_by_label (BirProgram p) l` >| [
 
 val bir_get_current_statement_def = Define `bir_get_current_statement p pc =
   option_CASE (bir_get_program_block_info_by_label p pc.bpc_label) NONE
-     (\ (_, bl). if (pc.bpc_index < LENGTH bl.bb_statements) then SOME (BStmtB (EL (pc.bpc_index) bl.bb_statements)) else (if pc.bpc_index = LENGTH bl.bb_statements then SOME (BStmtE bl.bb_last_statement) else NONE))`;
+    (\ (_, bl).
+      case bl of
+      | BBlock_Stmts stmts_bl =>
+        if (pc.bpc_index < LENGTH stmts_bl.bb_statements)
+        then SOME (BStmtB (EL (pc.bpc_index) stmts_bl.bb_statements))
+        else (if pc.bpc_index = LENGTH stmts_bl.bb_statements then SOME (BStmtE stmts_bl.bb_last_statement) else NONE)
+      | BBlock_Ext ext_bl => NONE)`;
+
+Definition bir_get_current_block_def:
+  bir_get_current_block p pc = 
+  option_CASE (bir_get_program_block_info_by_label p pc.bpc_label) NONE
+    (\ (_, bl). SOME bl)
+End
 
 val bir_pc_next_def = Define `
   bir_pc_next pc = pc with bpc_index updated_by SUC`;
@@ -220,7 +246,7 @@ val bir_block_pc_11 = store_thm ("bir_block_pc_11",
 SIMP_TAC (std_ss++bir_pc_ss) [bir_block_pc_def, bir_programcounter_t_component_equality]);
 
 val bir_pc_first_def = Define
-  `bir_pc_first (BirProgram p) = bir_block_pc (HD p).bb_label`;
+  `bir_pc_first (BirProgram p) = bir_block_pc (bir_label_of_block (HD p))`;
 
 
 (* ------------------------------------------------------------------------- *)
@@ -265,6 +291,7 @@ val bir_exec_stmt_assume_def = Define `bir_exec_stmt_assume ext_map ex (st:bir_s
     | SOME F => (st with bst_status := BST_AssumptionViolated)
     | NONE => bir_state_set_typeerror st`;
 
+(*
 val bir_exec_stmt_ext_put_def = Define `bir_exec_stmt_ext_put ext_map (ext_name:string) ex (st:bir_state_t, ext_st:'ext_state_t) =
   case bir_eval_exp ext_map ex st.bst_environ ext_st of
     | SOME va =>
@@ -277,12 +304,13 @@ val bir_exec_stmt_ext_put_def = Define `bir_exec_stmt_ext_put ext_map (ext_name:
       | NONE => (bir_state_set_typeerror st, ext_st)
      )
     | NONE => (bir_state_set_typeerror st, ext_st)`;
+*)
 
 val bir_exec_stmtB_def = Define `
   (bir_exec_stmtB ext_map (BStmt_Assert ex) (st, ext_st:'ext_state_t) = (bir_exec_stmt_assert ext_map ex (st, ext_st), ext_st)) /\
   (bir_exec_stmtB ext_map (BStmt_Assume ex) (st, ext_st) = (bir_exec_stmt_assume ext_map ex (st, ext_st), ext_st)) /\
-  (bir_exec_stmtB ext_map (BStmt_Assign v ex) (st, ext_st) = (bir_exec_stmt_assign ext_map v ex (st, ext_st), ext_st)) /\
-  (bir_exec_stmtB ext_map (BStmt_ExtPut ext_name ex) (st, ext_st) = bir_exec_stmt_ext_put ext_map ext_name ex (st, ext_st))`;
+  (bir_exec_stmtB ext_map (BStmt_Assign v ex) (st, ext_st) = (bir_exec_stmt_assign ext_map v ex (st, ext_st), ext_st)) (*/\
+  (bir_exec_stmtB ext_map (BStmt_ExtPut ext_name ex) (st, ext_st) = bir_exec_stmt_ext_put ext_map ext_name ex (st, ext_st))*)`;
 
 val bir_exec_stmtB_exists =
   store_thm("bir_exec_stmtB_exists",
@@ -293,7 +321,7 @@ val bir_exec_stmtB_exists =
 Cases_on `h` >> (
   rpt strip_tac >>
   fs [bir_exec_stmtB_def]
-) >>
+)(* >>
 fs [bir_exec_stmt_ext_put_def] >>
 Cases_on `bir_eval_exp ext_map b st.bst_environ ext_st` >> (
   fs []
@@ -303,7 +331,7 @@ Cases_on `bir_lookup_put ext_map s` >> (
 ) >>
 Cases_on `x' x ext_st` >> (
   fs []
-)
+) *)
 );
 
 val bir_exec_stmt_halt_def = Define `bir_exec_stmt_halt ext_map ex (st, ext_st:'ext_state_t) =
@@ -350,12 +378,25 @@ val bir_exec_stmt_def = Define `
      if bir_state_is_terminated st' then (st', ext_st') else (st' with bst_pc updated_by bir_pc_next, ext_st')) /\
   (bir_exec_stmt ext_map p (BStmtE bst) (st, ext_st) = (bir_exec_stmtE ext_map p bst (st, ext_st), ext_st))`;
 
+(* bmc_exec_block_ext is defined later, in the promising semantics *)
+Definition bir_exec_block_ext:
+  bir_exec_block_ext ext_fun (st:bir_state_t, ext_st:'ext_state_t) =
+    (CHOICE (ext_fun (st, EMPTY:bir_state_t -> bool, ext_st))):(bir_state_t # 'ext_state_t)
+End
+
 val bir_exec_step_def = Define `bir_exec_step ext_map p (state, ext_st:'ext_state_t) =
   if (bir_state_is_terminated state) then (state, ext_st) else
-  case (bir_get_current_statement p state.bst_pc) of
-    | NONE => (bir_state_set_failed state, ext_st)
-    | SOME stm => (bir_exec_stmt ext_map p stm (state, ext_st))
+  case (bir_get_current_block p state.bst_pc) of
+  | NONE => (bir_state_set_failed state, ext_st)
+  | SOME bl =>
+    (case bl of
+     | BBlock_Stmts stmts_bl =>
+       (case (bir_get_current_statement p state.bst_pc) of
+        | NONE => (bir_state_set_failed state, ext_st)
+        | SOME stm => (bir_exec_stmt ext_map p stm (state, ext_st)))
+     | BBlock_Ext ext_bl => bir_exec_block_ext ext_bl.beb_relation (state, ext_st))
 `;
+
 
 (* ------------------------------------------------------------------------- *)
 (*  Executing multiple steps                                                 *)
