@@ -170,6 +170,13 @@ val bir_stmt_ss = rewrites ((type_rws ``:'ext_state_t bir_stmt_t``)
 (* Programs                                                                  *)
 (* ------------------------------------------------------------------------- *)
 
+Definition bir_block_is_extern_def:
+  bir_block_is_extern bl =
+    case bl of
+    | BBlock_Stmts stmts_bl => F
+    | BBlock_Ext ext_bl => T
+End
+
 val bir_label_of_block_def = Define `bir_label_of_block bl =
   case bl of
   | BBlock_Stmts stmts_bl => stmts_bl.bb_label
