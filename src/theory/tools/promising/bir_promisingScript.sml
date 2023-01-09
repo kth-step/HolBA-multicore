@@ -260,7 +260,6 @@ Theorem bmc_exec_general_stmt_mc_invar:
   s.bst_prom = s'.bst_prom /\
   s.bst_fwdb = s'.bst_fwdb /\
   s.bst_xclb = s'.bst_xclb /\
-  s.bst_inflight = s'.bst_inflight /\
   s.bst_counter = s'.bst_counter
 Proof
   ntac 2 Induct
@@ -284,7 +283,6 @@ Theorem bir_exec_stmt_cjmp_mc_invar':
   s.bst_prom = s'.bst_prom /\
   s.bst_fwdb = s'.bst_fwdb /\
   s.bst_xclb = s'.bst_xclb /\
-  s.bst_inflight = s'.bst_inflight /\
   s.bst_counter = s'.bst_counter
 Proof
   rpt gen_tac >> strip_tac

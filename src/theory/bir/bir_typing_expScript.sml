@@ -70,72 +70,65 @@ Definition type_of_bir_exp_def:
                                                | _, _, _ => NONE)
 End
 
-
-val type_of_bir_exp_THM = store_thm ("type_of_bir_exp_THM",
- ``!(ext_map:'ext_state_t bir_ext_map_t) ext_st env e ty. (type_of_bir_exp e = SOME ty) ==>
-              ((bir_eval_exp ext_map e env ext_st = NONE) \/
-               (?v. (bir_eval_exp ext_map e env ext_st = SOME v) /\ (type_of_bir_val v = ty)))``,
-
-NTAC 3 GEN_TAC >>
-Induct >> (
-  SIMP_TAC (list_ss++bir_val_ss) [bir_eval_exp_def, type_of_bir_exp_def,
-     type_of_bir_val_def] >>
-  REPEAT CASE_TAC
-) >- (
-  METIS_TAC[bir_env_read_types]
-) >- (
-  FULL_SIMP_TAC std_ss [bir_eval_cast_REWRS, bir_type_is_Imm_def] >>
-  FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_cast_REWRS,
-    type_of_bir_gencast]
-) >- (
-  FULL_SIMP_TAC std_ss [bir_eval_unary_exp_REWRS, bir_type_is_Imm_def] >>
-  FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_unary_exp_REWRS,
-    type_of_bir_unary_exp]
-) >- (
-  FULL_SIMP_TAC std_ss [bir_eval_bin_exp_REWRS, bir_type_is_Imm_def] >>
-  FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_bin_exp_REWRS,
-    type_of_bir_bin_exp]
-) >- (
-  FULL_SIMP_TAC std_ss [bir_eval_bin_pred_REWRS, bir_type_is_Imm_def] >>
-  FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_bin_pred_REWRS,
-    type_of_bir_val_def, BType_Bool_def, type_of_bool2b]
-) >- (
-  FULL_SIMP_TAC std_ss [bir_eval_memeq_REWRS, bir_type_is_Imm_def] >>
-  FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_memeq_REWRS,
-    type_of_bir_val_def, BType_Bool_def, type_of_bool2b]
-) >- (
-  Cases_on `bir_eval_exp ext_map e env ext_st = NONE` >- (
-    ASM_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
-  ) >>
-  FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS, bir_type_is_Imm_def] >> 
-  Cases_on `v` >>  Cases_on `v'` >> Cases_on `v''` >> (
+Theorem type_of_bir_exp_THM:
+  !ext_st env e ty. (type_of_bir_exp e = SOME ty) ==>
+              ((bir_eval_exp e env ext_st = NONE) \/
+               (?v. (bir_eval_exp e env ext_st = SOME v) /\ (type_of_bir_val v = ty)))
+Proof
+  NTAC 2 GEN_TAC >> Induct
+  >> SIMP_TAC (list_ss++bir_val_ss) [bir_eval_exp_def, type_of_bir_exp_def,
+     type_of_bir_val_def]
+  >> REPEAT CASE_TAC
+  >- (
+    METIS_TAC[bir_env_read_types]
+  ) >- (
+    FULL_SIMP_TAC std_ss [bir_eval_cast_REWRS, bir_type_is_Imm_def] >>
+    FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_cast_REWRS,
+      type_of_bir_gencast]
+  ) >- (
+    FULL_SIMP_TAC std_ss [bir_eval_unary_exp_REWRS, bir_type_is_Imm_def] >>
+    FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_unary_exp_REWRS,
+      type_of_bir_unary_exp]
+  ) >- (
+    FULL_SIMP_TAC std_ss [bir_eval_bin_exp_REWRS, bir_type_is_Imm_def] >>
+    FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_bin_exp_REWRS,
+      type_of_bir_bin_exp]
+  ) >- (
+    FULL_SIMP_TAC std_ss [bir_eval_bin_pred_REWRS, bir_type_is_Imm_def] >>
+    FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_bin_pred_REWRS,
+      type_of_bir_val_def, BType_Bool_def, type_of_bool2b]
+  ) >- (
+    FULL_SIMP_TAC std_ss [bir_eval_memeq_REWRS, bir_type_is_Imm_def] >>
+    FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_memeq_REWRS,
+      type_of_bir_val_def, BType_Bool_def, type_of_bool2b]
+  ) >- (
+    Cases_on `bir_eval_exp e env ext_st = NONE` >- (
+      ASM_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
+    ) >>
+    FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS, bir_type_is_Imm_def] >> 
+    Cases_on `v` >>  Cases_on `v'` >> Cases_on `v''` >> (
+      FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_ifthenelse_REWRS,
+        BType_Bool_def, type_of_bir_val_def] >>
+      CASE_TAC
+    ) >> (
     FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_ifthenelse_REWRS,
-      BType_Bool_def, type_of_bir_val_def] >>
-    CASE_TAC
-  ) >> (
-  FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_eval_ifthenelse_REWRS,
-    BType_Bool_def, type_of_bir_val_def, type_of_bir_imm_def]
+      BType_Bool_def, type_of_bir_val_def, type_of_bir_imm_def]
+    )
+  ) >- (
+    dsimp[bir_eval_extget_def,CaseEq"option",DISJ_EQ_IMP]
+    >> metis_tac[option_CLAUSES]
+  ) >- (
+    FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS] >>
+    FULL_SIMP_TAC std_ss [type_of_bir_val_EQ_ELIMS, bir_eval_load_def] >>
+    REPEAT GEN_TAC >> REPEAT CASE_TAC >> (
+      METIS_TAC[type_of_bir_load_from_mem]
+    )
+  ) >- (
+    FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS] >>
+    FULL_SIMP_TAC std_ss [type_of_bir_val_EQ_ELIMS, bir_eval_store_def] >>
+    REPEAT GEN_TAC >> REPEAT CASE_TAC
   )
-) >- (
-  fs[bir_eval_extget_def] >>
-  rpt strip_tac >>
-  Cases_on `bir_lookup_get ext_map s` >> (
-    fs []
-  ) >>
-  Cases_on `x ext_st` >> (
-    fs []
-  )
-) >- (
-  FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS] >>
-  FULL_SIMP_TAC std_ss [type_of_bir_val_EQ_ELIMS, bir_eval_load_def] >>
-  REPEAT GEN_TAC >> REPEAT CASE_TAC >> (
-    METIS_TAC[type_of_bir_load_from_mem]
-  )
-) >- (
-  FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS] >>
-  FULL_SIMP_TAC std_ss [type_of_bir_val_EQ_ELIMS, bir_eval_store_def] >>
-  REPEAT GEN_TAC >> REPEAT CASE_TAC
-));
+QED
 
 
 val type_of_bir_exp_EQ_SOME_REWRS = store_thm ("type_of_bir_exp_EQ_SOME_REWRS",``
@@ -215,15 +208,15 @@ REPEAT CONJ_TAC >> (
 
 val bir_eval_exp_IS_SOME_IMPLIES_TYPE =
   store_thm("bir_eval_exp_IS_SOME_IMPLIES_TYPE",
-  ``!(ext_map:'ext_state_t bir_ext_map_t) env ext_st e va ty.
-    (bir_eval_exp ext_map e env ext_st = SOME va) ==>
+  ``!env ext_st e va ty.
+    (bir_eval_exp e env ext_st = SOME va) ==>
     (type_of_bir_val va = ty) ==>
     (type_of_bir_exp e = SOME ty)``,
 
-Induct_on `e` >> (
+Induct_on `e` >>
   REPEAT STRIP_TAC >>
   FULL_SIMP_TAC std_ss [bir_eval_exp_def, type_of_bir_exp_EQ_SOME_REWRS]
-) >| [
+  >| [
   (* Const *)
   RW_TAC std_ss [type_of_bir_val_def],
 
@@ -236,7 +229,7 @@ Induct_on `e` >> (
   FULL_SIMP_TAC std_ss [],
 
   (* Cast *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >| [
+  Cases_on `bir_eval_exp e env ext_st` >| [
     FULL_SIMP_TAC std_ss [bir_eval_cast_def],
 
     Cases_on `x` >> (
@@ -247,7 +240,7 @@ Induct_on `e` >> (
   ],
 
   (* UnaryExp *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >| [
+  Cases_on `bir_eval_exp e env ext_st` >| [
     FULL_SIMP_TAC std_ss [bir_eval_unary_exp_def],
 
     Cases_on `x` >> (
@@ -258,7 +251,7 @@ Induct_on `e` >> (
   ],
 
   (* BinExp *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >> Cases_on `bir_eval_exp ext_map e' env ext_st` >> (
+  Cases_on `bir_eval_exp e env ext_st` >> Cases_on `bir_eval_exp e' env ext_st` >> (
     FULL_SIMP_TAC std_ss [bir_eval_bin_exp_REWRS]
   ) >>
   Cases_on `x` >> Cases_on `x'` >> (
@@ -268,7 +261,7 @@ Induct_on `e` >> (
 	     NOT_NONE_SOME, bir_type_is_Imm_def],
 
   (* BinPred *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >> Cases_on `bir_eval_exp ext_map e' env ext_st` >> (
+  Cases_on `bir_eval_exp e env ext_st` >> Cases_on `bir_eval_exp e' env ext_st` >> (
     FULL_SIMP_TAC std_ss [bir_eval_bin_pred_REWRS]
   ) >>
   Cases_on `x` >> Cases_on `x'` >> (
@@ -278,7 +271,7 @@ Induct_on `e` >> (
              bool2b_def, BType_Bool_def, type_of_bool2b],
 
   (* MemEq *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >> Cases_on `bir_eval_exp ext_map e' env ext_st` >> (
+  Cases_on `bir_eval_exp e env ext_st` >> Cases_on `bir_eval_exp e' env ext_st` >> (
     FULL_SIMP_TAC std_ss [bir_eval_memeq_REWRS]
   ) >>
   Cases_on `x` >> Cases_on `x'` >> (
@@ -288,8 +281,8 @@ Induct_on `e` >> (
              bool2b_def, BType_Bool_def, type_of_bool2b],
 
   (* IfThenElse *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >> Cases_on `bir_eval_exp ext_map e' env ext_st` >>
-    Cases_on `bir_eval_exp ext_map e'' env ext_st` >> (
+  Cases_on `bir_eval_exp e env ext_st` >> Cases_on `bir_eval_exp e' env ext_st` >>
+    Cases_on `bir_eval_exp e'' env ext_st` >> (
     FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
   ) >>
   Cases_on `x` >> Cases_on `x'` >> Cases_on `x''` >> (
@@ -303,16 +296,10 @@ Induct_on `e` >> (
   ),
 
   (* ExtGet *)
-  fs [bir_eval_extget_def] >>
-  Cases_on `bir_lookup_get ext_map s` >> (
-    fs[]
-  ) >>
-  Cases_on `x ext_st` >> (
-    gvs[]
-  ),
+  fs[bir_eval_extget_def,CaseEq"option"],
 
   (* Load *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >> Cases_on `bir_eval_exp ext_map e' env ext_st` >> (
+  Cases_on `bir_eval_exp e env ext_st` >> Cases_on `bir_eval_exp e' env ext_st` >> (
     FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS]
   ) >>
   Cases_on `x` >> Cases_on `x'` >> (
@@ -343,8 +330,8 @@ Induct_on `e` >> (
   ),
 
   (* Store *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >> Cases_on `bir_eval_exp ext_map e' env ext_st` >>
-    Cases_on `bir_eval_exp ext_map e'' env ext_st` >> (
+  Cases_on `bir_eval_exp e env ext_st` >> Cases_on `bir_eval_exp e' env ext_st` >>
+    Cases_on `bir_eval_exp e'' env ext_st` >> (
     FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
   ) >>
   Cases_on `x` >> Cases_on `x'` >> Cases_on `x''` >> (
@@ -494,9 +481,9 @@ Cases_on `x` >> Cases_on `x'` >> (
 );
 
 val bir_type_of_bir_exp_NONE = store_thm("bir_type_of_bir_exp_NONE",
-  ``!(ext_map:'ext_state_t bir_ext_map_t) ex env ext_st.
+  ``!ex env ext_st.
     (type_of_bir_exp ex = NONE) ==>
-    (bir_eval_exp ext_map ex env ext_st = NONE)``,
+    (bir_eval_exp ex env ext_st = NONE)``,
 
 REPEAT STRIP_TAC >>
 Induct_on `ex` >> (
@@ -509,7 +496,7 @@ Induct_on `ex` >> (
   ) >>
   (* The memory remains... *)
   IMP_RES_TAC type_of_bir_exp_THM >>
-  QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`] >>
+  QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`] >>
   FULL_SIMP_TAC std_ss [bir_eval_cast_REWRS] >>
   Cases_on `v` >> (
     FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_cast_REWRS, type_of_bir_val_def]
@@ -520,7 +507,7 @@ Induct_on `ex` >> (
     FULL_SIMP_TAC std_ss [bir_eval_unary_exp_REWRS]
   ) >>
   IMP_RES_TAC type_of_bir_exp_THM >>
-  QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`] >>
+  QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`] >>
   FULL_SIMP_TAC std_ss [bir_eval_unary_exp_REWRS] >>
   Cases_on `v` >> (
     FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_unary_exp_REWRS, type_of_bir_val_def]
@@ -533,8 +520,8 @@ Induct_on `ex` >> (
     IMP_RES_TAC type_of_bir_exp_THM
   ) >> (
     (* 3 cases, two of which are proved by the below: *)
-    QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`] >>
-    TRY (QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`]) >>
+    QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`] >>
+    TRY (QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`]) >>
     FULL_SIMP_TAC std_ss [bir_eval_bin_exp_REWRS] >>
     Cases_on `v` >> (
       FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_bin_exp_REWRS, type_of_bir_val_def]
@@ -551,8 +538,8 @@ Induct_on `ex` >> (
   ) >> (
     IMP_RES_TAC type_of_bir_exp_THM
   ) >> (
-    QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`] >>
-    TRY (QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`]) >>
+    QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`] >>
+    TRY (QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`]) >>
     FULL_SIMP_TAC std_ss [bir_eval_bin_pred_REWRS] >>
     Cases_on `v` >> (
       FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_bin_pred_REWRS, type_of_bir_val_def]
@@ -569,7 +556,7 @@ Induct_on `ex` >> (
   IMP_RES_TAC type_of_bir_exp_THM >>
   Cases_on `x` >> Cases_on `x'` >> (
     FULL_SIMP_TAC (std_ss++bir_type_ss) [] >>
-    REPEAT (QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`]) >>
+    REPEAT (QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`]) >>
     FULL_SIMP_TAC std_ss [bir_eval_memeq_REWRS]
   ) >> (
     Cases_on `v` >> (
@@ -586,7 +573,7 @@ Induct_on `ex` >> (
     FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_ifthenelse_REWRS]
   ) >>
   IMP_RES_TAC type_of_bir_exp_THM >>
-  QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`] >>
+  QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`] >>
   FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS, bir_eval_ifthenelse_REWRS_NONE],
 
   (* IfThenElse second argument NONE *)
@@ -600,7 +587,7 @@ Induct_on `ex` >> (
     FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
   ) >>
   IMP_RES_TAC type_of_bir_exp_THM >>
-  REPEAT (QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`]) >>
+  REPEAT (QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`]) >>
   FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS, bir_eval_ifthenelse_REWRS_NONE],
 
   (* Load *)
@@ -608,7 +595,7 @@ Induct_on `ex` >> (
     FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS]
   ) >>
   IMP_RES_TAC type_of_bir_exp_THM >>
-  NTAC 2 (QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`]) >>
+  NTAC 2 (QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`]) >>
   FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS] >>
   Cases_on `v` >> Cases_on `v'` >> (
     FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS]
@@ -632,7 +619,7 @@ Induct_on `ex` >> (
     FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
   ) >>
   IMP_RES_TAC type_of_bir_exp_THM >>
-  NTAC 3 (QSPECL_X_ASSUM ``!ext_st ext_map env. _`` [`ext_st`, `ext_map`, `env`]) >>
+  NTAC 3 (QSPECL_X_ASSUM ``!ext_st env. _`` [`ext_st`, `env`]) >>
   FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS] >>
   Cases_on `v` >> Cases_on `v'` >> Cases_on `v''` >> (
     FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
@@ -673,9 +660,9 @@ val bir_vars_of_exp_def = Define `
 
 
 val bir_vars_of_exp_THM = store_thm ("bir_vars_of_exp_THM",
-``!env1 env2 e (ext_map:'ext_state_t bir_ext_map_t) ext_st. (!v. v IN (bir_vars_of_exp e) ==>
+``!env1 env2 e ext_st. (!v. v IN (bir_vars_of_exp e) ==>
                      (bir_env_read v env1 = bir_env_read v env2)) ==>
-                (bir_eval_exp ext_map e env1 ext_st = bir_eval_exp ext_map e env2 ext_st)``,
+                (bir_eval_exp e env1 ext_st = bir_eval_exp e env2 ext_st)``,
 
 NTAC 2 GEN_TAC >> Induct >> REPEAT STRIP_TAC >> (
   FULL_SIMP_TAC std_ss [bir_vars_of_exp_def, pred_setTheory.IN_UNION,
@@ -685,8 +672,8 @@ NTAC 2 GEN_TAC >> Induct >> REPEAT STRIP_TAC >> (
 
 
 val bir_vars_of_exp_THM_EQ_FOR_VARS = store_thm ("bir_vars_of_exp_THM_EQ_FOR_VARS",
-``!(ext_map:'ext_state_t bir_ext_map_t) env1 env2 e ext_st. (bir_env_EQ_FOR_VARS (bir_vars_of_exp e) env1 env2) ==>
-                (bir_eval_exp ext_map e env1 ext_st = bir_eval_exp ext_map e env2 ext_st)``,
+``! env1 env2 e ext_st. (bir_env_EQ_FOR_VARS (bir_vars_of_exp e) env1 env2) ==>
+                (bir_eval_exp e env1 ext_st = bir_eval_exp e env2 ext_st)``,
 METIS_TAC[bir_vars_of_exp_THM, bir_env_EQ_FOR_VARS_read_IMPL]);
 
 
@@ -715,194 +702,7 @@ val bir_exts_of_exp_def = Define `
   (bir_exts_of_exp (BExp_Store me ae _ ve) = (bir_exts_of_exp me UNION bir_exts_of_exp ae UNION bir_exts_of_exp ve))`;
 
 
-val type_of_bir_exp_THM_with_envty = store_thm ("type_of_bir_exp_THM_with_envty",
-  ``!(ext_map:'ext_state_t bir_ext_map_t) env ext_st envty ext_envty e ty.
-    type_of_bir_exp e = SOME ty ==>
-    bir_envty_includes_vs envty (bir_vars_of_exp e) ==>
-    bir_env_satisfies_envty env envty ==>
-    bir_ext_envty_includes_exts ext_envty (bir_exts_of_exp e) ==>
-    bir_ext_env_satisfies_ext_envty (ext_map, ext_st) ext_envty ==>
-    ?v. bir_eval_exp ext_map e env ext_st = SOME v /\ type_of_bir_val v = ty``,
-
-NTAC 5 GEN_TAC >> Induct >> (
-  SIMP_TAC (std_ss++bir_val_ss) [bir_eval_exp_def, BType_Bool_def,
-    type_of_bir_exp_EQ_SOME_REWRS, bir_vars_of_exp_def, bir_exts_of_exp_def,
-    bir_envty_includes_vs_UNION, bir_envty_includes_vs_INSERT,
-    bir_envty_includes_vs_EMPTY, bir_ext_envty_includes_exts_UNION, bir_ext_envty_includes_exts_INSERT,
-    bir_ext_envty_includes_exts_EMPTY, PULL_EXISTS, PULL_FORALL, bir_type_is_Imm_def] >>
-  REPEAT STRIP_TAC >>
-  FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_type_is_Imm_def]
-) >- (
-  METIS_TAC [bir_v_in_envty_env_IMP]
-) >- (
-  SIMP_TAC (std_ss++bir_val_ss) [bir_eval_cast_REWRS, type_of_bir_gencast]
-) >- (
-  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_unary_exp_REWRS, type_of_bir_unary_exp]
-) >- (
-  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_bin_exp_REWRS, type_of_bir_bin_exp]
-) >- (
-  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_bin_pred_REWRS, type_of_bir_val_def,
-    type_of_bool2b, BType_Bool_def]
-) >- (
-  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_memeq_REWRS, type_of_bir_val_def,
-    type_of_bool2b, BType_Bool_def]
-) >- (
-  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_ifthenelse_REWRS] >>
-  METIS_TAC[]
-) >- (
-  METIS_TAC[bir_ext_in_ext_envty_ext_env_IMP]
-) >- (
-  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_load_BASIC_REWR] >>
-  rename1 `bir_load_from_mem vt ity at mmap en (b2n i)` >>
-  Cases_on `bir_load_from_mem vt ity at mmap en (b2n i)` >- (
-    POP_ASSUM MP_TAC >>
-    ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_load_from_mem_EQ_NONE] >>
-    Cases_on `en = BEnd_NoEndian` >> (
-       FULL_SIMP_TAC (std_ss++boolSimps.CONJ_ss) [bir_number_of_mem_splits_ID]
-    )
-  ) >>
-  ASM_SIMP_TAC (std_ss++bir_val_ss) [] >>
-  METIS_TAC [type_of_bir_load_from_mem]
-) >- (
-  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_store_BASIC_REWR] >>
-  rename1 `bir_store_in_mem vt at ity mmap en (b2n i)` >>
-  Cases_on `bir_store_in_mem vt at ity mmap en (b2n i)` >- (
-    POP_ASSUM MP_TAC >>
-    ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_store_in_mem_EQ_NONE] >>
-    Cases_on `en = BEnd_NoEndian` >> (
-       FULL_SIMP_TAC (std_ss++boolSimps.CONJ_ss) [bir_number_of_mem_splits_ID]
-    )
-  ) >>
-  ASM_SIMP_TAC (std_ss++bir_val_ss) []
-));
-
 (* TODO: needs bir_env_oldTheory, due to involvement of bir_env_vars_are_initialised *)
-val type_of_bir_exp_THM_with_init_vars = store_thm ("type_of_bir_exp_THM_with_init_vars",
-  ``!ext_map env e ty ext_st:'ext_state_t.
-    type_of_bir_exp e = SOME ty ==>
-    bir_env_vars_are_initialised env (bir_vars_of_exp e) ==>
-    bir_ext_env_exts_are_valid (ext_map, ext_st) (bir_exts_of_exp e) ==>
-    ?va. bir_eval_exp ext_map e env ext_st = SOME va /\ type_of_bir_val va = ty``,
-  METIS_TAC [type_of_bir_exp_THM_with_envty, bir_env_vars_are_initialised_EQ_envty,
-             bir_env_satisfies_envty_of_env, bir_ext_env_exts_are_valid_EQ_ext_envty,
-             bir_ext_env_satisfies_ext_envty_of_ext_env]
-);
-
-
-(* This is the general theorem for eliminating initialisation requirements via evaluations
- * of expressions in assumptions *)
-val bir_eval_exp_IS_SOME_IMPLIES_INIT =
-  store_thm("bir_eval_exp_IS_SOME_IMPLIES_INIT",
-  ``!ext_map env e ext_st:'ext_state_t va.
-    (bir_eval_exp ext_map e env ext_st = SOME va) ==>
-    bir_env_vars_are_initialised env (bir_vars_of_exp e) /\
-    bir_ext_env_exts_are_valid (ext_map, ext_st) (bir_exts_of_exp e)``,
-
-Induct_on `e` >> (
-  REPEAT GEN_TAC >>
-  DISCH_TAC >>
-  FULL_SIMP_TAC std_ss [bir_eval_exp_def, bir_vars_of_exp_def, bir_exts_of_exp_def,
-                        bir_env_oldTheory.bir_env_vars_are_initialised_EMPTY,
-                        bir_env_oldTheory.bir_ext_env_exts_are_valid_EMPTY]
-) >| [
-  (* Den *)
-  subgoal `type_of_bir_val va = bir_var_type b` >- (
-    IMP_RES_TAC bir_env_read_types >>
-    FULL_SIMP_TAC std_ss []
-  ) >>
-  FULL_SIMP_TAC std_ss [bir_env_oldTheory.bir_env_vars_are_initialised_def, bir_env_read_def,
-                        pred_setTheory.IN_SING, bir_env_oldTheory.bir_env_var_is_initialised_def],
-
-  (* Cast *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_cast_REWRS]
-  ) >>
-  METIS_TAC [],
-
-  (* UnaryExp *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_unary_exp_REWRS]
-  ) >>
-  METIS_TAC [],
-
-  (* BinExp *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_bin_exp_REWRS]
-  ) >>
-  Cases_on `bir_eval_exp ext_map e' env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_bin_exp_REWRS]
-  ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
-             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
-
-  (* BinPred *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_bin_pred_REWRS]
-  ) >>
-  Cases_on `bir_eval_exp ext_map e' env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_bin_pred_REWRS]
-  ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
-             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
-
-  (* MemEq *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_memeq_REWRS]
-  ) >>
-  Cases_on `bir_eval_exp ext_map e' env ext_st` >- (
-    Cases_on `x` >> (
-      FULL_SIMP_TAC std_ss [bir_eval_memeq_REWRS]
-    )
-  ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
-             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
-
-  (* IfThenElse *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
-  ) >>
-  Cases_on `bir_eval_exp ext_map e' env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
-  ) >>
-  Cases_on `bir_eval_exp ext_map e'' env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
-  ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
-             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
-
-  (* ExtGet *)
-  REWRITE_TAC[bir_ext_env_exts_are_valid_def] >>
-  rpt strip_tac >>
-  fs[bir_ext_env_ext_is_valid_def] >>
-  irule bir_eval_extget_type >>
-  metis_tac[],
-
-  (* Load *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS]
-  ) >>
-  Cases_on `bir_eval_exp ext_map e' env ext_st` >- (
-    Cases_on `x` >> (
-      FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS]
-    )
-  ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
-             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
-
-  (* Store *)
-  Cases_on `bir_eval_exp ext_map e env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
-  ) >>
-  Cases_on `bir_eval_exp ext_map e' env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
-  ) >>
-  Cases_on `bir_eval_exp ext_map e'' env ext_st` >- (
-    FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
-  ) >>
-  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
-             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION]
-]
-);
 
 (* -------------------- *)
 (* Sensible expressions *)

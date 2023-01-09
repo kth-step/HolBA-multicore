@@ -21,8 +21,6 @@ Definition bir_state_init_def:
   ; bst_v_wOld := 0
   ; bst_v_Rel := 0
   ; bst_prom := []
-  ; bst_inflight := []
-  ; bst_counter := 0
   ; bst_fwdb := (\l. <| fwdb_time:= 0; fwdb_view:=0; fwdb_xcl:=F |>)
   ; bst_xclb := NONE
   |>
@@ -42,8 +40,6 @@ Definition bmc_state_init_def:
     ; bst_v_wOld := 0
     ; bst_v_Rel := 0
     ; bst_prom := []
-    ; bst_inflight := []
-    ; bst_counter := 0
     ; bst_fwdb := (\l. <| fwdb_time:= 0; fwdb_view:=0; fwdb_xcl:=F |>)
     ; bst_xclb := NONE
   |>

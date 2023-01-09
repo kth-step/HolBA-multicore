@@ -28,7 +28,7 @@ val _ = Datatype `bir_exp_t =
 
   | BExp_IfThenElse        bir_exp_t bir_exp_t bir_exp_t
 
-  | BExp_ExtGet            string bir_type_t (* string maps to a ('ext_state_t -> bir_val_t option) in the ext_map *)
+  | BExp_ExtGet            ('ext_state_t -> bir_val_t option) bir_type_t
 
   | BExp_Load              bir_exp_t bir_exp_t bir_endian_t bir_immtype_t
   | BExp_Store             bir_exp_t bir_exp_t bir_endian_t bir_exp_t
@@ -91,39 +91,39 @@ val bir_eval_store_def = Define `
 
 
 val bir_eval_exp_def = Define `
-  (bir_eval_exp (ext_map:'ext_state_t bir_ext_map_t) (BExp_Const n) env ext_st = SOME (BVal_Imm n)) /\
+  (bir_eval_exp (BExp_Const n) env ext_st = SOME (BVal_Imm n)) /\
 
-  (bir_eval_exp ext_map (BExp_MemConst aty vty mmap) env ext_st = SOME (BVal_Mem aty vty mmap)) /\
+  (bir_eval_exp (BExp_MemConst aty vty mmap) env ext_st = SOME (BVal_Mem aty vty mmap)) /\
 
-  (bir_eval_exp ext_map (BExp_Den v) env ext_st = bir_env_read v env) /\
+  (bir_eval_exp (BExp_Den v) env ext_st = bir_env_read v env) /\
 
-  (bir_eval_exp ext_map (BExp_Cast ct e ty) env ext_st = (
-     bir_eval_cast ct (bir_eval_exp ext_map e env ext_st) ty)) /\
+  (bir_eval_exp (BExp_Cast ct e ty) env ext_st = (
+     bir_eval_cast ct (bir_eval_exp e env ext_st) ty)) /\
 
-  (bir_eval_exp ext_map (BExp_UnaryExp et e) env ext_st = (
-     bir_eval_unary_exp et (bir_eval_exp ext_map e env ext_st))) /\
+  (bir_eval_exp (BExp_UnaryExp et e) env ext_st = (
+     bir_eval_unary_exp et (bir_eval_exp e env ext_st))) /\
 
-  (bir_eval_exp ext_map (BExp_BinExp et e1 e2) env ext_st = (
-     bir_eval_bin_exp et (bir_eval_exp ext_map e1 env ext_st) (bir_eval_exp ext_map e2 env ext_st))) /\
+  (bir_eval_exp (BExp_BinExp et e1 e2) env ext_st = (
+     bir_eval_bin_exp et (bir_eval_exp e1 env ext_st) (bir_eval_exp e2 env ext_st))) /\
 
-  (bir_eval_exp ext_map (BExp_BinPred pt e1 e2) env ext_st = (
-     bir_eval_bin_pred pt (bir_eval_exp ext_map e1 env ext_st) (bir_eval_exp ext_map e2 env ext_st))) /\
+  (bir_eval_exp (BExp_BinPred pt e1 e2) env ext_st = (
+     bir_eval_bin_pred pt (bir_eval_exp e1 env ext_st) (bir_eval_exp e2 env ext_st))) /\
 
-  (bir_eval_exp ext_map (BExp_MemEq e1 e2) env ext_st = (
-     bir_eval_memeq (bir_eval_exp ext_map e1 env ext_st) (bir_eval_exp ext_map e2 env ext_st))) /\
+  (bir_eval_exp (BExp_MemEq e1 e2) env ext_st = (
+     bir_eval_memeq (bir_eval_exp e1 env ext_st) (bir_eval_exp e2 env ext_st))) /\
 
-  (bir_eval_exp ext_map (BExp_IfThenElse c et ef) env ext_st =
-     bir_eval_ifthenelse (bir_eval_exp ext_map c env ext_st) (bir_eval_exp ext_map et env ext_st) (bir_eval_exp ext_map ef env ext_st)
+  (bir_eval_exp (BExp_IfThenElse c et ef) env ext_st =
+     bir_eval_ifthenelse (bir_eval_exp c env ext_st) (bir_eval_exp et env ext_st) (bir_eval_exp ef env ext_st)
   ) /\
 
-  (bir_eval_exp ext_map (BExp_ExtGet ext_name ty) env ext_st =
-     bir_eval_extget ext_map ext_name ty ext_st) /\
+  (bir_eval_exp (BExp_ExtGet ext_fn ty) env ext_st =
+     bir_eval_extget ext_fn ty ext_st) /\
 
-  (bir_eval_exp ext_map (BExp_Load mem_e a_e en ty) env ext_st =
-     bir_eval_load (bir_eval_exp ext_map mem_e env ext_st) (bir_eval_exp ext_map a_e env ext_st) en ty) /\
+  (bir_eval_exp (BExp_Load mem_e a_e en ty) env ext_st =
+     bir_eval_load (bir_eval_exp mem_e env ext_st) (bir_eval_exp a_e env ext_st) en ty) /\
 
-  (bir_eval_exp ext_map (BExp_Store mem_e a_e en v_e) env ext_st =
-     bir_eval_store (bir_eval_exp ext_map mem_e env ext_st) (bir_eval_exp ext_map a_e env ext_st) en (bir_eval_exp ext_map v_e env ext_st))
+  (bir_eval_exp (BExp_Store mem_e a_e en v_e) env ext_st =
+     bir_eval_store (bir_eval_exp mem_e env ext_st) (bir_eval_exp a_e env ext_st) en (bir_eval_exp v_e env ext_st))
 `;
 
 
@@ -229,11 +229,6 @@ Cases_on `c` >> Cases_on `b` >> Cases_on `v` >> (
   SIMP_TAC (std_ss++bir_imm_ss++bir_type_ss) [type_of_bir_imm_def, bir_eval_ifthenelse_REWRS,
     bir_val_checker_REWRS]
 ));
-
-val bir_eval_extget_NONE_REWR = prove (
-  ``(!ext_put_map ext_name ty ext_st. bir_eval_extget ((BExtMap FEMPTY ext_put_map):'ext_state_t bir_ext_map_t) ext_name ty ext_st = NONE)``,
-
-fs [bir_eval_extget_def, bir_lookup_get_def]);
 
 val bir_eval_load_NONE_REWRS1 = prove (
   ``(!mem en t. bir_eval_load mem NONE en t = NONE) /\
