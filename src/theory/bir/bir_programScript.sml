@@ -147,6 +147,9 @@ Datatype:
   bir_generic_program_t = BirProgram ((('a, 'ext_state_t) bir_generic_block_t) list)
 End
 
+Type bir_stmt_block_t = `` :('ext_state_t bir_stmt_basic_t, 'ext_state_t) bir_generic_stmt_block_t``
+Type bmc_stmt_block_t = `` :('ext_state_t bmc_stmt_basic_t, 'ext_state_t) bir_generic_stmt_block_t``
+
 Type bir_block_t = `` :('ext_state_t bir_stmt_basic_t, 'ext_state_t) bir_generic_block_t``
 Type bmc_block_t = `` :('ext_state_t bmc_stmt_basic_t, 'ext_state_t) bir_generic_block_t``
 
@@ -225,7 +228,7 @@ Cases_on `bir_get_program_block_info_by_label (BirProgram p) l` >| [
 (* ------------------------------------------------------------------------- *)
 
 Datatype:
-  bir_stmt_kind_t =
+  bir_generic_stmt_kind_t =
     | BSGen (('a,'ext_state_t) bir_generic_stmt_t)
     | BSExt ('ext_state_t beb_relation_t)
 End

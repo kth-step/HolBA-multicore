@@ -12,13 +12,17 @@ val _ = new_theory "bir_typing_prog";
 (*  Statements of Programs                                                   *)
 (* ------------------------------------------------------------------------- *)
 
-val bir_stmts_of_block_def = Define `bir_stmts_of_block bl =
+Definition bir_stmts_of_block_def:
+  bir_stmts_of_block bl =
   case bl of
-  | BBlock_Stmts bl_stmts => (BStmtE (bl_stmts.bb_last_statement) INSERT (IMAGE BStmtB (set bl_stmts.bb_statements)))
-  | BBlock_Ext bl_ext => EMPTY`;
+  | BBlock_Stmts bl_stmts =>
+    (BSGen $ BStmtE bl_stmts.bb_last_statement)
+      INSERT (IMAGE (BSGen o BStmtB) (set bl_stmts.bb_statements))
+  | BBlock_Ext bl_ext => {BSExt bl_ext.beb_relation}
+End
 
 val bir_stmts_of_prog_def = Define `bir_stmts_of_prog (BirProgram p) =
-  BIGUNION (IMAGE bir_stmts_of_generic_block (set p))`;
+  BIGUNION (IMAGE bir_stmts_of_block (set p))`;
 
 Theorem bir_get_current_statement_stmts_of_prog:
   !p pc stmt. bir_get_current_statement p pc = SOME stmt ==>
@@ -26,7 +30,7 @@ Theorem bir_get_current_statement_stmts_of_prog:
 Proof
   Cases >> rename1 `BirProgram p` >>
   SIMP_TAC std_ss [bir_get_current_statement_def, bir_stmts_of_prog_def,
-    IN_BIGUNION, IN_IMAGE, PULL_EXISTS, bir_stmts_of_generic_block_def,
+    IN_BIGUNION, IN_IMAGE, PULL_EXISTS, bir_stmts_of_block_def,
     IN_INSERT, IN_IMAGE] >>
   REPEAT GEN_TAC >>
   Cases_on `(bir_get_program_block_info_by_label (BirProgram p) pc.bpc_label)` >- (
@@ -36,14 +40,17 @@ Proof
   rename1 `_ = SOME xy` >> Cases_on `xy` >>
   rename1 `_ = SOME (i, bl)` >>
   ASM_SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) [] >>
-  Cases_on `bl` >> (
-    fs[]
-  ) >>
-  CASE_TAC >> STRIP_TAC >> REPEAT BasicProvers.VAR_EQ_TAC >> (
+  Cases_on `bl` >> fs[] >- (
+    CASE_TAC >> STRIP_TAC >> REPEAT BasicProvers.VAR_EQ_TAC >>
     Q.EXISTS_TAC `BBlock_Stmts b` >>
     fs[bir_get_program_block_info_by_label_THM] >>
     METIS_TAC[rich_listTheory.EL_MEM]
-  )
+  ) >>
+  strip_tac >>
+  qmatch_asmsub_rename_tac `BBlock_Ext b` >>
+  Q.EXISTS_TAC `BBlock_Ext b` >>
+  fs[bir_get_program_block_info_by_label_THM] >>
+  METIS_TAC[rich_listTheory.EL_MEM]
 QED
 
 Definition bir_blocks_of_prog_def:
@@ -81,75 +88,84 @@ val bir_is_well_typed_stmt_def = Define `
   (bir_is_well_typed_stmt (BStmtE s) = bir_is_well_typed_stmtE s) /\
   (bir_is_well_typed_stmt (BStmtB s) = bir_is_well_typed_stmtB s)`;
 
-(* TODO: Well-typedness criteria for extern block - additional proof obligation instead of blanket F? *)
+Definition bir_is_well_typed_ext_rel_def:
+  bir_is_well_typed_ext_rel R =
+    !s other_cores ext s' ext' var_name.
+      R (s,other_cores,ext) (s',ext')
+      ==>
+        bir_env_lookup_type var_name s.bst_environ =
+        bir_env_lookup_type var_name s'.bst_environ
+End
+
+(* type preservation is well-typedness criteria for extern block *)
+Definition bir_is_well_typed_ext_def:
+  bir_is_well_typed_ext ext_fun =
+    bir_is_well_typed_ext_rel ext_fun.beb_relation
+End
+
 val bir_is_well_typed_block_def = Define `bir_is_well_typed_block bl <=>
   case bl of
-  | BBlock_Stmts bl_stmts => 
+  | BBlock_Stmts bl_stmts =>
     EVERY bir_is_well_typed_stmtB bl_stmts.bb_statements /\
     bir_is_well_typed_stmtE bl_stmts.bb_last_statement
-  | BBlock_Ext ext_fun => F`;
+  | BBlock_Ext ext_fun => bir_is_well_typed_ext ext_fun`;
 
 val bir_is_well_typed_program_def = Define `bir_is_well_typed_program (BirProgram p) <=>
   (EVERY bir_is_well_typed_block p)`;
 
-val bir_is_well_typed_block_ALT_DEF = store_thm ("bir_is_well_typed_block_ALT_DEF",
-  ``!bl. bir_is_well_typed_block bl <=>
+Theorem bir_is_well_typed_block_ALT_DEF:
+  !bl. bir_is_well_typed_block bl <=>
       case bl of
-      | BBlock_Stmts bl_stmts => 
-        (!stmt. stmt IN bir_stmts_of_block bl ==> bir_is_well_typed_stmt stmt)
-      | BBlock_Ext ext_fun => F``,
-rpt strip_tac >>
-Cases_on `bl` >> (
-  EQ_TAC >>
-  fs [bir_is_well_typed_block_def, bir_stmts_of_block_def,
-    IN_INSERT, IN_IMAGE, DISJ_IMP_THM, PULL_EXISTS, FORALL_AND_THM,
-    bir_is_well_typed_stmt_def, listTheory.EVERY_MEM]
-));
+      | BBlock_Stmts bl_stmts =>
+        (!stmt. BSGen stmt IN bir_stmts_of_block bl ==> bir_is_well_typed_stmt stmt)
+      | BBlock_Ext ext_fun => bir_is_well_typed_ext ext_fun
+Proof
+  rpt strip_tac >>
+  Cases_on `bl` >>
+    fs [EQ_IMP_THM,bir_is_well_typed_block_def, bir_stmts_of_block_def,
+      IN_INSERT, IN_IMAGE, DISJ_IMP_THM, PULL_EXISTS, FORALL_AND_THM,
+      bir_is_well_typed_stmt_def, listTheory.EVERY_MEM]
+QED
 
-val bir_is_well_typed_program_ALT_DEF = store_thm ("bir_is_well_typed_program_ALT_DEF",
-  ``!p. bir_is_well_typed_program p <=>
+Theorem bir_is_well_typed_program_ALT_DEF:
+  !p. bir_is_well_typed_program p <=>
     !bl. bl IN bir_blocks_of_prog p ==>
-    ~(bir_block_is_extern bl) /\
-    (!stmt. stmt IN bir_stmts_of_block bl ==> bir_is_well_typed_stmt stmt)``,
-
-Cases >>
-EQ_TAC >> (
-  SIMP_TAC std_ss [bir_is_well_typed_program_def,
+    (!stmt. BSGen stmt IN bir_stmts_of_block bl ==> bir_is_well_typed_stmt stmt)
+    /\ (!stmt. BSExt stmt IN bir_stmts_of_block bl ==> bir_is_well_typed_ext_rel stmt)
+Proof
+  Cases >>
+  rw[EQ_IMP_THM,bir_is_well_typed_program_def,
     bir_stmts_of_prog_def, IN_BIGUNION, IN_IMAGE, PULL_EXISTS,
-    listTheory.EVERY_MEM, bir_is_well_typed_block_ALT_DEF, bir_block_is_extern_def] >>
-  rpt strip_tac
-) >- (
-  Cases_on `bl` >> (
-    fs[bir_blocks_of_prog_def]
-  ) >>
-  RES_TAC >>
-  fs[]
-) >- (
-  fs[bir_blocks_of_prog_def] >>
-  RES_TAC >>
-  Cases_on `bl` >> (
-    fs[]
+    listTheory.EVERY_MEM, bir_is_well_typed_block_ALT_DEF,
+    bir_blocks_of_prog_def] >>
+  first_x_assum drule
+  >- (
+    qmatch_asmsub_rename_tac `bir_stmts_of_block bl` >>
+    Cases_on `bl` >>
+    fs[bir_is_well_typed_stmt_def,bir_stmts_of_block_def,bir_is_well_typed_ext_def]
+  ) >- (
+    qmatch_asmsub_rename_tac `bir_stmts_of_block bl` >>
+    Cases_on `bl` >>
+    fs[bir_is_well_typed_stmt_def,bir_stmts_of_block_def,bir_is_well_typed_ext_def]
+  ) >- (
+    qmatch_asmsub_rename_tac `MEM e l` >>
+    Cases_on `e` >>
+    fs[bir_blocks_of_prog_def,bir_is_well_typed_ext_def,bir_stmts_of_block_def]
   )
-) >- (
-  Cases_on `e` >> (
-    fs[bir_blocks_of_prog_def] >>
-    rpt strip_tac >>
-    res_tac
-  ) >>
+QED
+
+Theorem bir_get_current_statement_well_typed:
+  !p pc stmt. bir_is_well_typed_program p /\
+    bir_get_current_statement p pc = SOME $ BSGen stmt ==>
+      bir_is_well_typed_stmt stmt
+Proof
+  Cases >> rpt strip_tac >>
+  imp_res_tac bir_get_current_statement_stmts_of_prog >>
+  gvs[bir_is_well_typed_program_ALT_DEF,bir_stmts_of_prog_def,bir_blocks_of_prog_def] >>
+  fs[IMP_CONJ_THM,FORALL_AND_THM] >>
+  first_x_assum $ drule_then irule >>
   fs[]
-)
-);
-
-
-val bir_get_current_statement_well_typed = store_thm ("bir_get_current_statement_well_typed",
-  ``!p pc stmt. (bir_is_well_typed_program p /\
-                (bir_get_current_statement p pc = SOME stmt)) ==>
-                bir_is_well_typed_stmt stmt``,
-fs[bir_is_well_typed_program_ALT_DEF, bir_get_current_statement_stmts_of_prog]
-rpt strip_tac >>
-(* TODO: If bir_get_current_statement is SOME, pc must point to a normal BIR block *)
-cheat);
-
+QED
 
 (* ------------------------------------------------------------------------- *)
 (*  Variables of statements and programs                                     *)
@@ -185,6 +201,21 @@ val bir_vars_of_stmt_def = Define `
   (bir_vars_of_stmt (BStmtE s) = bir_vars_of_stmtE s) /\
   (bir_vars_of_stmt (BStmtB s) = bir_vars_of_stmtB s)`;
 
+Definition bmc_vars_of_stmt_def:
+  bmc_vars_of_stmt (BStmtE s) = bir_vars_of_stmtE s /\
+  bmc_vars_of_stmt (BStmtB s) = bmc_vars_of_stmtB s
+End
+
+Definition bir_vars_of_stmt_kind_def:
+  bir_vars_of_stmt_kind (BSGen stmt) = bir_vars_of_stmt stmt /\
+  bir_vars_of_stmt_kind _ = {}
+End
+
+Definition bmc_vars_of_stmt_kind_def:
+  bmc_vars_of_stmt_kind (BSGen stmt) = bmc_vars_of_stmt stmt /\
+  bmc_vars_of_stmt_kind _ = {}
+End
+
 val bir_vars_of_block_def = Define `bir_vars_of_block bl <=>
   ((BIGUNION (IMAGE bir_vars_of_stmtB (LIST_TO_SET bl.bb_statements))) UNION
    (bir_vars_of_stmtE bl.bb_last_statement))`;
@@ -193,47 +224,91 @@ val bmc_vars_of_block_def = Define `bmc_vars_of_block bl <=>
   ((BIGUNION (IMAGE bmc_vars_of_stmtB (LIST_TO_SET bl.bb_statements))) UNION
    (bir_vars_of_stmtE bl.bb_last_statement))`;
 
+Definition bir_vars_of_generic_block_def:
+  bir_vars_of_generic_block (BBlock_Stmts bl) = bir_vars_of_block bl /\
+  bir_vars_of_generic_block _ = {}
+End
+
+Definition bmc_vars_of_generic_block_def:
+  bmc_vars_of_generic_block (BBlock_Stmts bl) = bmc_vars_of_block bl /\
+  bmc_vars_of_generic_block _ = {}
+End
+
 val bir_vars_of_program_def = Define `bir_vars_of_program (BirProgram p) <=>
-  (BIGUNION (IMAGE bir_vars_of_block (LIST_TO_SET p)))`;
+  (BIGUNION (IMAGE bir_vars_of_generic_block (LIST_TO_SET p)))`;
 
 val bmc_vars_of_program_def = Define `bmc_vars_of_program (BirProgram p) <=>
-  (BIGUNION (IMAGE bmc_vars_of_block (LIST_TO_SET p)))`;
+  (BIGUNION (IMAGE bmc_vars_of_generic_block (LIST_TO_SET p)))`;
 
-val bir_vars_of_block_ALT_DEF = store_thm ("bir_vars_of_block_ALT_DEF",
-  ``!bl. bir_vars_of_block bl = BIGUNION (IMAGE bir_vars_of_stmt (bir_stmts_of_block bl))``,
+Theorem bir_vars_of_generic_block_ALT_DEF:
+  !bl. bir_vars_of_generic_block bl  = BIGUNION (IMAGE bir_vars_of_stmt_kind (bir_stmts_of_block bl))
+Proof
+  SIMP_TAC std_ss [EXTENSION] >>
+  Induct >>
+  SIMP_TAC (std_ss++boolSimps.EQUIV_EXTRACT_ss) [bir_stmts_of_block_def,
+    IN_BIGUNION, PULL_EXISTS, IN_UNION,
+    IN_IMAGE, IN_INSERT, LEFT_AND_OVER_OR, EXISTS_OR_THM] >>
+  dsimp[AllCaseEqs(),bir_vars_of_generic_block_def,bir_vars_of_stmt_kind_def,bir_vars_of_stmt_def,bir_vars_of_block_def] >>
+  fs[LEFT_AND_OVER_OR,EXISTS_OR_THM,PULL_EXISTS,AC DISJ_ASSOC DISJ_COMM]
+QED
 
-SIMP_TAC std_ss [EXTENSION] >>
-SIMP_TAC (std_ss++boolSimps.EQUIV_EXTRACT_ss) [bir_vars_of_block_def, bir_stmts_of_block_def,
-  IN_BIGUNION, PULL_EXISTS, IN_UNION, bir_vars_of_stmt_def,
-  IN_IMAGE, IN_INSERT, LEFT_AND_OVER_OR, EXISTS_OR_THM]);
+Theorem bmc_vars_of_generic_block_ALT_DEF:
+  !bl. bmc_vars_of_generic_block bl  = BIGUNION (IMAGE bmc_vars_of_stmt_kind (bir_stmts_of_block bl))
+Proof
+  SIMP_TAC std_ss [EXTENSION] >>
+  Induct >>
+  SIMP_TAC (std_ss++boolSimps.EQUIV_EXTRACT_ss) [bir_stmts_of_block_def,
+    IN_BIGUNION, PULL_EXISTS, IN_UNION,
+    IN_IMAGE, IN_INSERT, LEFT_AND_OVER_OR, EXISTS_OR_THM] >>
+  dsimp[AllCaseEqs(),bmc_vars_of_generic_block_def,bmc_vars_of_stmt_kind_def,bmc_vars_of_stmt_def,bmc_vars_of_block_def] >>
+  fs[LEFT_AND_OVER_OR,EXISTS_OR_THM,PULL_EXISTS,AC DISJ_ASSOC DISJ_COMM]
+QED
 
+Theorem bir_vars_of_program_ALT_DEF:
+  !p. bir_vars_of_program p =
+        BIGUNION (IMAGE bir_vars_of_stmt_kind (bir_stmts_of_prog p))
+Proof
+  Cases >>
+  SIMP_TAC std_ss [EXTENSION] >>
+  SIMP_TAC std_ss [bir_vars_of_program_def, bir_stmts_of_prog_def,
+    IN_BIGUNION, PULL_EXISTS, IN_IMAGE, bir_vars_of_generic_block_ALT_DEF] >>
+  fs[AC CONJ_ASSOC CONJ_COMM,Once SWAP_EXISTS_THM]
+QED
 
-val bir_vars_of_program_ALT_DEF = store_thm ("bir_vars_of_program_ALT_DEF",
-  ``!p. bir_vars_of_program p =
-        BIGUNION (IMAGE bir_vars_of_stmt (bir_stmts_of_prog p))``,
+Theorem bmc_vars_of_program_ALT_DEF:
+  !p. bmc_vars_of_program p =
+        BIGUNION (IMAGE bmc_vars_of_stmt_kind (bir_stmts_of_prog p))
+Proof
+  Cases >>
+  SIMP_TAC std_ss [EXTENSION] >>
+  SIMP_TAC std_ss [bmc_vars_of_program_def, bir_stmts_of_prog_def,
+    IN_BIGUNION, PULL_EXISTS, IN_IMAGE, bmc_vars_of_generic_block_ALT_DEF] >>
+  fs[AC CONJ_ASSOC CONJ_COMM,Once SWAP_EXISTS_THM]
+QED
 
-Cases >>
-SIMP_TAC std_ss [EXTENSION] >>
-SIMP_TAC std_ss [bir_vars_of_program_def, bir_stmts_of_prog_def,
-  IN_BIGUNION, PULL_EXISTS, IN_IMAGE, bir_vars_of_block_ALT_DEF] >>
-METIS_TAC[]);
+Theorem bir_get_current_statement_vars_of:
+  !p pc stmt. (bir_get_current_statement p pc = SOME stmt) ==>
+                bir_vars_of_stmt_kind stmt SUBSET bir_vars_of_program p
+Proof
+  SIMP_TAC std_ss [bir_vars_of_program_ALT_DEF, SUBSET_DEF, IN_BIGUNION,
+    IN_IMAGE, PULL_EXISTS] >>
+  METIS_TAC[bir_get_current_statement_stmts_of_prog]
+QED
 
-
-val bir_get_current_statement_vars_of = store_thm ("bir_get_current_statement_vars_of",
-  ``!p pc stmt. (bir_get_current_statement p pc = SOME stmt) ==>
-                bir_vars_of_stmt stmt SUBSET bir_vars_of_program p``,
-
-SIMP_TAC std_ss [bir_vars_of_program_ALT_DEF, SUBSET_DEF, IN_BIGUNION,
-  IN_IMAGE, PULL_EXISTS] >>
-METIS_TAC[bir_get_current_statement_stmts_of_prog]);
-
+Theorem bmc_get_current_statement_vars_of:
+  !p pc stmt. (bir_get_current_statement p pc = SOME stmt) ==>
+                bmc_vars_of_stmt_kind stmt SUBSET bmc_vars_of_program p
+Proof
+  SIMP_TAC std_ss [bmc_vars_of_program_ALT_DEF, SUBSET_DEF, IN_BIGUNION,
+    IN_IMAGE, PULL_EXISTS] >>
+  METIS_TAC[bir_get_current_statement_stmts_of_prog]
+QED
 
 val bir_vars_of_label_exp_THM_EQ_FOR_VARS = store_thm ("bir_vars_of_label_exp_THM_EQ_FOR_VARS",
-``!ext_map env1 env2 (ext_st:'ext_state_t) e. (bir_env_EQ_FOR_VARS (bir_vars_of_label_exp e) env1 env2) ==>
-                (bir_eval_label_exp ext_map e env1 ext_st = bir_eval_label_exp ext_map e env2 ext_st)``,
-Cases_on `e` >> (
-  SIMP_TAC std_ss [bir_eval_label_exp_def, bir_vars_of_label_exp_def]
-) >>
+``!env1 env2 (ext_st:'ext_state_t) e. (bir_env_EQ_FOR_VARS (bir_vars_of_label_exp e) env1 env2) ==>
+                (bir_eval_label_exp e env1 ext_st = bir_eval_label_exp e env2 ext_st)``,
+Cases_on `e` >>
+SIMP_TAC std_ss [bir_eval_label_exp_def, bir_vars_of_label_exp_def] >>
 METIS_TAC[bir_vars_of_exp_THM_EQ_FOR_VARS]);
 
 
@@ -244,18 +319,35 @@ METIS_TAC[bir_vars_of_exp_THM_EQ_FOR_VARS]);
 val bir_changed_vars_of_stmtB_def = Define `
   (bir_changed_vars_of_stmtB (BStmt_Assert ex) = {}) /\
   (bir_changed_vars_of_stmtB (BStmt_Assume ex) = {}) /\
-  (bir_changed_vars_of_stmtB (BStmt_Assign v ex) = {v}) /\
-  (bir_changed_vars_of_stmtB (BStmt_ExtPut _ _) = {})`;
+  (bir_changed_vars_of_stmtB (BStmt_Assign v ex) = {v})`;
 
 val bir_changed_vars_of_stmt_def = Define `
   (bir_changed_vars_of_stmt (BStmtE s) = {}) /\
   (bir_changed_vars_of_stmt (BStmtB s) = bir_changed_vars_of_stmtB s)`;
 
+Definition bmc_changed_vars_of_stmtB_def:
+  bmc_changed_vars_of_stmtB (BMCStmt_Load var _ _ _ _ _) = { var } /\
+  bmc_changed_vars_of_stmtB (BMCStmt_Store var _ _ _ _ _) = { var } /\
+  bmc_changed_vars_of_stmtB (BMCStmt_Amo var _ _ _ _) = { var } /\
+  bmc_changed_vars_of_stmtB (BMCStmt_Assign var _) = { var } /\
+  bmc_changed_vars_of_stmtB _ = {}
+End
+
+Definition bmc_changed_vars_of_stmt_def:
+  bmc_changed_vars_of_stmt (BStmtE s) = {} /\
+  bmc_changed_vars_of_stmt (BStmtB s) = bir_changed_vars_of_stmtB s
+End
+
 val bir_changed_vars_of_block_def = Define `bir_changed_vars_of_block bl <=>
   (BIGUNION (IMAGE bir_changed_vars_of_stmtB (LIST_TO_SET bl.bb_statements)))`;
 
+Definition bir_changed_vars_of_generic_block_def:
+  bir_changed_vars_of_generic_block (BBlock_Stmts x) = bir_changed_vars_of_block x /\
+  bir_changed_vars_of_generic_block (BBlock_Ext _) = {} (* may be state-dependent *)
+End
+
 val bir_changed_vars_of_program_def = Define `bir_changed_vars_of_program (BirProgram p) <=>
-  (BIGUNION (IMAGE bir_changed_vars_of_block (LIST_TO_SET p)))`;
+  (BIGUNION (IMAGE bir_changed_vars_of_generic_block (LIST_TO_SET p)))`;
 
 val bir_changed_vars_of_stmtB_SUBST_all_vars = store_thm (
   "bir_changed_vars_of_stmtB_SUBST_all_vars",
