@@ -26,7 +26,9 @@ sig
    (* bir_label_exp_t *)
    (*******************)
 
-   val bir_label_exp_t_ty : hol_type
+   val mk_bir_label_exp_t_ty    : hol_type -> hol_type
+   val dest_bir_label_exp_t_ty  : hol_type -> hol_type
+   val is_bir_label_exp_t_ty    : hol_type -> bool
 
    val BLE_Label_tm   : term
    val dest_BLE_Label : term -> term
@@ -59,7 +61,9 @@ sig
    (* bir_stmt_basic_t *)
    (********************)
 
-   val bir_stmt_basic_t_ty   : hol_type
+   val mk_bir_stmt_basic_t_ty    : hol_type -> hol_type
+   val dest_bir_stmt_basic_t_ty  : hol_type -> hol_type
+   val is_bir_stmt_basic_t_ty    : hol_type -> bool
 
    val BStmt_Assign_tm   : term
    val dest_BStmt_Assign : term -> term * term
@@ -75,19 +79,21 @@ sig
    val dest_BStmt_Assume : term -> term
    val is_BStmt_Assume   : term -> bool
    val mk_BStmt_Assume   : term -> term
-
+(*
    val BStmt_ExtPut_tm   : term
    val dest_BStmt_ExtPut : term -> term * term
    val is_BStmt_ExtPut   : term -> bool
    val mk_BStmt_ExtPut   : term * term -> term
-
+*)
 
    (******************)
    (* bir_stmt_end_t *)
    (******************)
 
    (* The type itself *)
-   val bir_stmt_end_t_ty  : hol_type
+   val mk_bir_stmt_end_t_ty    : hol_type -> hol_type
+   val dest_bir_stmt_end_t_ty  : hol_type -> hol_type
+   val is_bir_stmt_end_t_ty    : hol_type -> bool
 
    val BStmt_Jmp_tm   : term
    val dest_BStmt_Jmp : term -> term
@@ -253,19 +259,19 @@ sig
    (***************************)
 
    val bir_exec_step_tm   : term
-   val dest_bir_exec_step : term -> term * term * term
+   val dest_bir_exec_step : term -> term * term
    val is_bir_exec_step   : term -> bool
-   val mk_bir_exec_step   : term * term * term -> term
+   val mk_bir_exec_step   : term * term -> term
 
    val bir_exec_steps_tm   : term
-   val dest_bir_exec_steps : term -> term * term * term
+   val dest_bir_exec_steps : term -> term * term
    val is_bir_exec_steps   : term -> bool
-   val mk_bir_exec_steps   : term * term * term -> term
+   val mk_bir_exec_steps   : term * term -> term
 
    val bir_exec_step_n_tm   : term
-   val dest_bir_exec_step_n : term -> term * term * term * term
+   val dest_bir_exec_step_n : term -> term * term * term
    val is_bir_exec_step_n   : term -> bool
-   val mk_bir_exec_step_n   : term * term * term * term -> term
+   val mk_bir_exec_step_n   : term * term * term -> term
 
    val bir_get_program_block_info_by_label_tm   : term
    val dest_bir_get_program_block_info_by_label : term -> term * term

@@ -7,7 +7,9 @@ sig
    (*************)
 
    (* The type itself *)
-   val bir_exp_t_ty : hol_type
+   val mk_bir_exp_t_ty      : hol_type -> hol_type;
+   val dest_bir_exp_t_ty    : hol_type -> hol_type;
+   val is_bir_exp_t_ty      : hol_type -> bool;
 
    val BExp_BinExp_tm       : term;
    val BExp_BinPred_tm      : term;
@@ -62,8 +64,8 @@ sig
    val mk_BExp_UnaryExp     : term * term -> term;
 
    val bir_eval_exp_tm      : term;
-   val mk_bir_eval_exp      : term * term * term * term -> term;
-   val dest_bir_eval_exp    : term -> term * term * term * term;
+   val dest_bir_eval_exp    : term -> term * term * term;
    val is_bir_eval_exp      : term -> bool;
+   val mk_bir_eval_exp      : term * term * term -> term;
 
 end

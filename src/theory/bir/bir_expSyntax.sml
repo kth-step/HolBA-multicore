@@ -26,7 +26,14 @@ val syntax_fns4 = syntax_fns 4 HolKernel.dest_quadop HolKernel.mk_quadop;
 (* bir_exp_t *)
 (*************)
 
-val bir_exp_t_ty = mk_type ("bir_exp_t", []);
+fun mk_bir_exp_t_ty ty = mk_type ("bir_exp_t", [ty]);
+
+fun dest_bir_exp_t_ty ty =
+   case total dest_thy_type ty
+    of SOME {Tyop="bir_exp_t", Thy="bir_exp", Args=[ty]} => ty
+     | other => raise ERR "dest_bir_exp_t_ty" ""
+
+val is_bir_exp_t_ty = can dest_bir_exp_t_ty;
 
 val (BExp_Const_tm, mk_BExp_Const, dest_BExp_Const, is_BExp_Const) = syntax_fns1 "BExp_Const";
 val (BExp_MemConst_tm, mk_BExp_MemConst, dest_BExp_MemConst, is_BExp_MemConst) = syntax_fns3 "BExp_MemConst";
@@ -43,6 +50,6 @@ val (BExp_Store_tm, mk_BExp_Store, dest_BExp_Store, is_BExp_Store) = syntax_fns4
 
 
 
-val (bir_eval_exp_tm, mk_bir_eval_exp, dest_bir_eval_exp, is_bir_eval_exp) = syntax_fns4 "bir_eval_exp";
+val (bir_eval_exp_tm, mk_bir_eval_exp, dest_bir_eval_exp, is_bir_eval_exp) = syntax_fns3 "bir_eval_exp";
 
 end

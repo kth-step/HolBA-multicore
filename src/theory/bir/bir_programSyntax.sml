@@ -34,7 +34,12 @@ fun mk_BL_Label_string s = mk_BL_Label (stringSyntax.fromMLstring s)
 
 (* bir_label_exp_t *)
 
-val bir_label_exp_t_ty = mk_type ("bir_label_exp_t", []);
+fun mk_bir_label_exp_t_ty ty = mk_type ("bir_label_exp_t", [ty]);
+fun dest_bir_label_exp_t_ty ty =
+   case total dest_thy_type ty
+    of SOME {Tyop="bir_label_exp_t", Thy="bir_program", Args=[ty]} => ty
+     | other => raise ERR "dest_bir_label_exp_t_ty" ""
+val is_bir_label_exp_t_ty = can dest_bir_label_exp_t_ty;
 
 val (BLE_Label_tm,  mk_BLE_Label, dest_BLE_Label, is_BLE_Label)  = syntax_fns1 "BLE_Label";
 val (BLE_Exp_tm,  mk_BLE_Exp, dest_BLE_Exp, is_BLE_Exp)  = syntax_fns1 "BLE_Exp";
@@ -49,16 +54,26 @@ val (BM_ReadWrite_tm,  is_BM_ReadWrite)  = syntax_fns0 "BM_ReadWrite";
 
 (* bir_stmt_basic_t *)
 
-val bir_stmt_basic_t_ty = mk_type ("bir_stmt_basic_t", []);
+fun mk_bir_stmt_basic_t_ty ty= mk_type ("bir_stmt_basic_t", [ty]);
+fun dest_bir_stmt_basic_t_ty ty =
+   case total dest_thy_type ty
+    of SOME {Tyop="bir_stmt_basic_t", Thy="bir_program", Args=[ty]} => ty
+     | other => raise ERR "dest_bir_stmt_basic_t_ty" ""
+val is_bir_stmt_basic_t_ty = can dest_bir_stmt_basic_t_ty;
 
 val (BStmt_Assign_tm,  mk_BStmt_Assign, dest_BStmt_Assign, is_BStmt_Assign)  = syntax_fns2 "BStmt_Assign";
 val (BStmt_Assert_tm,  mk_BStmt_Assert, dest_BStmt_Assert, is_BStmt_Assert)  = syntax_fns1 "BStmt_Assert";
 val (BStmt_Assume_tm,  mk_BStmt_Assume, dest_BStmt_Assume, is_BStmt_Assume)  = syntax_fns1 "BStmt_Assume";
-val (BStmt_ExtPut_tm,  mk_BStmt_ExtPut, dest_BStmt_ExtPut, is_BStmt_ExtPut)  = syntax_fns2 "BStmt_ExtPut";
+(* val (BStmt_ExtPut_tm,  mk_BStmt_ExtPut, dest_BStmt_ExtPut, is_BStmt_ExtPut)  = syntax_fns2 "BStmt_ExtPut"; *)
 
 (* bir_stmt_end_t *)
 
-val bir_stmt_end_t_ty = mk_type ("bir_stmt_end_t", []);
+fun mk_bir_stmt_end_t_ty ty = mk_type ("bir_stmt_end_t", [ty]);
+fun dest_bir_stmt_end_t_ty ty =
+   case total dest_thy_type ty
+    of SOME {Tyop="bir_stmt_end_t", Thy="bir_program", Args=[ty]} => ty
+     | other => raise ERR "dest_bir_stmt_end_t_ty" ""
+val is_bir_stmt_end_t_ty = can dest_bir_stmt_end_t_ty;
 
 val (BStmt_Jmp_tm,  mk_BStmt_Jmp, dest_BStmt_Jmp, is_BStmt_Jmp)  = syntax_fns1 "BStmt_Jmp";
 val (BStmt_CJmp_tm,  mk_BStmt_CJmp, dest_BStmt_CJmp, is_BStmt_CJmp)  = syntax_fns3 "BStmt_CJmp";
@@ -274,11 +289,11 @@ val (bir_state_is_terminated_tm,  mk_bir_state_is_terminated, dest_bir_state_is_
 
 
 (* various functions *)
-val (bir_exec_step_tm,  mk_bir_exec_step, dest_bir_exec_step, is_bir_exec_step)  = syntax_fns3 "bir_exec_step";
+val (bir_exec_step_tm,  mk_bir_exec_step, dest_bir_exec_step, is_bir_exec_step)  = syntax_fns2 "bir_exec_step";
 
-val (bir_exec_steps_tm,  mk_bir_exec_steps, dest_bir_exec_steps, is_bir_exec_steps)  = syntax_fns3 "bir_exec_steps";
+val (bir_exec_steps_tm,  mk_bir_exec_steps, dest_bir_exec_steps, is_bir_exec_steps)  = syntax_fns2 "bir_exec_steps";
 
-val (bir_exec_step_n_tm,  mk_bir_exec_step_n, dest_bir_exec_step_n, is_bir_exec_step_n)  = syntax_fns4 "bir_exec_step_n";
+val (bir_exec_step_n_tm,  mk_bir_exec_step_n, dest_bir_exec_step_n, is_bir_exec_step_n)  = syntax_fns3 "bir_exec_step_n";
 
 val (bir_get_program_block_info_by_label_tm,  mk_bir_get_program_block_info_by_label, dest_bir_get_program_block_info_by_label, is_bir_get_program_block_info_by_label)  = syntax_fns2 "bir_get_program_block_info_by_label";
 
