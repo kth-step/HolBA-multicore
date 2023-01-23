@@ -345,6 +345,37 @@ Proof
   >> fs[mem_is_loc_append]
 QED
 
+(* function that can be reused in abstract models, e.g. like
+   s' = (bir_state_fulful_view_updates s t loc v_addr v_data acq rel xcl) s'
+   enforcing only some updates
+*)
+Definition bir_state_fulful_view_updates_def:
+  bir_state_fulful_view_updates s t loc v_addr v_data acq rel xcl = λs'. s' with <|
+    bst_coh    updated_by (loc =+ t);
+    bst_v_wOld := MAX s.bst_v_wOld t;
+    bst_v_CAP  := MAX s.bst_v_CAP v_addr;
+    bst_v_Rel  := MAX s.bst_v_Rel (if (rel /\ acq) then t else 0);
+    bst_v_rNew := if (rel /\ acq /\ xcl) then (MAX s.bst_v_rNew t) else s.bst_v_rNew;
+    bst_v_wNew := if (rel /\ acq /\ xcl) then (MAX s.bst_v_wNew t) else s.bst_v_wNew;
+    bst_fwdb   updated_by (loc =+ <| fwdb_time := t; fwdb_view := MAX v_addr v_data; fwdb_xcl := xcl |>);
+    bst_xclb   := if xcl then NONE else s.bst_xclb;
+  |>
+End
+
+Definition bir_state_read_view_updates_def:
+  bir_state_read_view_updates s t loc v_addr v_post acq rel xcl = λs'. s' with <|
+    bst_coh    updated_by (loc =+ MAX (s.bst_coh loc) v_post);
+    bst_v_rOld := MAX s.bst_v_rOld v_post;
+    bst_v_rNew := if acq then (MAX s.bst_v_rNew v_post) else s.bst_v_rNew;
+    bst_v_wNew := if acq then (MAX s.bst_v_wNew v_post) else s.bst_v_wNew;
+    bst_v_Rel  := MAX s.bst_v_Rel (if (rel /\ acq) then v_post else 0);
+    bst_v_CAP  := MAX s.bst_v_CAP v_addr;
+    bst_xclb   := if xcl
+                then SOME <| xclb_time := t; xclb_view := v_post |>
+                else s.bst_xclb
+  |>
+End
+
 (* core-local steps that don't affect memory *)
 Inductive clstep:
 (* read *)
@@ -360,19 +391,9 @@ Inductive clstep:
  /\ v_post = MAX v_pre (mem_read_view (s.bst_fwdb(l)) t)
  /\ SOME new_env = env_update_cast64 (bir_var_name var) v (bir_var_type var) (s.bst_environ)
  (* TODO: Update viewenv by v_addr or v_post? *)
- /\ s' = s with <| bst_viewenv updated_by (\env. FUPDATE env (var, v_post));
+ /\ s' = (bir_state_read_view_updates s t l v_addr v_post acq rel xcl s)
+          with <| bst_viewenv updated_by (\env. FUPDATE env (var, v_post));
                   bst_environ := new_env;
-                  bst_coh := (λlo. if lo = l
-                                   then MAX (s.bst_coh l) v_post
-                                   else s.bst_coh(lo));
-                  bst_v_rOld := MAX s.bst_v_rOld v_post;
-                  bst_v_rNew := if acq then (MAX s.bst_v_rNew v_post) else s.bst_v_rNew;
-                  bst_v_wNew := if acq then (MAX s.bst_v_wNew v_post) else s.bst_v_wNew;
-                  bst_v_Rel := MAX s.bst_v_Rel (if (rel /\ acq) then v_post else 0);
-                  bst_v_CAP := MAX s.bst_v_CAP v_addr;
-                  bst_xclb := if xcl
-                              then SOME <| xclb_time := t; xclb_view := v_post |>
-                              else s.bst_xclb;
                   bst_pc := if xcl
                             then (bir_pc_next o bir_pc_next) s.bst_pc
                             else bir_pc_next s.bst_pc |>
@@ -419,23 +440,10 @@ clstep p cid tp (s,ext) M [] (s',ext))
  /\ SOME new_env = fulfil_update_env p s
  (* TODO: Update viewenv by v_post or something else? *)
  /\ SOME new_viewenv = fulfil_update_viewenv p s v_post
- /\ s' = s with <| bst_viewenv := new_viewenv;
+ /\ s' = (bir_state_fulful_view_updates s t l v_addr v_data acq rel xcl s)
+           with <| bst_viewenv := new_viewenv;
                    bst_prom updated_by (FILTER (\t'. t' <> t));
                    bst_environ := new_env;
-                   bst_coh     updated_by (l =+ v_post);
-                   bst_v_wOld := MAX s.bst_v_wOld v_post;
-                   bst_v_CAP := MAX s.bst_v_CAP v_addr;
-                   bst_v_Rel := MAX s.bst_v_Rel (if (rel /\ acq) then v_post else 0);
-                   bst_v_rNew := if (rel /\ acq /\ xcl) then (MAX s.bst_v_rNew v_post) else s.bst_v_rNew;
-                   bst_v_wNew := if (rel /\ acq /\ xcl) then (MAX s.bst_v_wNew v_post) else s.bst_v_wNew;
-                   bst_fwdb := (\lo. if lo = l
-                                     then <| fwdb_time := t;
-                                             fwdb_view := MAX v_addr v_data;
-                                             fwdb_xcl := xcl |>
-                                     else s.bst_fwdb(lo));
-                   bst_xclb := if xcl
-                               then NONE
-                               else s.bst_xclb;
                    bst_pc := if xcl
                              then (bir_pc_next o bir_pc_next o bir_pc_next) s.bst_pc
                              else bir_pc_next s.bst_pc |>

@@ -277,10 +277,13 @@ Theorem clstep_preserves_wf_fwdb:
 Proof
   rpt strip_tac
   >> fs[clstep_cases]
-  >> fs[well_formed_fwdb_def, latest_def]
+  >> fs[well_formed_fwdb_def, latest_def, bir_state_read_view_updates_def,
+    bir_state_fulful_view_updates_def]
   >~ [`BMCStmt_Load`]
   >- (
-    Cases_on ‘l = l'’ >> fs[]
+    qmatch_asmsub_abbrev_tac `latest_t l' M t _`
+    >> qmatch_goalsub_abbrev_tac `latest l _ _`
+    >> Cases_on ‘l = l'’ >> fs[combinTheory.APPLY_UPDATE_THM]
     >> ‘(s.bst_fwdb l').fwdb_time ≤ latest l' (s.bst_coh l') M’ by fs[]
     >> suff_tac “latest l' (s.bst_coh l') M <=
                 latest l'
@@ -290,7 +293,8 @@ Proof
                           (MAX (MAX v_addr s.bst_v_rNew)
                             (if acq ∧ rel then s.bst_v_Rel else 0))
                           (if acq ∧ rel then MAX s.bst_v_rOld s.bst_v_wOld else 0))
-                          (mem_read_view (s.bst_fwdb l') t))) M” >- fs[]
+                          (mem_read_view (s.bst_fwdb l') t))) M”
+    >- fs[AC arithmeticTheory.MAX_ASSOC arithmeticTheory.MAX_COMM]
     >> fs[latest_max]
   )
   >~ [`BMCStmt_Store`]
@@ -348,7 +352,7 @@ QED
 Theorem well_formed_xclb_bst_coh_update:
   !M s xclb v_post l.
     well_formed_xclb M s.bst_coh xclb
-    /\ s.bst_coh l < v_post
+    /\ s.bst_coh l <= v_post
     ==> well_formed_xclb M s.bst_coh(|l |-> v_post|) xclb
 Proof
   rw[well_formed_xclb_def,combinTheory.APPLY_UPDATE_THM]
@@ -439,12 +443,13 @@ Proof
   )
   >~ [`BMCStmt_Load`]
   >- (
-    qmatch_asmsub_abbrev_tac `<|xclb_time:=_;xclb_view:=v_post|>`
+    fs[bir_state_read_view_updates_def,combinTheory.APPLY_UPDATE_THM]
+    >> qmatch_asmsub_abbrev_tac `<|xclb_time:=_;xclb_view:=v_post|>`
     >> Cases_on `xcl` >> gvs[]
     >~ [`SOME (_:xclb_t)`]
     >- (
       imp_res_tac mem_read_LENGTH
-      >> simp[well_formed_xclb_def]
+      >> simp[well_formed_xclb_def,combinTheory.APPLY_UPDATE_THM]
       >> rpt gen_tac >> strip_tac
       >> drule_all_then (fs o single) mem_read_mem_is_loc
       >> qmatch_asmsub_rename_tac `mem_is_loc M t l`
@@ -461,7 +466,7 @@ Proof
       >> qunabbrev_tac `v_post`
       >> simp[arithmeticTheory.MAX_DEF,mem_read_view_def]
     )
-    >> fs[well_formed_xclb_def]
+    >> fs[well_formed_xclb_def,combinTheory.APPLY_UPDATE_THM]
     >> rpt gen_tac >> strip_tac
     >> first_x_assum $ drule_all_then strip_assume_tac
     >> qmatch_goalsub_abbrev_tac `COND cond' _ _`
@@ -471,7 +476,10 @@ Proof
     >> fs[latest_max]
   )
   >~ [`BMCStmt_Store`]
-  >- (rpt strip_tac >> fs[well_formed_xclb_bst_coh_update])
+  >- (
+    rpt strip_tac >>
+    fs[well_formed_xclb_bst_coh_update,bir_state_fulful_view_updates_def]
+  )
   >~ [`BMCStmt_Amo`]
   >- (rpt strip_tac >> fs[well_formed_xclb_bst_coh_update])
   >~ [`BSExt R`]
@@ -492,8 +500,9 @@ Proof
   rpt strip_tac
   >> drule_at_then (Pat `clstep _ _ _ _ _`) assume_tac clstep_preserves_wf_fwdb
   >> drule_at (Pat `clstep _ _ _ _ _`) clstep_preserves_wf_xclb
-  >> gs[wf_ext_def,wf_ext_fwdb_def,wf_ext_xclb_def,well_formed_def]
-  >> gs[clstep_cases]
+  >> gs[wf_ext_def,wf_ext_fwdb_def,wf_ext_xclb_def,well_formed_def,
+    bir_state_fulful_view_updates_def,bir_state_read_view_updates_def,
+    combinTheory.APPLY_UPDATE_THM,clstep_cases]
   >~ [`BMCStmt_Load var a_e opt_cast xcl acq rel`]
   >- (
     disch_then kall_tac (* removes wf_xclb *)
