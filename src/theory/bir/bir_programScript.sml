@@ -180,10 +180,13 @@ Definition bir_block_is_extern_def:
     | BBlock_Ext ext_bl => T
 End
 
-val bir_label_of_block_def = Define `bir_label_of_block bl =
-  case bl of
-  | BBlock_Stmts stmts_bl => stmts_bl.bb_label
-  | BBlock_Ext ext_bl => ext_bl.beb_label`;
+Definition bir_label_of_block_def:
+  bir_label_of_block bl =
+    case bl of
+    | BBlock_Stmts stmts_bl => stmts_bl.bb_label
+    | BBlock_Ext ext_bl => ext_bl.beb_label
+End
+
 
 val bir_labels_of_program_def = Define `bir_labels_of_program (BirProgram p) =
   MAP (\bl. bir_label_of_block bl) p`;
@@ -407,16 +410,10 @@ End
 Definition bir_exec_step_def:
   bir_exec_step p (state : bir_state_t, ext_st:'ext_state_t) =
   if (bir_state_is_terminated state) then (state, ext_st) else
-  case (bir_get_current_block p state.bst_pc) of
-  | NONE => (bir_state_set_failed state, ext_st)
-  | SOME bl =>
-    (case bl of
-     | BBlock_Stmts stmts_bl =>
-       (case (bir_get_current_statement p state.bst_pc) of
-        | NONE => (bir_state_set_failed state, ext_st)
-        | SOME $ BSGen stm => bir_exec_stmt p stm (state, ext_st)
-        | SOME $ BSExt rel => bir_exec_block_ext rel (state, ext_st))
-     | BBlock_Ext ext_bl => bir_exec_block_ext ext_bl.beb_relation (state, ext_st))
+    case (bir_get_current_statement p state.bst_pc) of
+    | NONE => (bir_state_set_failed state, ext_st)
+    | SOME $ BSGen stm => bir_exec_stmt p stm (state, ext_st)
+    | SOME $ BSExt rel => bir_exec_block_ext rel (state, ext_st)
 End
 
 
