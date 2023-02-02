@@ -1,3 +1,7 @@
+(*
+ Well-formedness and its preservation for promising multicore semantics
+*)
+
 open HolKernel Parse boolLib bossLib;
 open bir_promisingTheory;
 open bir_programTheory;
@@ -9,15 +13,16 @@ val _ = new_theory "bir_promising_wf";
 
 Theorem bir_exec_stmt_jmp_bst_eq:
   !s p lbl.
-     (bir_exec_stmt_jmp p lbl s).bst_v_rNew = s.bst_v_rNew
-  /\ (bir_exec_stmt_jmp p lbl s).bst_v_rOld = s.bst_v_rOld
-  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wNew = s.bst_v_wNew
-  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wOld = s.bst_v_wOld
-  /\ (bir_exec_stmt_jmp p lbl s).bst_v_Rel  = s.bst_v_Rel
-  /\ (bir_exec_stmt_jmp p lbl s).bst_viewenv  = s.bst_viewenv
-  /\ (!l. (bir_exec_stmt_jmp p lbl s).bst_coh l = s.bst_coh l)
+     (bir_exec_stmt_jmp p lbl s).bst_v_rNew   = (FST s).bst_v_rNew
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_rOld   = (FST s).bst_v_rOld
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wNew   = (FST s).bst_v_wNew
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wOld   = (FST s).bst_v_wOld
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_Rel    = (FST s).bst_v_Rel
+  /\ (bir_exec_stmt_jmp p lbl s).bst_viewenv  = (FST s).bst_viewenv
+  /\ (!l. (bir_exec_stmt_jmp p lbl s).bst_coh l = (FST s).bst_coh l)
 Proof
-  rw[bir_exec_stmt_jmp_def]
+  PairCases
+  >> rw[bir_exec_stmt_jmp_def]
   >> CASE_TAC
   >> fs[bir_state_set_typeerror_def,bir_exec_stmt_jmp_to_label_def]
   >> CASE_TAC
@@ -80,10 +85,44 @@ Definition well_formed_def:
            MEM (SUC t) s.bst_prom)
 End
 
+(* well-formed external block relation *)
+Definition wf_ext_fwdb_def:
+  wf_ext_fwdb p cid tp s e M =
+    !R s' e'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
+    /\ R (s,(tp,M),e) (s',e')
+    /\ (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
+    ==> (!l. well_formed_fwdb l M (s'.bst_coh l) (s'.bst_fwdb l))
+End
+
+Definition wf_ext_xclb_def:
+  wf_ext_xclb p cid tp s e M =
+    !R s' e'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
+    /\ R (s,(tp,M),e) (s',e')
+    /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
+    ==> (!xclb. s'.bst_xclb = SOME xclb ==> well_formed_xclb M s'.bst_coh xclb)
+End
+
+Definition wf_ext_def:
+  wf_ext p cid tp s e M =
+    !R s' e'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
+    /\ R (s,(tp,M),e) (s',e')
+    /\ well_formed cid M s ==> well_formed cid M s'
+End
+
+Definition wf_ext_p_def:
+  wf_ext_p p cid = !M s tp e. wf_ext p cid tp s e M
+End
+
 Definition well_formed_cores_def:
   well_formed_cores cores M <=>
     !cid p s. FLOOKUP cores cid = SOME $ Core cid p s
       ==> well_formed cid M s
+End
+
+Definition well_formed_ext_cores_def:
+  well_formed_ext_cores cores <=>
+    !cid p s. FLOOKUP cores cid = SOME $ Core cid p s
+      ==> wf_ext_p p cid
 End
 
 Theorem latest_bound:
@@ -229,9 +268,10 @@ Proof
 QED
 
 Theorem clstep_preserves_wf_fwdb:
-  !p cid s M prom s'.
+  !p cid tp s e M prom s' e'.
   (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
-  /\ clstep p cid s M prom s'
+  /\ wf_ext_fwdb p cid tp s e M
+  /\ clstep p cid tp (s,e) M prom (s',e')
   ==>
   (!l. well_formed_fwdb l M (s'.bst_coh l) (s'.bst_fwdb l))
 Proof
@@ -283,7 +323,16 @@ Proof
   >~ [`BStmt_CJmp`]
   >- fs[bir_exec_stmt_cjmp_mc_invar]
   >~ [`bmc_exec_general_stmt`]
-  >- drule_then (fs o single) bmc_exec_general_stmt_mc_invar
+  >- (
+    drule_then assume_tac bmc_exec_general_stmt_mc_invar
+    >> fs[]
+  )
+  >~ [`BSExt R`]
+  >- (
+    gs[wf_ext_fwdb_def,well_formed_fwdb_def]
+    >> first_x_assum drule
+    >> fs[]
+  )
 QED
 
 Theorem well_formed_fwdb_coh:
@@ -345,7 +394,7 @@ Theorem bir_eval_view_of_exp_bound:
   !a_e s M.
     well_formed_viewenv s.bst_viewenv M
     ==>
-    (bir_eval_view_of_exp a_e s.bst_viewenv) <= LENGTH M
+    bir_eval_view_of_exp a_e s.bst_viewenv <= LENGTH M
 Proof
   metis_tac[bir_eval_view_of_exp_wf]
 QED
@@ -362,9 +411,9 @@ Proof
 QED
 
 Theorem bir_eval_exp_view_bound:
-  !l a_e s M v_addr.
+  !l a_e s M v_addr ext.
     well_formed_viewenv s.bst_viewenv M
-    /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv
+    /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv ext
     ==>
     v_addr <= LENGTH M
 Proof
@@ -372,18 +421,22 @@ Proof
 QED
 
 Theorem clstep_preserves_wf_xclb:
-  !p cid s M prom s'.
+  !p cid tp s e M prom s' e'.
     (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
     /\ (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
     /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
-    /\ clstep p cid s M prom s'
+    /\ wf_ext_xclb p cid tp s e M
+    /\ clstep p cid tp (s,e) M prom (s',e')
     ==> (!xclb. s'.bst_xclb = SOME xclb ==> well_formed_xclb M s'.bst_coh xclb)
 Proof
   rw[clstep_cases] >> fs[]
   >~ [`BStmt_CJmp`]
   >- fs[bir_exec_stmt_cjmp_mc_invar]
   >~ [`bmc_exec_general_stmt`]
-  >- drule_then (fs o single) bmc_exec_general_stmt_mc_invar
+  >- (
+    drule_then assume_tac bmc_exec_general_stmt_mc_invar
+    >> fs[]
+  )
   >~ [`BMCStmt_Load`]
   >- (
     qmatch_asmsub_abbrev_tac `<|xclb_time:=_;xclb_view:=v_post|>`
@@ -421,25 +474,32 @@ Proof
   >- (rpt strip_tac >> fs[well_formed_xclb_bst_coh_update])
   >~ [`BMCStmt_Amo`]
   >- (rpt strip_tac >> fs[well_formed_xclb_bst_coh_update])
+  >~ [`BSExt R`]
+  >- (
+    gs[wf_ext_xclb_def]
+    >> first_x_assum $ drule_all_then irule
+  )
 QED
 
 Theorem clstep_preserves_wf:
-!p cid s M prom s'.
+  !p cid tp s e M prom s' e'.
   well_formed cid M s
-  /\ clstep p cid s M prom s'
+  /\ wf_ext p cid tp s e M
+  /\ clstep p cid tp (s,e) M prom (s',e')
 ==>
   well_formed cid M s'
 Proof
   rpt strip_tac
-  >> fs[well_formed_def]
   >> drule_at_then (Pat `clstep _ _ _ _ _`) assume_tac clstep_preserves_wf_fwdb
   >> drule_at (Pat `clstep _ _ _ _ _`) clstep_preserves_wf_xclb
-  >> gs[]
-  >> disch_then kall_tac (* removes wf_xclb *)
-  >> fs[clstep_cases]
-  >~ [`BMCStmt_Load`]
+  >> gs[wf_ext_def,wf_ext_fwdb_def,wf_ext_xclb_def,well_formed_def]
+  >> gs[clstep_cases]
+  >~ [`BMCStmt_Load var a_e opt_cast xcl acq rel`]
   >- (
-    ‘v_addr <= LENGTH M’
+    disch_then kall_tac (* removes wf_xclb *)
+    >> qmatch_asmsub_rename_tac
+      `(SOME l,v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv e`
+    >> ‘v_addr <= LENGTH M’
      by (fs[bir_eval_exp_view_def]
          >> drule bir_eval_view_of_exp_wf
          >> fs[])
@@ -448,16 +508,13 @@ Proof
     >> map_every qexists_tac [‘l’,‘s.bst_coh l’]
     >> gvs[]
     >> imp_res_tac mem_read_LENGTH
-    >> Cases_on ‘acq /\ rel’
-    >- (
-      rw[]
-      >> Cases_on ‘var' = var’
-      >> gvs[FLOOKUP_DEF, FLOOKUP_UPDATE]
-      >> irule mem_read_view_wf_fwdb
-      >> fs[]
-      >> qexists_tac ‘s.bst_coh l’ >> qexists_tac ‘l’
+    >> `mem_read_view (s.bst_fwdb l) t ≤ LENGTH M` by (
+      irule mem_read_view_wf_fwdb
+      >> qpat_x_assum `!l. well_formed_fwdb _ _ (s.bst_coh l) _` $ irule_at Any
       >> fs[]
     )
+    >> Cases_on `acq /\ rel`
+    >- (rw[] >> gvs[FLOOKUP_DEF, FLOOKUP_UPDATE,AllCaseEqs()])
     >> asm_rewrite_tac[]
     >> conj_tac
     >~ [`FLOOKUP (_ |+ _)`]
@@ -469,12 +526,13 @@ Proof
       >> rpt gen_tac
       >> BasicProvers.FULL_CASE_TAC
       >> gvs[]
-      >> rw[mem_read_view_def]
-      >> fs[well_formed_fwdb_def]
+      >> simp[arithmeticTheory.MAX_DEF]
     )
-    >> rw[mem_read_view_def]
-    >> ntac 2 $ first_x_assum $ qspec_then `l` mp_tac
-    >> gvs[well_formed_fwdb_def]
+    >> rpt strip_tac
+    >> BasicProvers.FULL_CASE_TAC
+    >> gns[]
+    >> BasicProvers.FULL_CASE_TAC
+    >> gns[]
   )
   >~ [`BMCStmt_Store`,`xclfail_update_env`]
   >- (
@@ -483,7 +541,8 @@ Proof
   )
   >~ [`BMCStmt_Store`]
   >- (
-    conj_tac
+    disch_then kall_tac (* removes wf_xclb *)
+    >> conj_tac
     >- (
       gvs[well_formed_viewenv_def,fulfil_update_viewenv_def,AllCaseEqs(),FLOOKUP_UPDATE,listTheory.EVERY_MEM]
       >> rw[] >> gvs[] >> metis_tac[]
@@ -527,7 +586,8 @@ Proof
   )
   >~ [`BMCStmt_Amo`]
   >- (
-    irule_at Any mem_read_view_wf_fwdb
+    disch_then kall_tac (* removes wf_xclb *)
+    >> irule_at Any mem_read_view_wf_fwdb
     >> map_every qexists_tac [‘l’,‘s.bst_coh l’]
     >> drule_then (irule_at Any) well_formed_viewenv_UPDATE
     >> imp_res_tac mem_get_LENGTH
@@ -554,16 +614,27 @@ Proof
   >- rw[]
   >~ [`BStmt_CJmp`]
   >- (
-    drule_then (rev_drule_then assume_tac) bir_eval_exp_view_bound
+    disch_then kall_tac (* removes wf_xclb *)
+    >> drule_then (rev_drule_then assume_tac) bir_eval_exp_view_bound
     >> fs[bir_exec_stmt_cjmp_mc_invar]
   )
   >~ [`bmc_exec_general_stmt`]
-  >- drule_then (fs o single) bmc_exec_general_stmt_mc_invar
+  >- (
+    disch_then kall_tac (* removes wf_xclb *)
+    >> drule_then assume_tac bmc_exec_general_stmt_mc_invar
+    >> fs[]
+  )
   >~ [`BMCStmt_Assign`]
   >- (
     drule_then irule well_formed_viewenv_UPDATE
     >> drule_all bir_eval_exp_view_bound
     >> fs[]
+  )
+  >~ [`BSExt R`]
+  >- (
+    disch_then assume_tac
+    >> first_x_assum $ drule_then strip_assume_tac
+    >> gs[]
   )
 QED
 
@@ -664,45 +735,58 @@ Proof
 QED
 
 Theorem cstep_preserves_wf:
-!p cid s M prom s' M'.
+!p cid s M prom s' M' tp e e'.
   well_formed cid M s
-  /\ cstep p cid s M prom s' M'
+  /\ wf_ext_p p cid
+  /\ cstep p cid tp (s,e) M prom (s',e') M'
   ==> well_formed cid M' s'
 Proof
   rw[cstep_cases]
-  >- (drule_all_then irule clstep_preserves_wf)
+  >- (
+    drule_at_then Any irule clstep_preserves_wf
+    >> fs[wf_ext_p_def]
+  )
   >> fs[well_formed_promise_self]
 QED
 
 Theorem cstep_seq_preserves_wf:
-!p cid s M s' M'.
+!p cid s M s' M' tp e e'.
   well_formed cid M s
-  /\ cstep_seq p cid (s,M) (s',M')
+  /\ wf_ext_p p cid
+  /\ cstep_seq p cid tp ((s,e), M) ((s',e'), M')
   ==> well_formed cid M' s'
 Proof
   rw[cstep_seq_cases]
-  >> TRY $ drule_all_then assume_tac cstep_preserves_wf
-  >> drule_all clstep_preserves_wf
-  >> fs[]
+  >- (
+    drule_at_then Any irule clstep_preserves_wf
+    >> fs[wf_ext_p_def]
+  )
+  >> qmatch_asmsub_rename_tac `clstep p cid tp s'' M' [t] (s',e')`
+  >> PairCases_on `s''`
+  >> drule_at_then Any irule clstep_preserves_wf
+  >> drule_at_then Any (irule_at Any) cstep_preserves_wf
+  >> fs[wf_ext_p_def]
 QED
 
 Theorem cstep_seq_rtc_preserves_wf:
-  !p cid s M s' M'.
+  !p cid s M s' M' e e' tp.
   well_formed cid M s
-  /\ cstep_seq_rtc p cid (s,M) (s',M')
+  /\ wf_ext_p p cid
+  /\ cstep_seq_rtc p cid tp ((s,e),M) ((s',e'),M')
   ==> well_formed cid M' s'
 Proof
   qsuff_tac `
-    !p cid sM sM'.
-    cstep_seq_rtc p cid sM sM'
-    ==> well_formed cid (SND sM) (FST sM)
-    ==> well_formed cid (SND sM') (FST sM')
+    !p cid tp sM sM'.
+    cstep_seq_rtc p cid tp sM sM'
+    ==> well_formed cid (SND sM) (FST $ FST sM)
+    ==> wf_ext_p p cid
+    ==> well_formed cid (SND sM') (FST $ FST sM')
   `
   >- (
     fs[pairTheory.FORALL_PROD,pairTheory.LAMBDA_PROD,pairTheory.ELIM_UNCURRY,AND_IMP_INTRO]
     >> metis_tac[]
   )
-  >> ntac 2 gen_tac
+  >> ntac 3 gen_tac
   >> REWRITE_TAC[cstep_seq_rtc_def]
   >> ho_match_mp_tac relationTheory.RTC_INDUCT
   >> fs[pairTheory.FORALL_PROD,pairTheory.LAMBDA_PROD,pairTheory.ELIM_UNCURRY]
@@ -712,20 +796,18 @@ Proof
 QED
 
 Theorem parstep_preserves_wf:
-!cid cores M cores' M'.
+!cid cores M cores' M' ext ext'.
   well_formed_cores cores M
-  /\ parstep cid cores M cores' M'
+  /\ well_formed_ext_cores cores
+  /\ parstep cid cores ext M cores' ext' M'
   ==> well_formed_cores cores' M'
 Proof
   rw[parstep_cases]
-  >> fs[well_formed_cores_def,FLOOKUP_UPDATE]
+  >> fs[well_formed_cores_def,well_formed_ext_cores_def,FLOOKUP_UPDATE]
   >> rw[]
-  >- (
-    first_x_assum $ drule_then assume_tac
-    >> drule_all_then irule cstep_preserves_wf
-  )
-  >> first_x_assum $ drule_then assume_tac
-  >> fs[cstep_cases,well_formed_promise_other]
+  >> ntac 2 $ first_x_assum $ drule_then strip_assume_tac
+  >- drule_all_then irule cstep_preserves_wf
+  >> fs[cstep_cases,well_formed_promise_other,well_formed_ext_cores_def]
 QED
 
 (* init state *)
