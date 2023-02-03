@@ -538,7 +538,7 @@ clstep p cid tp (s,ext) M [] (s',ext))
 /\ (* external functionality *)
 (!p s s' M cid ext ext' tp R.
   bir_get_current_statement p s.bst_pc = SOME $ BSExt R
-    /\ R (s,tp,ext) (s',ext')
+    /\ R (s,(tp,M),ext) (s',ext')
     /\ s.bst_status = BST_Running
 ==>
   clstep p cid tp (s,ext) M [] (s',ext'))
@@ -557,7 +557,8 @@ Inductive cstep:
 (!p cid s M s' t msg tp.
    (msg.cid = cid
    /\ t = LENGTH M + 1
-   /\ SND s' = (FST s) with bst_prom updated_by (\pr. pr ++ [t]))
+   /\ FST s' = (FST s) with bst_prom updated_by (\pr. pr ++ [t]))
+   /\ SND s = SND s'
 ==>
   cstep p cid tp s M [t] s' (M ++ [msg]))
 End
@@ -597,11 +598,11 @@ QED
 Definition is_certified_def:
   is_certified p cid tp s M = ?s' M'.
     cstep_seq_rtc p cid tp (s, M) (s', M')
-    /\ (SND s').bst_prom = []
+    /\ (FST s').bst_prom = []
 End
 
 val _ = Datatype `core_t =
-  Core num (('a,'b) bir_generic_program_t) bir_state_t
+  Core num (('a, 'ext_state_t, 'shared_state_t) bir_generic_program_t) bir_state_t
 `;
 
 val get_core_cid = Define‘
