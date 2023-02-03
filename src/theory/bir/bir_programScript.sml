@@ -124,8 +124,17 @@ Datatype:
 |>
 End
 
+(* The extern block relation has three components on the RHS:
+ * The local BIR state (bir_state_t)
+ * A polymorphic shared state ('shared_state_t)
+ * an external state ('ext_state_t).
+ * Note that the shared state is not on the LHS, meaning
+ * effectively that it is hard-coded as read-only.
+ * For multicore BIR, the shared state contains the
+ * set of other threads' local states and the shared memory. *)
+(* TODO: If this relation also has the BIR program on LHS, we can model block-relative jumps (i.e. "next block") *)
 Type beb_relation_t =
-  ``: (bir_state_t # (bir_state_t -> bool) # 'ext_state_t)
+  ``: (bir_state_t # 'shared_state_t # 'ext_state_t)
     -> (bir_state_t # 'ext_state_t) -> bool``
 
 val _ = Datatype `bir_generic_stmt_block_t = <|
@@ -135,26 +144,25 @@ val _ = Datatype `bir_generic_stmt_block_t = <|
   bb_last_statement : 'ext_state_t bir_stmt_end_t |>`;
 
 val _ = Datatype `bir_ext_block_t = <|
-  beb_label          : bir_label_t;
-  (* TODO: If this relation also has the BIR program on LHS, we can model block-relative jumps (i.e. "next block") *)
-  beb_relation     : 'ext_state_t beb_relation_t |>`;
+  beb_label     : bir_label_t;
+  beb_relation  : ('ext_state_t, 'shared_state_t) beb_relation_t |>`;
 
 val _ = Datatype `bir_generic_block_t =
   | BBlock_Stmts (('a,'ext_state_t)  bir_generic_stmt_block_t)
-  | BBlock_Ext ('ext_state_t bir_ext_block_t)`;
+  | BBlock_Ext (('ext_state_t, 'shared_state_t) bir_ext_block_t)`;
 
 Datatype:
-  bir_generic_program_t = BirProgram ((('a, 'ext_state_t) bir_generic_block_t) list)
+  bir_generic_program_t = BirProgram ((('a, 'ext_state_t, 'shared_state_t) bir_generic_block_t) list)
 End
 
 Type bir_stmt_block_t = `` :('ext_state_t bir_stmt_basic_t, 'ext_state_t) bir_generic_stmt_block_t``
 Type bmc_stmt_block_t = `` :('ext_state_t bmc_stmt_basic_t, 'ext_state_t) bir_generic_stmt_block_t``
 
-Type bir_block_t = `` :('ext_state_t bir_stmt_basic_t, 'ext_state_t) bir_generic_block_t``
-Type bmc_block_t = `` :('ext_state_t bmc_stmt_basic_t, 'ext_state_t) bir_generic_block_t``
+Type bir_block_t = `` :('ext_state_t bir_stmt_basic_t, 'ext_state_t, 'shared_state_t) bir_generic_block_t``
+Type bmc_block_t = `` :('ext_state_t bmc_stmt_basic_t, 'ext_state_t, 'shared_state_t) bir_generic_block_t``
 
-Type bir_program_t = ``:('ext_state_t bir_stmt_basic_t, 'ext_state_t) bir_generic_program_t``
-Type bmc_program_t = ``:('ext_state_t bmc_stmt_basic_t, 'ext_state_t) bir_generic_program_t``
+Type bir_program_t = ``:('ext_state_t bir_stmt_basic_t, 'ext_state_t, 'shared_state_t) bir_generic_program_t``
+Type bmc_program_t = ``:('ext_state_t bmc_stmt_basic_t, 'ext_state_t, 'shared_state_t) bir_generic_program_t``
 
 val bir_state_t_component_equality = DB.fetch "-" "bir_state_t_component_equality";
 val bir_programcounter_t_component_equality = DB.fetch "-" "bir_programcounter_t_component_equality";
@@ -233,7 +241,7 @@ Cases_on `bir_get_program_block_info_by_label (BirProgram p) l` >| [
 Datatype:
   bir_generic_stmt_kind_t =
     | BSGen (('a,'ext_state_t) bir_generic_stmt_t)
-    | BSExt ('ext_state_t beb_relation_t)
+    | BSExt (('ext_state_t,'shared_state_t) beb_relation_t)
 End
 
 val bir_get_current_statement_def = Define `bir_get_current_statement p pc =
