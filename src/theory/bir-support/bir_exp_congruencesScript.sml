@@ -1,3 +1,7 @@
+(*
+  Congruence relation for bir expressions, which allows expressions to be simplified.
+*)
+
 open HolKernel Parse boolLib bossLib;
 open bir_envTheory bir_valuesTheory;
 open bir_immTheory bir_typing_expTheory;
@@ -5,10 +9,6 @@ open bir_exp_memTheory bir_expTheory;
 open bir_exp_immTheory;
 open bir_exp_substitutionsTheory pred_setTheory;
 open HolBACoreSimps
-
-(* This theory defines a congruence relation for bir expressions.
-   This allows expressions to be simplified. *)
-
 
 val _ = new_theory "bir_exp_congruences";
 
@@ -25,23 +25,23 @@ val _ = new_theory "bir_exp_congruences";
    simplification. *)
 
 Definition bir_eval_exp_EQUIV_def:
-  bir_eval_exp_EQUIV ext_map e1 e2 = !env ext_st.
-    bir_eval_exp ext_map e1 env ext_st = bir_eval_exp ext_map e2 env ext_st
+  bir_eval_exp_EQUIV e1 e2 = !env ext_st.
+    bir_eval_exp e1 env ext_st = bir_eval_exp e2 env ext_st
 End
 
 val bir_eval_exp_EQUIV_IS_EQUIV = store_thm ("bir_eval_exp_EQUIV_IS_EQUIV",
-  ``(!e. bir_eval_exp_EQUIV ext_map e e) /\
-    (!e1 e2. bir_eval_exp_EQUIV ext_map e1 e2 <=> bir_eval_exp_EQUIV ext_map e2 e1) /\
-    (!e1 e2 e3. bir_eval_exp_EQUIV ext_map e1 e2 ==> bir_eval_exp_EQUIV ext_map e2 e3 ==>
-                bir_eval_exp_EQUIV ext_map e1 e3)``,
+  ``(!e. bir_eval_exp_EQUIV e e) /\
+    (!e1 e2. bir_eval_exp_EQUIV e1 e2 <=> bir_eval_exp_EQUIV e2 e1) /\
+    (!e1 e2 e3. bir_eval_exp_EQUIV e1 e2 ==> bir_eval_exp_EQUIV e2 e3 ==>
+                bir_eval_exp_EQUIV e1 e3)``,
 METIS_TAC[bir_eval_exp_EQUIV_def]);
 
 
 (* It is a congruence, it works with substitution *)
 
 val bir_eval_exp_EQUIV_IS_CONG_SUBST = store_thm ("bir_eval_exp_EQUIV_IS_CONG_SUBST",
-``!v ve ve' e. bir_eval_exp_EQUIV ext_map ve ve' ==>
-               bir_eval_exp_EQUIV ext_map (bir_exp_subst1 v ve e) (bir_exp_subst1 v ve' e)``,
+``!v ve ve' e. bir_eval_exp_EQUIV ve ve' ==>
+               bir_eval_exp_EQUIV (bir_exp_subst1 v ve e) (bir_exp_subst1 v ve' e)``,
 
 SIMP_TAC std_ss [bir_eval_exp_EQUIV_def] >>
 METIS_TAC[bir_exp_subst1_EVAL_EQ_GEN]);
@@ -59,38 +59,39 @@ METIS_TAC[bir_exp_subst1_EVAL_EQ_GEN]);
    we don't get an error message. *)
 
 Definition bir_exp_CONG_def:
-  bir_exp_CONG ext_map e1 e2 <=>
+  bir_exp_CONG e1 e2 <=>
     type_of_bir_exp e1 = type_of_bir_exp e2 /\
     bir_vars_of_exp e2 = bir_vars_of_exp e1 /\
     bir_exts_of_exp e1 = bir_exts_of_exp e2 /\
-    !env ty ext_st.  bir_env_vars_are_initialised env (bir_vars_of_exp e1) /\
-        type_of_bir_exp e1 = SOME ty /\
-        bir_ext_env_exts_are_valid (ext_map,ext_st) (bir_exts_of_exp e1) ==>
-        bir_eval_exp ext_map e1 env ext_st = bir_eval_exp ext_map e2 env ext_st
+    !env ty ext_st.
+      bir_env_vars_are_initialised env (bir_vars_of_exp e1) /\
+      type_of_bir_exp e1 = SOME ty /\
+      bir_ext_env_exts_are_valid ext_st (bir_exts_of_exp e1) ==>
+      bir_eval_exp e1 env ext_st = bir_eval_exp e2 env ext_st
 End
 
 Theorem bir_exp_CONG_REFL:
-  !e ext_map. bir_exp_CONG ext_map e e
+  !e. bir_exp_CONG e e
 Proof
   SIMP_TAC std_ss [bir_exp_CONG_def]
 QED
 
 Theorem bir_exp_CONG_TRANS:
-  !e1 e2 e3 ext_map. bir_exp_CONG ext_map e1 e2
-  ==> bir_exp_CONG ext_map e2 e3 ==> bir_exp_CONG ext_map e1 e3
+  !e1 e2 e3. bir_exp_CONG e1 e2
+  ==> bir_exp_CONG e2 e3 ==> bir_exp_CONG e1 e3
 Proof
   rw[bir_exp_CONG_def]
 QED
 
 Theorem bir_exp_CONG_SYM:
-  !e1 e2 ext_map. bir_exp_CONG ext_map e1 e2 <=> bir_exp_CONG ext_map e2 e1
+  !e1 e2. bir_exp_CONG e1 e2 <=> bir_exp_CONG e2 e1
 Proof
   rw[EQ_IMP_THM,bir_exp_CONG_def]
 QED
 
 Theorem bir_exp_CONG_EQUIV_THM:
-  !e1 e2 ext_map. bir_exp_CONG ext_map e1 e2 <=>
-  bir_exp_CONG ext_map e1 = bir_exp_CONG ext_map e2
+  !e1 e2. bir_exp_CONG e1 e2 <=>
+  bir_exp_CONG e1 = bir_exp_CONG e2
 Proof
   fs[FUN_EQ_THM]
   >> rpt strip_tac >> EQ_TAC
@@ -114,9 +115,9 @@ Proof
 QED
 
 Theorem bir_ext_env_exts_are_valid_bir_exp_subst1:
-  !e ext_map ext_st v ve.
-  bir_ext_env_exts_are_valid (ext_map,ext_st) (bir_exts_of_exp (bir_exp_subst1 v ve e))
-  ==> bir_ext_env_exts_are_valid (ext_map,ext_st) (bir_exts_of_exp e)
+  !e ext_st v ve.
+  bir_ext_env_exts_are_valid ext_st (bir_exts_of_exp (bir_exp_subst1 v ve e))
+  ==> bir_ext_env_exts_are_valid ext_st (bir_exts_of_exp e)
 Proof
   Induct
   >> fs[bir_exts_of_exp_def,bir_env_oldTheory.bir_ext_env_exts_are_valid_EMPTY,bir_exp_subst1_REWRS]
@@ -128,10 +129,10 @@ Proof
 QED
 
 Theorem bir_ext_env_exts_are_valid_bir_exp_subst1':
-  !e ext_map ext_st v ve.
+  !e ext_st v ve.
   v IN bir_vars_of_exp e
-  /\ bir_ext_env_exts_are_valid (ext_map,ext_st) (bir_exts_of_exp (bir_exp_subst1 v ve e))
-  ==> bir_ext_env_exts_are_valid (ext_map,ext_st) (bir_exts_of_exp ve)
+  /\ bir_ext_env_exts_are_valid ext_st (bir_exts_of_exp (bir_exp_subst1 v ve e))
+  ==> bir_ext_env_exts_are_valid ext_st (bir_exts_of_exp ve)
 Proof
   Induct
   >> fs[bir_exts_of_exp_def,bir_env_oldTheory.bir_ext_env_exts_are_valid_EMPTY,bir_exp_subst1_REWRS,bir_vars_of_exp_def]
@@ -143,84 +144,85 @@ Proof
 QED
 
 Theorem bir_exp_CONG_IS_CONG_SUBST:
-  !v ve ve' e ext_map. bir_exp_CONG ext_map ve ve' ==>
-    bir_exp_CONG ext_map (bir_exp_subst1 v ve e) (bir_exp_subst1 v ve' e)
+  !v ve ve' e.
+    bir_exp_CONG ve ve' ==>
+    bir_exp_CONG (bir_exp_subst1 v ve e) (bir_exp_subst1 v ve' e)
 Proof
   REPEAT GEN_TAC >>
   qmatch_goalsub_rename_tac `bir_exp_subst1 v ve e` >>
-  Tactical.REVERSE (Cases_on `v IN bir_vars_of_exp e`) >- (
+  Tactical.REVERSE $ Cases_on `v IN bir_vars_of_exp e` >- (
     ASM_SIMP_TAC std_ss [bir_exp_subst1_UNUSED_VAR, bir_exp_CONG_REFL]
   ) >>
   STRIP_TAC >>
-  fs[bir_exp_CONG_def, bir_exp_subst1_TYPE_EQ_GEN,
-    bir_exp_subst1_USED_VARS, bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
-    bir_exts_of_exp_bir_exp_subst1] >>
+  fs[bir_exp_CONG_def, bir_exp_subst1_TYPE_EQ_GEN, bir_exp_subst1_USED_VARS,
+     bir_env_oldTheory.bir_env_vars_are_initialised_UNION, bir_exts_of_exp_bir_exp_subst1] >>
   REPEAT STRIP_TAC >>
   drule_all_then strip_assume_tac bir_exp_subst1_NO_TYPE_SOME >>
   drule_all_then assume_tac bir_ext_env_exts_are_valid_bir_exp_subst1 >>
   drule_all_then assume_tac bir_ext_env_exts_are_valid_bir_exp_subst1' >>
   irule bir_exp_subst1_EVAL_EQ_GEN >>
   first_x_assum irule >>
-  fs[]
+  gs[]
 QED
 
 (* For practical purposed more insteresting is however a form that can be used
    as congruence rules. *)
 
 Theorem bir_exp_CONG_BASIC_CONG_RULES:
-  (!e e' ty ct ext_map.
-      bir_exp_CONG ext_map e e' ==>
-      bir_exp_CONG ext_map (BExp_Cast ct e ty) (BExp_Cast ct e' ty)) /\
-  (!e e' et ext_map.
-      bir_exp_CONG ext_map e e' ==>
-      bir_exp_CONG ext_map (BExp_UnaryExp et e) (BExp_UnaryExp et e')) /\
-  (!e1 e1' e2 e2' et ext_map.
-      bir_exp_CONG ext_map e1 e1' ==>
-      bir_exp_CONG ext_map e2 e2' ==>
-      bir_exp_CONG ext_map (BExp_BinExp et e1 e2) (BExp_BinExp et e1' e2')) /\
-  (!e1 e1' e2 e2' et ext_map.
-      bir_exp_CONG ext_map e1 e1' ==>
-      bir_exp_CONG ext_map e2 e2' ==>
-      bir_exp_CONG ext_map (BExp_BinPred et e1 e2) (BExp_BinPred et e1' e2')) /\
-  (!c c' et et' ef ef' ext_map.
-      bir_exp_CONG ext_map c c' ==>
-      bir_exp_CONG ext_map et et' ==>
-      bir_exp_CONG ext_map ef ef' ==>
-      bir_exp_CONG ext_map (BExp_IfThenElse c et ef) (BExp_IfThenElse c' et' ef')) /\
-  (!ext_map ext ty.
-      bir_exp_CONG ext_map (BExp_ExtGet ext ty) (BExp_ExtGet ext ty)) /\
-  (!mem_e mem_e' a_e a_e' en ty ext_map.
-      bir_exp_CONG ext_map mem_e mem_e' ==>
-      bir_exp_CONG ext_map a_e a_e' ==>
-      bir_exp_CONG ext_map (BExp_Load mem_e a_e en ty) (BExp_Load mem_e' a_e' en ty)) /\
-  (!mem_e mem_e' a_e a_e' v_e v_e' en ext_map.
-      bir_exp_CONG ext_map mem_e mem_e' ==>
-      bir_exp_CONG ext_map a_e a_e' ==>
-      bir_exp_CONG ext_map v_e v_e' ==>
-      bir_exp_CONG ext_map (BExp_Store mem_e a_e en v_e) (BExp_Store mem_e' a_e' en v_e'))
+  (!e e' ty ct.
+      bir_exp_CONG e e' ==>
+      bir_exp_CONG (BExp_Cast ct e ty) (BExp_Cast ct e' ty)) /\
+  (!e e' et.
+      bir_exp_CONG e e' ==>
+      bir_exp_CONG (BExp_UnaryExp et e) (BExp_UnaryExp et e')) /\
+  (!e1 e1' e2 e2' et.
+      bir_exp_CONG e1 e1' ==>
+      bir_exp_CONG e2 e2' ==>
+      bir_exp_CONG (BExp_BinExp et e1 e2) (BExp_BinExp et e1' e2')) /\
+  (!e1 e1' e2 e2' et.
+      bir_exp_CONG e1 e1' ==>
+      bir_exp_CONG e2 e2' ==>
+      bir_exp_CONG (BExp_BinPred et e1 e2) (BExp_BinPred et e1' e2')) /\
+  (!c c' et et' ef ef'.
+      bir_exp_CONG c c' ==>
+      bir_exp_CONG et et' ==>
+      bir_exp_CONG ef ef' ==>
+      bir_exp_CONG (BExp_IfThenElse c et ef) (BExp_IfThenElse c' et' ef')) /\
+  (!ext ty.
+      bir_exp_CONG (BExp_ExtGet ext ty) (BExp_ExtGet ext ty)) /\
+  (!mem_e mem_e' a_e a_e' en ty.
+      bir_exp_CONG mem_e mem_e' ==>
+      bir_exp_CONG a_e a_e' ==>
+      bir_exp_CONG (BExp_Load mem_e a_e en ty) (BExp_Load mem_e' a_e' en ty)) /\
+  (!mem_e mem_e' a_e a_e' v_e v_e' en.
+      bir_exp_CONG mem_e mem_e' ==>
+      bir_exp_CONG a_e a_e' ==>
+      bir_exp_CONG v_e v_e' ==>
+      bir_exp_CONG (BExp_Store mem_e a_e en v_e) (BExp_Store mem_e' a_e' en v_e'))
 Proof
   SIMP_TAC (std_ss++holBACore_ss) [bir_exp_CONG_def,
-    bir_env_oldTheory.bir_env_vars_are_initialised_UNION, type_of_bir_exp_def] >>
-  REPEAT STRIP_TAC >> ASM_SIMP_TAC std_ss [] >>
-  simp[Once FUN_EQ_THM,bir_eval_exp_def]
+    bir_env_oldTheory.bir_env_vars_are_initialised_UNION, type_of_bir_exp_def, bir_exts_of_exp_def] >>
+  REPEAT STRIP_TAC >> ASM_SIMP_TAC std_ss [] >> (
+    metis_tac[bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION]
+  )
 QED
 
 
 (* Now real simplifications.
-   TODO: Add Many more! *)
+   TODO: Add many more! *)
 
 Theorem bir_exp_CONG_simp_IDEMPOTENT_AND:
-  !e ext_map ty.
+  !e ty.
      bir_type_is_Imm ty /\ type_of_bir_exp e = SOME ty ==>
-     bir_exp_CONG ext_map (BExp_BinExp BIExp_And e e) e
+     bir_exp_CONG (BExp_BinExp BIExp_And e e) e
 Proof
   REPEAT STRIP_TAC >>
   ASM_SIMP_TAC std_ss [bir_exp_CONG_def, bir_vars_of_exp_def,
     UNION_IDEMPOT, type_of_bir_exp_def, pairTheory.pair_case_thm,
     bir_eval_exp_def,FUN_EQ_THM] >>
   REPEAT STRIP_TAC >>
-  qmatch_goalsub_rename_tac `_ = bir_eval_exp ext_map e env x` >>
-  Cases_on `bir_eval_exp ext_map e env x` >- (
+  qmatch_goalsub_rename_tac `_ = bir_eval_exp e env x` >>
+  Cases_on `bir_eval_exp e env x` >- (
     FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_eval_bin_exp_def]
   ) >>
   qmatch_goalsub_rename_tac `SOME x'` >>
@@ -243,7 +245,7 @@ QED
 val bir_exp_CONG_simp_IDEMPOTENT_OR = store_thm ("bir_exp_CONG_simp_IDEMPOTENT_OR",
    ``!e ext_map.
      (?ty. bir_type_is_Imm ty /\ (type_of_bir_exp e = SOME ty)) ==>
-     bir_exp_CONG ext_map (BExp_BinExp BIExp_Or e e) e``,
+     bir_exp_CONG (BExp_BinExp BIExp_Or e e) e``,
 
 
 REPEAT STRIP_TAC >>
@@ -288,7 +290,7 @@ val bir_exp_CONG_WEAK_def = Define `bir_exp_CONG_WEAK e1 e2 <=> (
                (bir_eval_exp e1 env = bir_eval_exp e2 env)))`;
 
 val bir_exp_CONG_WEAK_IS_WEAK = store_thm ("bir_exp_CONG_WEAK_IS_WEAK",
- ``!e1 e2. bir_exp_CONG ext_map e1 e2 ==> bir_exp_CONG_WEAK e1 e2``,
+ ``!e1 e2. bir_exp_CONG e1 e2 ==> bir_exp_CONG_WEAK e1 e2``,
 SIMP_TAC std_ss [bir_exp_CONG_def, bir_exp_CONG_WEAK_def, SUBSET_REFL]);
 
 val bir_exp_CONG_WEAK_REFL = store_thm ("bir_exp_CONG_WEAK_REFL",

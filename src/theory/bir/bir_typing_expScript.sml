@@ -1,10 +1,14 @@
+(*
+  Well-typedness of expressions
+*)
+
 open HolKernel Parse boolLib bossLib;
 open wordsTheory bitstringTheory;
 open optionTheory;
 open bir_auxiliaryTheory bir_immTheory bir_valuesTheory bir_env_oldTheory;
 open bir_exp_immTheory bir_exp_memTheory bir_envTheory;
 open bir_expTheory finite_mapTheory
-open pred_setTheory;
+open pred_setTheory pairTheory;
 
 open wordsLib bir_auxiliaryLib;
 
@@ -702,7 +706,189 @@ val bir_exts_of_exp_def = Define `
   (bir_exts_of_exp (BExp_Store me ae _ ve) = (bir_exts_of_exp me UNION bir_exts_of_exp ae UNION bir_exts_of_exp ve))`;
 
 
+val type_of_bir_exp_THM_with_envty = store_thm ("type_of_bir_exp_THM_with_envty",
+  ``!env ext_st envty e ty.
+    type_of_bir_exp e = SOME ty ==>
+    bir_envty_includes_vs envty (bir_vars_of_exp e) ==>
+    bir_env_satisfies_envty env envty ==>
+    bir_ext_env_exts_are_valid ext_st (bir_exts_of_exp e) ==>
+    ?v. bir_eval_exp e env ext_st = SOME v /\ type_of_bir_val v = ty``,
+
+NTAC 3 GEN_TAC >> Induct >> (
+  SIMP_TAC (std_ss++bir_val_ss) [bir_eval_exp_def, BType_Bool_def,
+    type_of_bir_exp_EQ_SOME_REWRS, bir_vars_of_exp_def, bir_exts_of_exp_def,
+    bir_envty_includes_vs_UNION, bir_envty_includes_vs_INSERT,
+    bir_envty_includes_vs_EMPTY, PULL_EXISTS, PULL_FORALL, bir_type_is_Imm_def,
+    bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION] >>
+  REPEAT STRIP_TAC >>
+  FULL_SIMP_TAC (std_ss++bir_val_ss) [type_of_bir_val_EQ_ELIMS, bir_type_is_Imm_def]
+) >- (
+  METIS_TAC [bir_v_in_envty_env_IMP]
+) >- (
+  SIMP_TAC (std_ss++bir_val_ss) [bir_eval_cast_REWRS, type_of_bir_gencast]
+) >- (
+  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_unary_exp_REWRS, type_of_bir_unary_exp]
+) >- (
+  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_bin_exp_REWRS, type_of_bir_bin_exp]
+) >- (
+  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_bin_pred_REWRS, type_of_bir_val_def,
+    type_of_bool2b, BType_Bool_def]
+) >- (
+  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_memeq_REWRS, type_of_bir_val_def,
+    type_of_bool2b, BType_Bool_def]
+) >- (
+  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_ifthenelse_REWRS] >>
+  METIS_TAC[]
+) >- (
+  fs[bir_ext_env_exts_are_valid_def, bir_ext_env_ext_is_valid_def, GSYM PFORALL_THM]
+) >- (
+  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_load_BASIC_REWR] >>
+  rename1 `bir_load_from_mem vt ity at mmap en (b2n i)` >>
+  Cases_on `bir_load_from_mem vt ity at mmap en (b2n i)` >- (
+    POP_ASSUM MP_TAC >>
+    ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_load_from_mem_EQ_NONE] >>
+    Cases_on `en = BEnd_NoEndian` >> (
+       FULL_SIMP_TAC (std_ss++boolSimps.CONJ_ss) [bir_number_of_mem_splits_ID]
+    )
+  ) >>
+  ASM_SIMP_TAC (std_ss++bir_val_ss) [] >>
+  METIS_TAC [type_of_bir_load_from_mem]
+) >- (
+  ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_eval_store_BASIC_REWR] >>
+  rename1 `bir_store_in_mem vt at ity mmap en (b2n i)` >>
+  Cases_on `bir_store_in_mem vt at ity mmap en (b2n i)` >- (
+    POP_ASSUM MP_TAC >>
+    ASM_SIMP_TAC (std_ss++bir_val_ss) [bir_store_in_mem_EQ_NONE] >>
+    Cases_on `en = BEnd_NoEndian` >> (
+       FULL_SIMP_TAC (std_ss++boolSimps.CONJ_ss) [bir_number_of_mem_splits_ID]
+    )
+  ) >>
+  ASM_SIMP_TAC (std_ss++bir_val_ss) []
+));
+
 (* TODO: needs bir_env_oldTheory, due to involvement of bir_env_vars_are_initialised *)
+val type_of_bir_exp_THM_with_init_vars = store_thm ("type_of_bir_exp_THM_with_init_vars",
+  ``!env e ty ext_st:'ext_state_t.
+    type_of_bir_exp e = SOME ty ==>
+    bir_env_vars_are_initialised env (bir_vars_of_exp e) ==>
+    bir_ext_env_exts_are_valid ext_st (bir_exts_of_exp e) ==>
+    ?va. bir_eval_exp e env ext_st = SOME va /\ type_of_bir_val va = ty``,
+  METIS_TAC [type_of_bir_exp_THM_with_envty, bir_env_vars_are_initialised_EQ_envty,
+             bir_env_satisfies_envty_of_env]
+);
+
+
+(* This is the general theorem for eliminating initialisation requirements via evaluations
+ * of expressions in assumptions *)
+val bir_eval_exp_IS_SOME_IMPLIES_INIT =
+  store_thm("bir_eval_exp_IS_SOME_IMPLIES_INIT",
+  ``!env e ext_st:'ext_state_t va.
+    (bir_eval_exp e env ext_st = SOME va) ==>
+    bir_env_vars_are_initialised env (bir_vars_of_exp e) /\
+    bir_ext_env_exts_are_valid ext_st (bir_exts_of_exp e)``,
+
+Induct_on `e` >> (
+  REPEAT GEN_TAC >>
+  DISCH_TAC >>
+  FULL_SIMP_TAC std_ss [bir_eval_exp_def, bir_vars_of_exp_def, bir_exts_of_exp_def,
+                        bir_env_oldTheory.bir_env_vars_are_initialised_EMPTY,
+                        bir_env_oldTheory.bir_ext_env_exts_are_valid_EMPTY]
+) >| [
+  (* Den *)
+  subgoal `type_of_bir_val va = bir_var_type b` >- (
+    IMP_RES_TAC bir_env_read_types >>
+    FULL_SIMP_TAC std_ss []
+  ) >>
+  FULL_SIMP_TAC std_ss [bir_env_oldTheory.bir_env_vars_are_initialised_def, bir_env_read_def,
+                        pred_setTheory.IN_SING, bir_env_oldTheory.bir_env_var_is_initialised_def],
+
+  (* Cast *)
+  Cases_on `bir_eval_exp e env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_cast_REWRS]
+  ) >>
+  METIS_TAC [],
+
+  (* UnaryExp *)
+  Cases_on `bir_eval_exp e env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_unary_exp_REWRS]
+  ) >>
+  METIS_TAC [],
+
+  (* BinExp *)
+  Cases_on `bir_eval_exp e env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_bin_exp_REWRS]
+  ) >>
+  Cases_on `bir_eval_exp e' env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_bin_exp_REWRS]
+  ) >>
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
+
+  (* BinPred *)
+  Cases_on `bir_eval_exp e env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_bin_pred_REWRS]
+  ) >>
+  Cases_on `bir_eval_exp e' env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_bin_pred_REWRS]
+  ) >>
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
+
+  (* MemEq *)
+  Cases_on `bir_eval_exp e env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_memeq_REWRS]
+  ) >>
+  Cases_on `bir_eval_exp e' env ext_st` >- (
+    Cases_on `x` >> (
+      FULL_SIMP_TAC std_ss [bir_eval_memeq_REWRS]
+    )
+  ) >>
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
+
+  (* IfThenElse *)
+  Cases_on `bir_eval_exp e env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
+  ) >>
+  Cases_on `bir_eval_exp e' env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
+  ) >>
+  Cases_on `bir_eval_exp e'' env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
+  ) >>
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
+
+  (* ExtGet *)
+  fs[bir_ext_env_exts_are_valid_def, bir_ext_env_ext_is_valid_def, GSYM PFORALL_THM] >>
+  metis_tac[bir_eval_extget_type],
+
+  (* Load *)
+  Cases_on `bir_eval_exp e env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS]
+  ) >>
+  Cases_on `bir_eval_exp e' env ext_st` >- (
+    Cases_on `x` >> (
+      FULL_SIMP_TAC std_ss [bir_eval_load_NONE_REWRS]
+    )
+  ) >>
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION],
+
+  (* Store *)
+  Cases_on `bir_eval_exp e env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
+  ) >>
+  Cases_on `bir_eval_exp e' env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
+  ) >>
+  Cases_on `bir_eval_exp e'' env ext_st` >- (
+    FULL_SIMP_TAC std_ss [bir_eval_store_NONE_REWRS]
+  ) >>
+  METIS_TAC [bir_env_oldTheory.bir_env_vars_are_initialised_UNION,
+             bir_env_oldTheory.bir_ext_env_exts_are_valid_UNION]
+]
+);
 
 (* -------------------- *)
 (* Sensible expressions *)
