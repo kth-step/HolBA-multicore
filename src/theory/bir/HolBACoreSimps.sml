@@ -38,10 +38,10 @@ val bir_list_of_types = [
    mk_thy_type {Tyop="xclb_t",                   Thy="bir_program", Args=[]},
    mk_thy_type {Tyop="bir_state_t",              Thy="bir_program", Args=[]},
    mk_thy_type {Tyop="bir_generic_stmt_block_t", Thy="bir_program", Args=[Type.alpha, Type.beta]},
-   mk_thy_type {Tyop="bir_ext_block_t",          Thy="bir_program", Args=[Type.alpha]},
-   mk_thy_type {Tyop="bir_generic_block_t",      Thy="bir_program", Args=[Type.alpha, Type.beta]},
-   mk_thy_type {Tyop="bir_generic_program_t",    Thy="bir_program", Args=[Type.alpha, Type.beta]},
-   mk_thy_type {Tyop="bir_generic_stmt_kind_t",  Thy="bir_program", Args=[Type.alpha, Type.beta]},
+   mk_thy_type {Tyop="bir_ext_block_t",          Thy="bir_program", Args=[Type.alpha, Type.beta]},
+   mk_thy_type {Tyop="bir_generic_block_t",      Thy="bir_program", Args=[Type.alpha, Type.beta, Type.gamma]},
+   mk_thy_type {Tyop="bir_generic_program_t",    Thy="bir_program", Args=[Type.alpha, Type.beta, Type.gamma]},
+   mk_thy_type {Tyop="bir_generic_stmt_kind_t",  Thy="bir_program", Args=[Type.alpha, Type.beta, Type.gamma]},
 
    mk_thy_type {Tyop="bir_execution_result_t", Thy="bir_program", Args=[Type.alpha]}
 ];
