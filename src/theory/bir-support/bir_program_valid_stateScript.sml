@@ -30,7 +30,7 @@ Theorem bir_is_valid_labels_blocks_EQ_EL:
 Proof
   SIMP_TAC list_ss [bir_is_valid_labels_def, bir_labels_of_program_def] >>
   REPEAT STRIP_TAC >>
-  MP_TAC (Q.ISPEC `MAP (\bl. bir_label_of_block bl) (p:(('a, 'b) bir_generic_block_t) list)` listTheory.EL_ALL_DISTINCT_EL_EQ) >>
+  MP_TAC (Q.ISPEC `MAP (\bl. bir_label_of_block bl) (p:(('a, 'b, 'c) bir_generic_block_t) list)` listTheory.EL_ALL_DISTINCT_EL_EQ) >>
   ASM_SIMP_TAC list_ss [GSYM LEFT_EXISTS_IMP_THM] >>
   Q.EXISTS_TAC `n1` >> Q.EXISTS_TAC `n2` >>
   ASM_SIMP_TAC list_ss [listTheory.EL_MAP]
@@ -378,8 +378,7 @@ Cases_on `stmt` >> (
   ASM_SIMP_TAC std_ss [bir_exec_stmtB_def,
     bir_exec_stmtB_well_typed_env_assign,
     bir_exec_stmtB_well_typed_env_assume,
-    bir_exec_stmtB_well_typed_env_assert,
-    bir_exec_stmtB_well_typed_env_extput]
+    bir_exec_stmtB_well_typed_env_assert]
 ));
 
 
@@ -507,8 +506,9 @@ SIMP_TAC std_ss [bir_is_valid_state_def,
 
 
 val bir_exec_stmtE_block_pc = store_thm ("bir_exec_stmtE_block_pc",
-``!p st ext_st stmt. ~(bir_state_is_terminated (bir_exec_stmtE p stmt (st, ext_st))) ==>
-              ((bir_exec_stmtE p stmt (st, ext_st)).bst_pc.bpc_index = 0)``,
+``!p st ext_st stmt.
+  ~(bir_state_is_terminated (bir_exec_stmtE p stmt (st, ext_st))) ==>
+  ((bir_exec_stmtE p stmt (st, ext_st)).bst_pc.bpc_index = 0)``,
 
 REPEAT GEN_TAC >>
 Cases_on `stmt` >> (
@@ -530,10 +530,12 @@ Cases_on `stmt` >> (
   )
 ));
 
-
+(* TODO: Relax to allowing some kind of well-formed extern block? *)
 val bir_exec_step_valid_pc = store_thm ("bir_exec_step_valid_pc",
-``!p st ext_st. bir_is_valid_pc p (FST (bir_exec_step p (st, ext_st))).bst_pc <=>
-         bir_is_valid_pc p st.bst_pc``,
+``!p st ext_st.
+  ~bir_current_block_is_extern p st.bst_pc ==>
+  (bir_is_valid_pc p (FST (bir_exec_step p (st, ext_st))).bst_pc <=>
+    bir_is_valid_pc p st.bst_pc)``,
 
 REPEAT STRIP_TAC >>
 Cases_on `bir_state_is_terminated st` >- (
@@ -565,22 +567,27 @@ COND_CASES_TAC >> ASM_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_pc_next_valid]);
 
 
 val bir_exec_step_well_typed_env = store_thm ("bir_exec_step_well_typed_env",
-``!ext_map p st ext_st. bir_is_well_typed_env st.bst_environ ==>
-         bir_is_well_typed_env (FST (bir_exec_step ext_map p (st, ext_st))).bst_environ``,
+``!p st ext_st.
+  ~bir_current_block_is_extern p st.bst_pc ==>
+  bir_is_well_typed_env st.bst_environ ==>
+  bir_is_well_typed_env (FST (bir_exec_step p (st, ext_st))).bst_environ``,
 
 REPEAT STRIP_TAC >>
 ASM_SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) [bir_exec_step_def, bir_exec_step_def] >>
 CASE_TAC >> (
   ASM_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_state_set_failed_def]
 ) >>
+Cases_on `x` >> (
+ fs[bir_current_block_is_extern_BSExt]
+) >>
 DISJ2_TAC >>
-rename1 `_ = SOME stmt` >>
+rename1 `_ = SOME (BSGen stmt)` >>
 Cases_on `stmt` >> (
   ASM_SIMP_TAC std_ss [bir_exec_stmt_def, LET_DEF,
     bir_exec_stmtE_env_unchanged]
 ) >>
-Cases_on `bir_exec_stmtB ext_map b (st,ext_st)` >>
-subgoal `(FST (bir_exec_stmtB ext_map b (st,ext_st))).bst_environ = q.bst_environ` >- (
+Cases_on `bir_exec_stmtB a (st,ext_st)` >>
+subgoal `(FST (bir_exec_stmtB a (st,ext_st))).bst_environ = q.bst_environ` >- (
   fs[pairTheory.FST]
 ) >>
 fs[] >>
@@ -591,8 +598,10 @@ CASE_TAC >> (
 
 
 val bir_exec_step_valid_state_invar = store_thm ("bir_exec_step_valid_state_invar",
-``!ext_map p st ext_st. bir_is_valid_state p st ==>
-         bir_is_valid_state p (FST (bir_exec_step ext_map p (st, ext_st)))``,
+``!p st ext_st.
+  ~bir_current_block_is_extern p st.bst_pc ==>
+  bir_is_valid_state p st ==>
+  bir_is_valid_state p (FST (bir_exec_step p (st, ext_st)))``,
 
 SIMP_TAC std_ss [bir_is_valid_state_def,
   bir_exec_step_well_typed_env, bir_exec_step_valid_pc]);
