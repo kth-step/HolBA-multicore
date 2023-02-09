@@ -1155,11 +1155,7 @@ val noteq_trans_impl = store_thm("noteq_trans_impl",
     (A <> B) ==>
     (((x = A) /\ (x = B)) <=> F)``,
 
-REPEAT STRIP_TAC >>
-RW_TAC std_ss [] >>
-CCONTR_TAC >>
-FULL_SIMP_TAC std_ss [] >>
-RW_TAC std_ss []
+metis_tac[]
 );
 
 val _ = export_theory();

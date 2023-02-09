@@ -171,6 +171,27 @@ CASE_TAC >> (
 ));
 
 
+(* The set of used exts changes *)
+val bir_exp_subst_USED_EXTS = store_thm ("bir_exp_subst_USED_EXTS",
+``!s e. bir_exts_of_exp (bir_exp_subst s e) =
+        (bir_exts_of_exp e) UNION
+        (BIGUNION (IMAGE bir_exts_of_exp
+           {e' | ?v. ((v IN (bir_vars_of_exp e)) /\ (FLOOKUP s v = SOME e'))}))``,
+
+GEN_TAC >>
+SIMP_TAC std_ss [EXTENSION] >>
+SIMP_TAC (std_ss++pred_setSimps.PRED_SET_ss) [PULL_EXISTS] >>
+Induct_on `e` >> (
+  ASM_SIMP_TAC (std_ss++pred_setSimps.PRED_SET_ss) [bir_exp_subst_def, bir_vars_of_exp_def, bir_exts_of_exp_def] >>
+  SIMP_TAC (std_ss++boolSimps.EQUIV_EXTRACT_ss) [RIGHT_AND_OVER_OR,
+    LEFT_AND_OVER_OR, EXISTS_OR_THM, bir_exp_subst_var_def]
+) >>
+REPEAT STRIP_TAC >>
+CASE_TAC >>
+FULL_SIMP_TAC (std_ss++pred_setSimps.PRED_SET_ss) [bir_exts_of_exp_def]
+);
+
+
 
 (* Variables not occurring in the expression are irrelevant *)
 val bir_exp_subst_UNUSED_VARS_OVERAPPROX = store_thm ("bir_exp_subst_UNUSED_VARS_OVERAPPROX",
@@ -316,6 +337,18 @@ SIMP_TAC std_ss [bir_exp_subst1_def, bir_exp_subst_USED_VARS,
   FDOM_FEMPTY, FDOM_FUPDATE, FLOOKUP_UPDATE, FLOOKUP_EMPTY, EXTENSION] >>
 SIMP_TAC (std_ss++pred_setSimps.PRED_SET_ss++boolSimps.LIFT_COND_ss++
           boolSimps.EQUIV_EXTRACT_ss) []);
+
+
+val bir_exp_subst1_USED_EXTS = store_thm ("bir_exp_subst1_USED_EXTS",
+``!v ve e. bir_exts_of_exp (bir_exp_subst1 v ve e) =
+        (bir_exts_of_exp e) UNION
+        (if v IN bir_vars_of_exp e then bir_exts_of_exp ve else {})``,
+
+SIMP_TAC std_ss [bir_exp_subst1_def, bir_exp_subst_USED_EXTS,
+  FDOM_FEMPTY, FDOM_FUPDATE, FLOOKUP_UPDATE, FLOOKUP_EMPTY, EXTENSION] >>
+SIMP_TAC (std_ss++pred_setSimps.PRED_SET_ss++boolSimps.LIFT_COND_ss++
+          boolSimps.EQUIV_EXTRACT_ss) []
+);
 
 
 (* Variables not occurring in the expression are irrelevant *)

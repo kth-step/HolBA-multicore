@@ -273,6 +273,16 @@ rpt strip_tac >> (
 )
 QED
 
+Theorem bir_ext_env_exts_are_valid_SUBSET:
+  !ext_st:'ext_state_t exts1 exts2.
+  bir_ext_env_exts_are_valid ext_st exts1 ==>
+  exts2 SUBSET exts1 ==>
+  bir_ext_env_exts_are_valid ext_st exts2
+Proof
+rpt strip_tac >>
+fs [bir_ext_env_exts_are_valid_def, bir_ext_env_ext_is_valid_def, GSYM pairTheory.PFORALL_THM, SUBSET_DEF]
+QED
+
 (* ===================== *)
 
 val bir_var_set_is_well_typed_def = Define `bir_var_set_is_well_typed vs <=>
