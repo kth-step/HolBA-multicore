@@ -1,0 +1,17 @@
+# includes
+# ----------------------------------
+DEPENDENCIES   = ../../../src/tools/exec ../../../src/theory/bir
+
+
+# configuration
+# ----------------------------------
+#HOLHEAP        = ../../../src/HolBA-heap
+HOLHEAP        =
+NEWHOLHEAP     = HolBAExamples_LitmusTheory-heap
+
+HEAPINC_EXTRA  = 
+
+
+# included lines follow
+# ----------------------------------
+include ../../../src/Holmakefile.inc
