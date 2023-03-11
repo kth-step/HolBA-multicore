@@ -1746,14 +1746,14 @@ Theorem cstep_seq_rtc_f_correctness:
     cstep_seq_rtc p cid (s,M) (s',M')
 Proof
   rpt gen_tac >> eq_tac >>
-  simp [cstep_seq_rtc_f_completeness_thm, cstep_seq_rtc_f_soundness_thm]
+  simp [cstep_seq_rtc_f_completeness, cstep_seq_rtc_f_soundness]
 QED
 
 Theorem is_certified_f_correctness:
   !cid p s M.
   (?f. is_certified_f f p cid s M) <=> is_certified p cid s M
 Proof
-  METIS_TAC [cstep_seq_rtc_f_correctness_thm, is_certified_f_def, is_certified_def]
+  METIS_TAC [cstep_seq_rtc_f_correctness, is_certified_f_def, is_certified_def]
 QED
 
 
@@ -2109,12 +2109,14 @@ Theorem eval_is_certified_correctness:
   !cid p s M.
      (?f. eval_is_certified f p cid s M) <=> is_certified p cid s M
 Proof
-  fs [eval_is_certified_correctness_f, is_certified_f_correctness]
+  fs [eval_is_certified_f_correctness, is_certified_f_correctness]
 QED
 
 Definition sim_time_def:
-sim_time i t = if t < i then t
-               else t - 1
+sim_time i j t =
+  if t < i \/ j < t then t
+  else if i = t then j
+  else t - 1
 End
 
 
@@ -2138,4 +2140,5 @@ val _ = Hol_reln `
   (!l. mem_get M l i = mem_get M' l j)
   ==> sim cid i j (s,M) (s',M'))
 `;
+
 val _ = export_theory();

@@ -1,3 +1,4 @@
+(* This file will probably be deleted *)
 open HolKernel Parse boolLib bossLib BasicProvers;
 open arithmeticTheory finite_mapTheory;
 open bir_promisingTheory bir_programTheory;
@@ -291,7 +292,8 @@ Proof
                           bst_coh := z_coh'; bst_v_rOld := z_v_rOld'; bst_v_wOld := z_v_wOld';
                           bst_v_rNew := z_v_rNew'; bst_v_wNew := z_v_wNew';
                           bst_v_CAP := z_v_CAP'; bst_v_Rel := z_v_Rel'; bst_prom := z_prom';
-                          bst_fwdb := z_fwdb'; bst_xclb := z_xclb' |>’ >>
+                          bst_fwdb := z_fwdb'; bst_xclb := z_xclb';
+			  bst_inflight := z.bst_inflight; bst_counter := z.bst_counter |>’ >>
   gvs [clstep_cases, clstep_cases, sim_def, bir_eval_exp_view_def, GSYM RIGHT_EXISTS_AND_THM, GSYM LEFT_EXISTS_AND_THM] >|
   [ (* READ *)
     fs [bir_state_t_component_equality] >>
