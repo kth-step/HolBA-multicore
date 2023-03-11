@@ -179,6 +179,22 @@ Proof
   >> gs[AllCaseEqs()]
 QED
 
+val is_read_def = Define`
+  is_read BM_Read = T
+  /\
+  is_read BM_ReadWrite = T
+  /\
+  is_read _ = F
+`;
+
+val is_write_def = Define`
+  is_write BM_ReadWrite = T
+  /\
+  is_write BM_Write = T
+  /\
+  is_write _ = F
+`;
+
 (* Note that this currently does not take into account ARM *)
 val mem_read_view_def = Define‘
   mem_read_view (f:fwdb_t) t = if f.fwdb_time = t ∧ ~f.fwdb_xcl then f.fwdb_view else t
@@ -259,9 +275,7 @@ Theorem bmc_exec_general_stmt_mc_invar:
   s.bst_v_Rel = s'.bst_v_Rel /\
   s.bst_prom = s'.bst_prom /\
   s.bst_fwdb = s'.bst_fwdb /\
-  s.bst_xclb = s'.bst_xclb /\
-  s.bst_inflight = s'.bst_inflight /\
-  s.bst_counter = s'.bst_counter
+  s.bst_xclb = s'.bst_xclb
 Proof
   ntac 2 Induct
   >> rpt gen_tac >> strip_tac
@@ -283,9 +297,7 @@ Theorem bir_exec_stmt_cjmp_mc_invar':
   s.bst_v_Rel = s'.bst_v_Rel /\
   s.bst_prom = s'.bst_prom /\
   s.bst_fwdb = s'.bst_fwdb /\
-  s.bst_xclb = s'.bst_xclb /\
-  s.bst_inflight = s'.bst_inflight /\
-  s.bst_counter = s'.bst_counter
+  s.bst_xclb = s'.bst_xclb
 Proof
   rpt gen_tac >> strip_tac
   >> fs[bir_exec_stmt_cjmp_def,pairTheory.ELIM_UNCURRY,AllCaseEqs(),bir_state_set_typeerror_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def]

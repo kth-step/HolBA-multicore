@@ -112,8 +112,6 @@ val _ = Datatype `bir_status_t =
   | BST_Halted bir_val_t        (* Halt called *)
   | BST_JumpOutside bir_label_t (* Jump to unknown label *)`;
 
-val _ = Datatype `bir_inflight_stmt_t = BirInflight string ('a bir_stmt_t)`;
-
 (* forward buffer, part of the core-local state *)
 val fwdb_def = Datatype`
   fwdb_t = <| fwdb_time : num; fwdb_view : num; fwdb_xcl : bool |>
@@ -138,19 +136,9 @@ val _ = Datatype `bir_state_t = <|
   bst_v_Rel    : num;
   bst_prom     : num list;
   bst_fwdb     : bir_val_t -> fwdb_t;
-  bst_xclb     : xclb_t option;
-  bst_inflight : (string bir_inflight_stmt_t) list;
-  bst_counter  : num
+  bst_xclb     : xclb_t option
 |>`;
 
-val remove_inflight_def = Define`
-remove_inflight t l =
-    FILTER (\bi . case bi of BirInflight t0 _ => (t <> t0)) l
-`;
-
-val fresh_def = Define`
-fresh s = STRCAT "t" (n2s s.bst_counter)
-`;
 
 val bir_varset_of_basic_stmt_def = Define`
    bir_varset_of_basic_stmt (BStmt_Assign var exp) = { var } UNION bir_varset_of_exp exp
