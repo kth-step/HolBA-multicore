@@ -432,7 +432,7 @@ Definition eval_cstep_seq_store_def:
            t = LENGTH M';
            s' = s with <| bst_prom updated_by (SNOC t) |>;
          in
-           MAP (\ (l, s''). (s'', [msg])) (FILTER (\ (l,s''). l = [t]) (eval_clstep_storefulfil p cid s' M' a_e v_e xcl acq rel))
+           MAP (\ (l, s''). (s'', [msg])) (FILTER (\ (l,s''). l = [t]) (eval_clstep_store_fulfil p cid s' M' a_e v_e xcl acq rel))
         )
     | _ => []
 End
@@ -464,7 +464,7 @@ Definition eval_cstep_seq_amo_def:
                                    t = LENGTH M';
                                    s' = s with <| bst_prom updated_by (SNOC (LENGTH M')) |>;
                                  in
-                                   MAP (\ (l,s''). (s'', [msg])) (FILTER (\ (l,s''). l = [t]) (eval_clstep_amofulfil cid s' M' var a_e v_e acq rel))
+                                   MAP (\ (l,s''). (s'', [msg])) (FILTER (\ (l,s''). l = [t]) (eval_clstep_amo_fulfil cid s' M' var a_e v_e acq rel))
                             )
                        )
                   )
@@ -484,7 +484,7 @@ Definition eval_cstep_seq_def:
       eval_cstep_seq_amo cid s M var a_e v_e acq rel ++
       MAP (\ (l,s'). (s', [])) (eval_clstep_amo_fulfil cid s M var a_e v_e acq rel)
   | SOME (BStmtB (BMCStmt_Assign var e)) =>
-      MAP (\ (l,s'). (s', [])) (eval_clstep_exp s var e)
+      MAP (\ (l,s'). (s', [])) (eval_clstep_assign s var e)
   | SOME (BStmtB (BMCStmt_Fence K1 K2)) =>
       MAP (\ (l,s'). (s', [])) (eval_clstep_fence s K1 K2)
   | SOME (BStmtE (BStmt_CJmp cond_e lbl1 lbl2)) =>
@@ -1067,31 +1067,33 @@ QED
 
 Theorem eval_clstep_read_completeness:
   ∀p cid M s s' var a_e acq rel xcl cast l.
-  clstep p cid s M l s' ==>
-  bir_get_stmt p s.bst_pc = BirStmt_Read var a_e cast xcl acq rel ==>
-  MEM (l,s') (eval_clstep_read s M var a_e xcl acq rel)
+  clstep p cid s M l s' ∧
+  bir_get_current_statement p s.bst_pc = SOME (BStmtB (BMCStmt_Load var a_e cast xcl acq rel)) ==>
+  MEM (l,s') (eval_clstep_load s M var a_e xcl acq rel)
 Proof
   rpt strip_tac >>
-  gvs [clstep_cases, eval_clstep_read_def, bir_eval_exp_view_def] >>
-  Cases_on ‘bir_eval_exp a_e s.bst_environ’
-  >- (gvs [CaseEq"option"])
-  >>  gvs [CaseEq"option"]
-  (* MEM s' (MAP_PARTIAL (λ(msg,t). state option) (mem_readable M x (MAX ...)) *)
-  >> fs [MEM_MAP_PARTIAL, MEM_MAP, mem_read_def, CaseEq"option"]
-  >> Q.EXISTS_TAC ‘(m,t)’
-  >> fs [MEM_readable_thm, bir_state_t_component_equality]
-  >> fs [MAXL_def, ifView_def, combinTheory.UPDATE_def]
-  >> rw [] >> (gvs [] >> METIS_TAC [MAX_ASSOC, MAX_COMM])
+  gvs [clstep_cases, eval_clstep_load_def, bir_eval_exp_view_def]
+  >| [
+    Cases_on ‘bir_eval_exp a_e s.bst_environ’ >- (fs [CaseEq"option"]) >>
+    (* MEM s' (MAP_PARTIAL (λ(msg,t). state option) (mem_readable M x (MAX ...)) *)
+    fs [MEM_MAP_PARTIAL, MEM_MAP, mem_read_def, CaseEq"option"] >>
+    Q.EXISTS_TAC ‘(m,t)’ >>
+    fs [MEM_readable_thm, bir_state_t_component_equality] >>
+    fs [MAXL_def, ifView_def, combinTheory.UPDATE_def] >>
+    rw [] >> (gvs [] >> METIS_TAC [MAX_ASSOC, MAX_COMM])
+    ,
+    fs [bmc_exec_general_stmt_def]
+  ]
 QED                                   
 
 Theorem eval_clstep_write_completeness:
-  ∀p s s' a_e v_e xcl acq rel cid M l.
+  ∀p s s' var_succ a_e v_e xcl acq rel cid M l.
   clstep p cid s M l s' ==>
-  bir_get_stmt p s.bst_pc = BirStmt_Write a_e v_e xcl acq rel ==>
-  MEM (l,s') (eval_clstep_fulfil p cid s M a_e v_e xcl acq rel ++ eval_clstep_xclfail p cid s xcl)
+  bir_get_current_statement p s.bst_pc = SOME (BStmtB (BMCStmt_Store var_succ a_e v_e xcl acq rel)) ==>
+  MEM (l,s') (eval_clstep_store_fulfil p cid s M a_e v_e xcl acq rel ++ eval_clstep_store_xclfail p cid s xcl)
 Proof
   rpt strip_tac >>
-  fs [clstep_cases, eval_clstep_fulfil_def, eval_clstep_xclfail_def, bir_eval_exp_view_def]
+  fs [clstep_cases, eval_clstep_store_fulfil_def, eval_clstep_store_xclfail_def, bir_eval_exp_view_def]
   >| [
     (* xclfail *)
     DISJ2_TAC >>
@@ -1105,81 +1107,99 @@ Proof
      Cases_on ‘bir_eval_exp v_e s.bst_environ’ >> fs []) >>
     fs [MEM_MAP_PARTIAL, MEM_MAP, MEM_FILTER] >>
     Q.EXISTS_TAC ‘v_post’ >>
-    (Cases_on ‘fulfil_update_env p s xcl’ >>
-     Cases_on ‘fulfil_update_viewenv p s xcl v_post’ >> fs[]) >>
+    fs [] >>
+    (Cases_on ‘fulfil_update_env p s’ >> Cases_on ‘fulfil_update_viewenv p s v_post’ >> fs[]) >>
     gvs [bir_state_t_component_equality, combinTheory.UPDATE_def, ifView_def, MAXL_def] >>
     fs [mem_atomic_correctness, IS_SOME_EQ_NOT_NONE] >>
     (rpt FULL_CASE_TAC >> fs[] >>
      METIS_TAC [MAX_ASSOC, MAX_COMM])
+    ,
+    fs [bmc_exec_general_stmt_def]
   ] 
 QED
 
 Theorem eval_clstep_amo_completeness:
   ∀p s var a_e v_e acq rel s' cid M l.
   clstep p cid s M l s' ==>
-  bir_get_stmt p s.bst_pc = BirStmt_Amo var a_e v_e acq rel ==>
-  MEM (l,s') (eval_clstep_amofulfil cid s M var a_e v_e acq rel)
+  bir_get_current_statement p s.bst_pc = SOME (BStmtB (BMCStmt_Amo var a_e v_e acq rel)) ==>
+  MEM (l,s') (eval_clstep_amo_fulfil cid s M var a_e v_e acq rel)
 Proof
   rpt strip_tac >>
-  fs [clstep_cases, eval_clstep_amofulfil_def, bir_eval_exp_view_def] >>
-  Cases_on ‘bir_eval_exp a_e s.bst_environ’ >- fs [] >>
-  fs [LIST_BIND_def, MEM_FLAT, MEM_MAP] >>
-  CONV_TAC (DEPTH_CONV LEFT_AND_EXISTS_CONV) >>
-  CONV_TAC SWAP_EXISTS_CONV >>
-  fs [mem_read_correctness] >>
-  Q.EXISTS_TAC ‘(m, t_r)’ >>
-  fs [MEM_readable_thm] >>
-  Cases_on ‘env_update_cast64 (bir_var_name var) v_r (bir_var_type var) s.bst_environ’ >- fs [] >>
-  Cases_on ‘bir_eval_exp v_e new_environ’ >- fs [] >>
-  gvs [MEM_FILTER, MEM_MAP] >>
-  fs [bir_state_t_component_equality, mem_every_amo] >>
-  fs [MAXL_def, ifView_def] >>
-  Cases_on ‘acq’ >> Cases_on ‘rel’ >> fs[]
+  fs [clstep_cases, eval_clstep_amo_fulfil_def, bir_eval_exp_view_def]
+  >| [
+    Cases_on ‘bir_eval_exp a_e s.bst_environ’ >- fs [] >>
+    fs [LIST_BIND_def, MEM_FLAT, MEM_MAP] >>
+    CONV_TAC (DEPTH_CONV LEFT_AND_EXISTS_CONV) >>
+    CONV_TAC SWAP_EXISTS_CONV >>
+    fs [mem_read_correctness] >>
+    Q.EXISTS_TAC ‘(m, t_r)’ >>
+    fs [MEM_readable_thm, latest_t_def] >>
+    Cases_on ‘env_update_cast64 (bir_var_name var) v_r (bir_var_type var) s.bst_environ’ >- fs [] >>
+    Cases_on ‘bir_eval_exp v_e new_environ’ >- fs [] >>
+    gvs [MEM_FILTER, MEM_MAP] >>
+    fs [bir_state_t_component_equality, mem_every_amo] >>
+    fs [MAXL_def, ifView_def] >>
+    Cases_on ‘acq’ >> Cases_on ‘rel’ >> fs[]
+    ,
+    fs [bmc_exec_general_stmt_def]
+  ]
 QED                                              
 
-Theorem eval_clstep_expr_completeness:
-  ∀p cid M s s' var e l.
-  clstep p cid s M l s' ==>
-  bir_get_stmt p s.bst_pc = BirStmt_Expr var e ==>
-  MEM (l, s') (eval_clstep_exp s var e)
+Theorem eval_clstep_assign_completeness:
+  !p cid M s s' var e l.
+  clstep p cid s M l s' /\
+  bir_get_current_statement p s.bst_pc = SOME (BStmtB (BMCStmt_Assign var e)) ==>
+  MEM (l, s') (eval_clstep_assign s var e)
 Proof
   rpt strip_tac >>
-  gvs [clstep_cases, eval_clstep_exp_def, bir_eval_exp_view_def] >>
-  CASE_TAC >- fs [] >>
-  CASE_TAC >- fs [] >>
-  fs [combinTheory.UPDATE_def, bir_state_t_component_equality, MAX_COMM]
+  gvs [clstep_cases, eval_clstep_assign_def, bir_eval_exp_view_def]
+  >| [
+    CASE_TAC >- fs [] >>
+    CASE_TAC >- fs [] >>
+    fs [combinTheory.UPDATE_def, bir_state_t_component_equality, MAX_COMM]
+    ,
+    fs [bmc_exec_general_stmt_def]
+  ]
 QED
 
 Theorem eval_clstep_fence_completeness:
-  ∀p cid M s s' K1 K2 l.
-  clstep p cid s M l s' ==>
-  bir_get_stmt p s.bst_pc = BirStmt_Fence K1 K2 ==>
+  !p cid M s s' K1 K2 l.
+  clstep p cid s M l s' /\
+  bir_get_current_statement p s.bst_pc = SOME (BStmtB (BMCStmt_Fence K1 K2)) ==>
   MEM (l, s') (eval_clstep_fence s K1 K2)
 Proof
   rpt strip_tac >>
-  gvs [clstep_cases, eval_clstep_fence_def, bir_eval_exp_view_def] >>
-  fs [combinTheory.UPDATE_def, bir_state_t_component_equality, MAX_COMM]
+  gvs [clstep_cases, eval_clstep_fence_def, bir_eval_exp_view_def]
+  >| [
+    fs [combinTheory.UPDATE_def, bir_state_t_component_equality, MAX_COMM]
+    ,
+    fs [bmc_exec_general_stmt_def]
+  ]
 QED
 
 Theorem eval_clstep_branch_completeness:
-  ∀p cid M s s' cond_e lbl1 lbl2 l.
-  clstep p cid s M l s' ==>
-  bir_get_stmt p s.bst_pc = BirStmt_Branch cond_e lbl1 lbl2 ==>
+  !p cid M s s' cond_e lbl1 lbl2 l.
+  clstep p cid s M l s' /\
+  bir_get_current_statement p s.bst_pc = SOME (BStmtE (BStmt_CJmp cond_e lbl1 lbl2)) ==>
   MEM (l,s') (eval_clstep_branch p s cond_e lbl1 lbl2)
 Proof
   rpt strip_tac >>
-  gvs [clstep_cases, eval_clstep_branch_def, bir_eval_exp_view_def] >>
-  Cases_on ‘bir_eval_exp cond_e s.bst_environ’ >> (fs [])
+  gvs [clstep_cases, eval_clstep_branch_def, bir_eval_exp_view_def] >|
+  [
+    Cases_on ‘bir_eval_exp cond_e s.bst_environ’ >> (fs [])
+    ,
+    fs [bmc_exec_general_stmt_def]
+  ]
 QED
 
 Theorem eval_clstep_bir_generic_completeness:
-  ∀p cid M s s' stmt l.
-  clstep p cid s M l s' ==>
-  bir_get_stmt p s.bst_pc = BirStmt_Generic stmt ==>
+  !p cid M s s' stmt l.
+  clstep p cid s M l s' /\
+  bir_get_current_statement p s.bst_pc = SOME stmt ==>
   MEM (l,s') (eval_clstep_bir_step p s stmt)
 Proof
   rpt strip_tac >>
-  gvs [clstep_cases, eval_clstep_bir_step_def]
+  gvs [clstep_cases, eval_clstep_bir_step_def, bmc_exec_general_stmt_def]
 QED
 
 Theorem eval_clstep_completeness:
@@ -1188,31 +1208,48 @@ Theorem eval_clstep_completeness:
 Proof
   rpt strip_tac >>
   fs [eval_clstep_def] >>
-  Cases_on ‘bir_get_stmt p s.bst_pc’ >> (fs []) >|
+  Cases_on ‘bir_get_current_statement p s.bst_pc’ >> (fs []) >|
   [
-    (* read *)
-    imp_res_tac eval_clstep_read_completeness
-    ,
-    (* fulfil & xclfail *)
-    imp_res_tac eval_clstep_write_completeness >> fs[]
-    ,
-    (* amofulfil *)
-    imp_res_tac eval_clstep_amo_completeness
-    ,
-    (* expr *)
-    imp_res_tac eval_clstep_expr_completeness
-    ,
-    (* fence *)
-    imp_res_tac eval_clstep_fence_completeness
-    ,
-    (* branch *)
-    imp_res_tac eval_clstep_branch_completeness
-    ,
-    (* generic *)
-    imp_res_tac eval_clstep_bir_generic_completeness
-    ,
-    (* none *)
     fs [clstep_cases]
+    ,
+    Cases_on ‘s.bst_status = BST_Running’ >> (fs []) >|
+    [
+      FULL_CASE_TAC >|
+      [ (* BStmtB *)
+        FULL_CASE_TAC >|
+        [
+          (* read *)
+          imp_res_tac eval_clstep_read_completeness
+          ,
+          (* fulfil & xclfail *)
+          imp_res_tac eval_clstep_write_completeness >> fs[]
+          ,
+          (* amofulfil *)
+          imp_res_tac eval_clstep_amo_completeness
+          ,
+          (* expr *)
+          imp_res_tac eval_clstep_assign_completeness
+          ,
+          (* fence *)
+          imp_res_tac eval_clstep_fence_completeness
+          , (* assert *)
+          fs [eval_clstep_bir_step_def, clstep_cases]
+          , (* assume *)
+          fs [eval_clstep_bir_step_def, clstep_cases]
+        ]
+        , (* BStmtE *)
+        FULL_CASE_TAC >|
+        [ (*jmp *)
+          fs [eval_clstep_bir_step_def, clstep_cases]
+          ,
+          imp_res_tac eval_clstep_branch_completeness
+          ,
+          fs [eval_clstep_bir_step_def, clstep_cases]
+        ]
+      ]
+      , (* not running *)
+      fs [clstep_cases]
+    ]
   ]
 QED
 
