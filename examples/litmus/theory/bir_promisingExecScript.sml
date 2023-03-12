@@ -119,7 +119,7 @@ End
  ************************************************************)
 
 (****************************************
- * DEFINITION: eval_clstep_read s M var a_e xcl acq rel
+ * DEFINITION: eval_clstep_load s M var a_e xcl acq rel
  *
  * DESCRIPTION:
  *   Implements an executable version of the core-local read rule.
@@ -164,7 +164,7 @@ Definition eval_clstep_load_def:
 End
 
 (****************************************
- * DEFINITION: eval_clstep_fulfil p cid s M a_e v_e xcl acq rel
+ * DEFINITION: eval_clstep_store_fulfil p cid s M a_e v_e xcl acq rel
  *
  * DESCRIPTION:
  *   Implements an executable version of the core-local fulfil rule.
@@ -224,7 +224,7 @@ Definition eval_clstep_store_fulfil_def:
 End
 
 (****************************************
- * DEFINITION: eval_clstep_xclfail p cid s xcl
+ * DEFINITION: eval_clstep_store_xclfail p cid s xcl
  *
  * DESCRIPTION:
  *   If xcl = T, then execute an xcl failure, a store-conditional that failed.
@@ -245,7 +245,7 @@ Definition eval_clstep_store_xclfail_def:
 End
 
 (****************************************
- * DEFINITION: eval_clstep_amofulfil cid s M a_e v_e acq rel
+ * DEFINITION: eval_clstep_amo_fulfil cid s M a_e v_e acq rel
  *
  * DESCRIPTION:
  *   Implements our AMO fulfil rule.
@@ -1010,7 +1010,7 @@ Theorem eval_clstep_generic_soundness:
   !p cid M s s' stmt l.
     s.bst_status = BST_Running /\
     bir_get_current_statement p s.bst_pc = SOME stmt /\
-    MEM (l,s') (eval_clstep_bir_step p s stmt) ==>
+    MEM (l,s') (eval_clstep_generic p s stmt) ==>
     clstep p cid s M l s'
 Proof
   rpt strip_tac >>
@@ -1199,10 +1199,10 @@ Theorem eval_clstep_bir_generic_completeness:
   !p cid M s s' stmt l.
     clstep p cid s M l s' /\
     bir_get_current_statement p s.bst_pc = SOME stmt ==>
-    MEM (l,s') (eval_clstep_bir_step p s stmt)
+    MEM (l,s') (eval_clstep_generic p s stmt)
 Proof
   rpt strip_tac >>
-  gvs [clstep_cases, eval_clstep_bir_step_def, bmc_exec_general_stmt_def]
+  gvs [clstep_cases, eval_clstep_generic_def, bmc_exec_general_stmt_def]
 QED
 
 Theorem eval_clstep_completeness:
@@ -1429,7 +1429,6 @@ Proof
   ]
 QED
 
-eval_clstep_store_fulfil_soundness
 Theorem eval_cstep_seq_soundness:
   !cid p s M s' msgs.
     MEM (s', msgs) (eval_cstep_seq cid p s M)
@@ -1437,86 +1436,78 @@ Theorem eval_cstep_seq_soundness:
     cstep_seq p cid (s, M) (s', M ++ msgs)
 Proof
   rpt strip_tac >>
-  Cases_on ‘bir_get_current_statement p s.bst_pc’ >|
-  [
-    fs [eval_cstep_seq_def]
-    ,
-    fs [eval_cstep_seq_def] >>
-    Cases_on ‘s.bst_status = BST_Running’ >> (fs [])
-    >| [ (* running *)
-        FULL_CASE_TAC >|
-        [ (* BstmtB *)
-          fs [] >>
-          FULL_CASE_TAC >|
-          [ (* load *)
-            gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
-            rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
-            fs [eval_clstep_load_soundness]
-            , (* store *)
-            fs [] >|
-            [
-              imp_res_tac eval_cstep_seq_store_soundness
-              ,
-              gvs [MEM_MAP2, cstep_seq_cases] >>
-              imp_res_tac eval_clstep_store_fulfil_soundness >>
-              HINT_EXISTS_TAC >>
-              fs []
-              ,
-              gvs [MEM_MAP2, cstep_seq_cases] >>
-              imp_res_tac eval_clstep_store_xclfail_soundness >>
-              rename1 ‘clstep p cid s M l s'’ >>
-              Q.EXISTS_TAC ‘l’ >>
-              fs []
-            ]
-            , (* amo *)
-            fs [] >|
-            [
-              imp_res_tac eval_cstep_seq_amo_soundness
-              ,
-              gvs [MEM_MAP2, cstep_seq_cases] >>
-              imp_res_tac eval_clstep_amo_fulfil_soundness >>
-              HINT_EXISTS_TAC >>
-              fs []
-            ]
-            , (* assign *)
-            fs [] >|
-            [
-              gvs [MEM_MAP2, cstep_seq_cases] >>
-              imp_res_tac eval_clstep_assign_soundness >>
-              rename1 ‘clstep p cid s M l s'’ >>
-              Q.EXISTS_TAC ‘l’ >>
-              fs []
-            ]
-            , (* fence *)
-            fs [] >|
-            [
-              gvs [MEM_MAP2, cstep_seq_cases] >>
-              imp_res_tac eval_clstep_fence_soundness >>
-              rename1 ‘clstep p cid s M l s'’ >>
-              Q.EXISTS_TAC ‘l’ >>
-              fs []
-            ]
-            , (* assert *)
-
-          ]
-    ,
-    gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
-    rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
-    fs [eval_clstep_expr_soundness]
-    ,
-    gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
-    rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
-    fs [eval_clstep_fence_soundness]
-    ,
-    gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
-    rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
-    fs [eval_clstep_branch_soundness]
-    , 
-    gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
-    rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
-    fs [eval_clstep_generic_soundness]
-    ,
-    fs [eval_cstep_seq_def]
+  Cases_on ‘bir_get_current_statement p s.bst_pc’ >- fs [eval_cstep_seq_def] >>
+  fs [eval_cstep_seq_def] >>
+  Cases_on ‘s.bst_status = BST_Running’ >> (fs []) >>
+  FULL_CASE_TAC >|
+  [ (* BstmtB *)
+    fs [] >>
+    FULL_CASE_TAC >|
+    [ (* load *)
+      gvs [eval_cstep_seq_def, MEM_MAP2, cstep_seq_cases] >>
+      rename1 ‘MEM (l, s') _’ >> Q.EXISTS_TAC ‘l’ >>
+      fs [eval_clstep_load_soundness]
+      , (* store *)
+      fs [] >|
+      [
+        imp_res_tac eval_cstep_seq_store_soundness
+        ,
+        gvs [MEM_MAP2, cstep_seq_cases] >>
+        imp_res_tac eval_clstep_store_fulfil_soundness >>
+        HINT_EXISTS_TAC >>
+        fs []
+        ,
+        gvs [MEM_MAP2, cstep_seq_cases] >>
+        imp_res_tac eval_clstep_store_xclfail_soundness >>
+        rename1 ‘clstep p cid s M l s'’ >>
+        Q.EXISTS_TAC ‘l’ >>
+        fs []
+      ]
+      , (* amo *)
+      fs [] >|
+      [
+        imp_res_tac eval_cstep_seq_amo_soundness
+        ,
+        gvs [MEM_MAP2, cstep_seq_cases] >>
+        imp_res_tac eval_clstep_amo_fulfil_soundness >>
+        HINT_EXISTS_TAC >>
+        fs []
+      ]
+      , (* assign *)
+      gvs [MEM_MAP2, cstep_seq_cases] >>
+      imp_res_tac eval_clstep_assign_soundness >>
+      rename1 ‘clstep p cid s M l s'’ >>
+      Q.EXISTS_TAC ‘l’ >>
+      fs []
+      , (* fence *)
+      gvs [MEM_MAP2, cstep_seq_cases] >>
+      imp_res_tac eval_clstep_fence_soundness >>
+      rename1 ‘clstep p cid s M l s'’ >>
+      Q.EXISTS_TAC ‘l’ >>
+      fs []
+      , (* assert *)
+      gvs [MEM_MAP2, cstep_seq_cases, eval_clstep_bir_step_def,
+           bmc_exec_general_stmt_def, clstep_cases, bir_exec_stmtB_def]
+      , (* assume *)
+      gvs [MEM_MAP2, cstep_seq_cases, eval_clstep_bir_step_def,
+           bmc_exec_general_stmt_def, clstep_cases, bir_exec_stmtB_def]
+    ]
+    , (* BStmtE *)
+    fs [] >>
+    FULL_CASE_TAC >|
+    [
+      gvs [MEM_MAP2, cstep_seq_cases, eval_clstep_bir_step_def,
+           bmc_exec_general_stmt_def, clstep_cases, bir_exec_stmtB_def]
+      ,
+      gvs [MEM_MAP2, cstep_seq_cases] >>
+      imp_res_tac eval_clstep_branch_soundness >>
+      rename1 ‘clstep p cid s M l s'’ >>
+      Q.EXISTS_TAC ‘l’ >>
+      fs[] 
+      ,
+      gvs [MEM_MAP2, cstep_seq_cases, eval_clstep_bir_step_def,
+           bmc_exec_general_stmt_def, clstep_cases, bir_exec_stmtB_def]
+    ]
   ]
 QED
 
