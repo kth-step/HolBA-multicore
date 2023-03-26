@@ -94,8 +94,8 @@ val bir_is_well_typed_stmt_def = Define `
 
 Definition bir_is_well_typed_ext_rel_def:
   bir_is_well_typed_ext_rel R =
-    !s other_cores ext s' ext' var_name.
-      R (s,other_cores,ext) (s',ext')
+    !s other_cores s' var_name.
+      R (s,other_cores) (s')
       ==>
         bir_env_lookup_type var_name s.bst_environ =
         bir_env_lookup_type var_name s'.bst_environ
@@ -309,8 +309,8 @@ Proof
 QED
 
 val bir_vars_of_label_exp_THM_EQ_FOR_VARS = store_thm ("bir_vars_of_label_exp_THM_EQ_FOR_VARS",
-``!env1 env2 (ext_st:'ext_state_t) e. (bir_env_EQ_FOR_VARS (bir_vars_of_label_exp e) env1 env2) ==>
-                (bir_eval_label_exp e env1 ext_st = bir_eval_label_exp e env2 ext_st)``,
+``!env1 env2 e. (bir_env_EQ_FOR_VARS (bir_vars_of_label_exp e) env1 env2) ==>
+                (bir_eval_label_exp e env1 = bir_eval_label_exp e env2)``,
 Cases_on `e` >>
 SIMP_TAC std_ss [bir_eval_label_exp_def, bir_vars_of_label_exp_def] >>
 METIS_TAC[bir_vars_of_exp_THM_EQ_FOR_VARS]);
@@ -443,8 +443,7 @@ METIS_TAC[bir_get_current_statement_stmts_of_prog]);
 val bir_exps_of_stmtB_def = Define `
   (bir_exps_of_stmtB (BStmt_Assert ex) = {ex}) /\
   (bir_exps_of_stmtB (BStmt_Assume ex) = {ex}) /\
-  (bir_exps_of_stmtB (BStmt_Assign v ex) = {ex}) (*/\
-  (bir_exps_of_stmtB (BStmt_ExtPut en ex) = {ex})*)`;
+  (bir_exps_of_stmtB (BStmt_Assign v ex) = {ex})`;
 
 val bir_exps_of_label_exp_def = Define `
   (bir_exps_of_label_exp (BLE_Label l) = {}) /\

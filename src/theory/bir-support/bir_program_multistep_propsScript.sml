@@ -1,3 +1,7 @@
+(*
+  Executable multi-step definitions and their properties
+*)
+
 open HolKernel Parse boolLib bossLib;
 
 open bir_auxiliaryLib;
@@ -6,9 +10,9 @@ open wordsTheory bitstringTheory;
 open bir_auxiliaryTheory bir_immTheory bir_valuesTheory;
 open bir_exp_immTheory bir_exp_memTheory bir_envTheory;
 open bir_expTheory bir_programTheory;
-open bir_program_valid_stateTheory;
+open bir_program_valid_stateTheory bir_extTheory;
 open llistTheory wordsLib pred_setTheory;
-open HolBACoreSimps
+open HolBACoreSimps;
 
 open bir_auxiliaryTheory;
 
@@ -28,25 +32,30 @@ val _ = new_theory "bir_program_multistep_props";
 val bir_exec_infinite_steps_fun_REWRS2 = store_thm ("bir_exec_infinite_steps_fun_REWRS2",
 ``(!p st. (bir_exec_infinite_steps_fun p st 0 = st)) /\
   (!p st n. (bir_exec_infinite_steps_fun p st (SUC n) =
-     bir_exec_step_state p (bir_exec_infinite_steps_fun p st n)))``,
+     bir_exec_step p (bir_exec_infinite_steps_fun p st n)))``,
 
 SIMP_TAC std_ss [bir_exec_infinite_steps_fun_def, arithmeticTheory.FUNPOW_0,
   arithmeticTheory.FUNPOW_SUC]);
 
 
 val bir_exec_infinite_steps_fun_ADD = store_thm ("bir_exec_infinite_steps_fun_ADD",
-  ``!p st n1 n2. (bir_exec_infinite_steps_fun p (bir_exec_infinite_steps_fun p st n1) n2) =
-                 bir_exec_infinite_steps_fun p st (n1 + n2)``,
+  ``!p st n1 n2.
+    (bir_exec_infinite_steps_fun p (bir_exec_infinite_steps_fun p st n1) n2) =
+      bir_exec_infinite_steps_fun p st (n1 + n2)``,
 
 Induct_on `n1` >> (
   ASM_SIMP_TAC std_ss [bir_exec_infinite_steps_fun_REWRS, arithmeticTheory.ADD_CLAUSES]
-));
+) >>
+rpt strip_tac >>
+Cases_on `bir_exec_step p st` >>
+metis_tac[]
+);
 
 
 val bir_exec_step_REWR_TERMINATED = store_thm ("bir_exec_step_REWR_TERMINATED",
   ``!p st.
    bir_state_is_terminated st ==>
-   (bir_exec_step p st = (NONE, st))``,
+   bir_exec_step p st = st``,
 
 REPEAT STRIP_TAC >>
 ASM_SIMP_TAC std_ss [bir_exec_step_def]);
@@ -60,7 +69,7 @@ SIMP_TAC std_ss [FUN_EQ_THM] >>
 REPEAT STRIP_TAC >>
 rename1 `bir_exec_infinite_steps_fun p st n = _` >>
 Induct_on `n` >> (
-  ASM_SIMP_TAC std_ss [bir_exec_infinite_steps_fun_REWRS, bir_exec_step_state_def,
+  ASM_SIMP_TAC std_ss [bir_exec_infinite_steps_fun_REWRS,
     bir_exec_step_REWR_TERMINATED]
 ));
 
@@ -72,16 +81,28 @@ val bir_exec_infinite_steps_fun_TERMINATED = store_thm ("bir_exec_infinite_steps
 
 REPEAT STRIP_TAC >>
 `?c. n2 = n1 + c` by METIS_TAC[arithmeticTheory.LESS_EQ_EXISTS] >>
-ASM_SIMP_TAC std_ss [GSYM bir_exec_infinite_steps_fun_ADD,
+Cases_on `bir_exec_infinite_steps_fun p st n1` >>
+FULL_SIMP_TAC std_ss [GSYM bir_exec_infinite_steps_fun_ADD,
   bir_exec_infinite_steps_fun_TERMINATED_0]);
 
-
+(* TODO: We need the notion of well-formedness for externs preserving bir_is_valid_pc from extTheory
+ *       then retrofit this into bir_exec_step_valid_pc *)
 val bir_exec_infinite_steps_fun_valid_pc = store_thm ("bir_exec_infinite_steps_fun_valid_pc",
-``!p st n. bir_is_valid_pc p (bir_exec_infinite_steps_fun p st n).bst_pc <=>
-           bir_is_valid_pc p st.bst_pc``,
+``!p st n.
+  well_formed_prog_ext p ==>
+  (bir_is_valid_pc p (bir_exec_infinite_steps_fun p st n).bst_pc <=>
+    bir_is_valid_pc p st.bst_pc)``,
 
-Induct_on `n` >> REWRITE_TAC[bir_exec_infinite_steps_fun_REWRS2] >>
-ASM_SIMP_TAC std_ss [bir_exec_step_valid_pc]);
+cheat
+(* TODO
+`bir_is_valid_pc p (FST (bir_exec_step p (q,r))).bst_pc <=>
+        bir_is_valid_pc p (FST (bir_exec_infinite_steps_fun p st n)).bst_pc` suffices_by (
+  metis_tac[bir_exec_step_valid_pc]
+) >>
+ASM_REWRITE_TAC [pairTheory.FST] >>
+irule bir_exec_step_valid_pc >>
+*)
+);
 
 
 (*****************************************)
@@ -410,10 +431,10 @@ Proof
   Q.PAT_X_ASSUM `!n'. _` (MP_TAC o Q.SPEC `n'`) >>
   FULL_SIMP_TAC std_ss [bir_exec_infinite_steps_fun_REWRS2] >>
   Cases_on `bir_state_is_terminated st_n'` >- (
-    FULL_SIMP_TAC std_ss [bir_exec_step_state_def, bir_exec_step_def]
+    FULL_SIMP_TAC std_ss [bir_exec_step_def]
   ) >>
   Tactical.REVERSE (Cases_on `bir_is_valid_pc p st_n'.bst_pc`) >- (
-    FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_exec_step_state_def, bir_exec_step_def,
+    FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_exec_step_def,
       GSYM bir_get_current_statement_IS_SOME, bir_state_set_failed_def,
       bir_state_is_terminated_def]
   ) >>
@@ -421,9 +442,9 @@ Proof
   drule_then assume_tac bir_exec_step_state_valid_THM >>
   gs[] >>
   Tactical.REVERSE (Cases_on `stmt`) >- (
-    FULL_SIMP_TAC arith_ss [bir_exec_stmt_state_REWRS, bir_exec_stmtE_block_pc]
+    FULL_SIMP_TAC arith_ss [bir_exec_stmtE_block_pc]
   ) >>
-  FULL_SIMP_TAC std_ss [bir_exec_stmt_state_REWRS, LET_DEF] >>
+  FULL_SIMP_TAC std_ss [LET_DEF] >>
   qmatch_goalsub_rename_tac `bir_exec_stmtB_state b st_n'` >>
   Cases_on `bir_state_is_terminated (bir_exec_stmtB_state b st_n')` >> (
     FULL_SIMP_TAC std_ss []

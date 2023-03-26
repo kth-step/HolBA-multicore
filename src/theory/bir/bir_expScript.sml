@@ -28,8 +28,6 @@ val _ = Datatype `bir_exp_t =
 
   | BExp_IfThenElse        bir_exp_t bir_exp_t bir_exp_t
 
-  | BExp_ExtGet            ('ext_state_t -> bir_val_t option) bir_type_t
-
   | BExp_Load              bir_exp_t bir_exp_t bir_endian_t bir_immtype_t
   | BExp_Store             bir_exp_t bir_exp_t bir_endian_t bir_exp_t
 `;
@@ -91,39 +89,36 @@ val bir_eval_store_def = Define `
 
 
 val bir_eval_exp_def = Define `
-  (bir_eval_exp (BExp_Const n) env ext_st = SOME (BVal_Imm n)) /\
+  (bir_eval_exp (BExp_Const n) env = SOME (BVal_Imm n)) /\
 
-  (bir_eval_exp (BExp_MemConst aty vty mmap) env ext_st = SOME (BVal_Mem aty vty mmap)) /\
+  (bir_eval_exp (BExp_MemConst aty vty mmap) env = SOME (BVal_Mem aty vty mmap)) /\
 
-  (bir_eval_exp (BExp_Den v) env ext_st = bir_env_read v env) /\
+  (bir_eval_exp (BExp_Den v) env = bir_env_read v env) /\
 
-  (bir_eval_exp (BExp_Cast ct e ty) env ext_st = (
-     bir_eval_cast ct (bir_eval_exp e env ext_st) ty)) /\
+  (bir_eval_exp (BExp_Cast ct e ty) env = (
+     bir_eval_cast ct (bir_eval_exp e env) ty)) /\
 
-  (bir_eval_exp (BExp_UnaryExp et e) env ext_st = (
-     bir_eval_unary_exp et (bir_eval_exp e env ext_st))) /\
+  (bir_eval_exp (BExp_UnaryExp et e) env = (
+     bir_eval_unary_exp et (bir_eval_exp e env))) /\
 
-  (bir_eval_exp (BExp_BinExp et e1 e2) env ext_st = (
-     bir_eval_bin_exp et (bir_eval_exp e1 env ext_st) (bir_eval_exp e2 env ext_st))) /\
+  (bir_eval_exp (BExp_BinExp et e1 e2) env = (
+     bir_eval_bin_exp et (bir_eval_exp e1 env) (bir_eval_exp e2 env))) /\
 
-  (bir_eval_exp (BExp_BinPred pt e1 e2) env ext_st = (
-     bir_eval_bin_pred pt (bir_eval_exp e1 env ext_st) (bir_eval_exp e2 env ext_st))) /\
+  (bir_eval_exp (BExp_BinPred pt e1 e2) env = (
+     bir_eval_bin_pred pt (bir_eval_exp e1 env) (bir_eval_exp e2 env))) /\
 
-  (bir_eval_exp (BExp_MemEq e1 e2) env ext_st = (
-     bir_eval_memeq (bir_eval_exp e1 env ext_st) (bir_eval_exp e2 env ext_st))) /\
+  (bir_eval_exp (BExp_MemEq e1 e2) env = (
+     bir_eval_memeq (bir_eval_exp e1 env) (bir_eval_exp e2 env))) /\
 
-  (bir_eval_exp (BExp_IfThenElse c et ef) env ext_st =
-     bir_eval_ifthenelse (bir_eval_exp c env ext_st) (bir_eval_exp et env ext_st) (bir_eval_exp ef env ext_st)
+  (bir_eval_exp (BExp_IfThenElse c et ef) env =
+     bir_eval_ifthenelse (bir_eval_exp c env) (bir_eval_exp et env) (bir_eval_exp ef env)
   ) /\
 
-  (bir_eval_exp (BExp_ExtGet ext_fn ty) env ext_st =
-     bir_eval_extget ext_fn ty ext_st) /\
+  (bir_eval_exp (BExp_Load mem_e a_e en ty) env =
+     bir_eval_load (bir_eval_exp mem_e env) (bir_eval_exp a_e env) en ty) /\
 
-  (bir_eval_exp (BExp_Load mem_e a_e en ty) env ext_st =
-     bir_eval_load (bir_eval_exp mem_e env ext_st) (bir_eval_exp a_e env ext_st) en ty) /\
-
-  (bir_eval_exp (BExp_Store mem_e a_e en v_e) env ext_st =
-     bir_eval_store (bir_eval_exp mem_e env ext_st) (bir_eval_exp a_e env ext_st) en (bir_eval_exp v_e env ext_st))
+  (bir_eval_exp (BExp_Store mem_e a_e en v_e) env =
+     bir_eval_store (bir_eval_exp mem_e env) (bir_eval_exp a_e env) en (bir_eval_exp v_e env))
 `;
 
 

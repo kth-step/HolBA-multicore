@@ -1,3 +1,7 @@
+(*
+  Theorems about the labels of a program, type extensions, and translations between addresses and labels
+*)
+
 open HolKernel Parse boolLib bossLib;
 open bir_programTheory;
 open bir_immTheory;
@@ -5,8 +9,6 @@ open HolBACoreSimps
 open ASCIInumbersTheory listTheory
 
 val _ = new_theory "bir_program_labels";
-
-(* This theory reasons about the labels of a program *)
 
 
 (*************************)
@@ -22,9 +24,8 @@ val num_to_hex_string_fix_width_def = Define
   let s = num_to_hex_string n in
   "0x" ++ (if LENGTH s < w then APPEND (REPLICATE (w - LENGTH s) #"0") s else s)`
 
-val LENGTH_num_to_hex_string = store_thm (
-  "LENGTH_num_to_hex_string",
-``LENGTH (num_to_hex_string n) = (if n = 0 then 1 else SUC (LOG 16 n))``,
+val LENGTH_num_to_hex_string = store_thm ("LENGTH_num_to_hex_string",
+``!n. LENGTH (num_to_hex_string n) = (if n = 0 then 1 else SUC (LOG 16 n))``,
 SIMP_TAC list_ss [num_to_hex_string_def, n2s_def, numposrepTheory.LENGTH_n2l]);
 
 
@@ -140,7 +141,7 @@ Cases >> (
   MP_TAC (Q.SPEC `32` LENGTH_num_to_hex_string_fixwidth) >>
   MP_TAC (Q.SPEC `c` (INST_TYPE [``:'a`` |-> ``:128``] wordsTheory.w2n_lt)) >>
   ASM_SIMP_TAC (arith_ss++wordsLib.SIZES_ss) []
-])
+]);
 
 val s2b_b2s = store_thm ("s2b_b2s",
 ``!b. s2b (b2s b) = SOME b``,
@@ -154,7 +155,7 @@ Cases >> (
 
 val b2s_11 = store_thm ("b2s_11",
 ``!b1 b2. (b2s b1 = b2s b2) <=> (b1 = b2)``,
-METIS_TAC[s2b_b2s, optionTheory.SOME_11])
+METIS_TAC[s2b_b2s, optionTheory.SOME_11]);
 
 val num_to_hex_string_CHARS = store_thm ("num_to_hex_string_CHARS",
 ``!n c. MEM c (num_to_hex_string n) ==> MEM c [
@@ -370,7 +371,7 @@ val bir_program_addr_labels_sorted_def = Define `
 val bir_labels_of_program_REWRS = store_thm ("bir_labels_of_program_REWRS",
 ``(bir_labels_of_program (BirProgram []) = []) /\
   (!bl bls. bir_labels_of_program (BirProgram (bl::bls)) =
-            (bl.bb_label :: bir_labels_of_program (BirProgram bls)))``,
+            (bir_label_of_block bl :: bir_labels_of_program (BirProgram bls)))``,
 SIMP_TAC list_ss [bir_labels_of_program_def])
 
 

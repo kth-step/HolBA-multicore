@@ -80,20 +80,6 @@ val bir_env_vars_are_initialised_EQ_envty = store_thm("bir_env_vars_are_initiali
 
 (* ===================== *)
 
-(* TODO: This is used with get, for now. Rename to reflect this? *)
-Definition bir_ext_env_ext_is_valid_def:
-  bir_ext_env_ext_is_valid (ext_st:'ext_state_t) (ext_fn, ext_ty) <=>
-  ?v. bir_eval_extget ext_fn ext_ty ext_st = SOME v /\
-      type_of_bir_val v = ext_ty
-End
-
-Definition bir_ext_env_exts_are_valid_def:
-  bir_ext_env_exts_are_valid (ext_st:'ext_state_t) exts <=>
-  !ext_fn, ext_ty. (ext_fn, ext_ty) IN exts ==> bir_ext_env_ext_is_valid ext_st (ext_fn, ext_ty)
-End
-
-(* ===================== *)
-
 val bir_env_var_is_initialised_weaken = store_thm ("bir_env_var_is_initialised_weaken",
   ``!v env. bir_env_var_is_initialised env v ==> bir_env_var_is_declared env v``,
 Cases >> SIMP_TAC std_ss [bir_env_var_is_initialised_def, bir_env_var_is_declared_def,
@@ -246,42 +232,6 @@ val bir_env_order_well_typed = store_thm ("bir_env_order_well_typed",
 
 REWRITE_TAC [bir_is_well_typed_env_THM]
 );
-
-
-(* ===================== *)
-
-Theorem bir_ext_env_exts_are_valid_EMPTY:
-  !ext_st:'ext_state_t. bir_ext_env_exts_are_valid ext_st {}
-Proof
-fs [bir_ext_env_exts_are_valid_def, bir_ext_env_ext_is_valid_def, GSYM pairTheory.PFORALL_THM]
-QED
-
-Theorem bir_ext_env_exts_are_valid_UNION:
-  !ext_st:'ext_state_t exts1 exts2.
-  bir_ext_env_exts_are_valid ext_st (exts1 UNION exts2) <=>
-    (bir_ext_env_exts_are_valid ext_st exts1 /\
-     bir_ext_env_exts_are_valid ext_st exts2)
-Proof
-rpt strip_tac >>
-eq_tac >> (
-  rpt strip_tac
-) >> (
-  fs [bir_ext_env_exts_are_valid_def, bir_ext_env_ext_is_valid_def, GSYM pairTheory.PFORALL_THM]
-) >>
-rpt strip_tac >> (
-  metis_tac[]
-)
-QED
-
-Theorem bir_ext_env_exts_are_valid_SUBSET:
-  !ext_st:'ext_state_t exts1 exts2.
-  bir_ext_env_exts_are_valid ext_st exts1 ==>
-  exts2 SUBSET exts1 ==>
-  bir_ext_env_exts_are_valid ext_st exts2
-Proof
-rpt strip_tac >>
-fs [bir_ext_env_exts_are_valid_def, bir_ext_env_ext_is_valid_def, GSYM pairTheory.PFORALL_THM, SUBSET_DEF]
-QED
 
 (* ===================== *)
 

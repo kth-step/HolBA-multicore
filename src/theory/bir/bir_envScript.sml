@@ -339,26 +339,6 @@ val bir_envty_includes_vs_SUBSET = store_thm("bir_envty_includes_vs_SUBSET", ``
 
 (* ===================== *)
 
-Definition bir_eval_extget_def:
-  bir_eval_extget ext_fn ty ext_st =
-      case ext_fn ext_st of
-       | SOME v =>
-        if type_of_bir_val v <> ty
-        then NONE
-        else SOME v
-       | NONE => NONE
-End
-
-Theorem bir_eval_extget_type:
-  !ext_st ext_fn ext_ty v.
-  bir_eval_extget ext_fn ext_ty ext_st = SOME v ==>
-  type_of_bir_val v = ext_ty
-Proof
-  rpt strip_tac >> fs[bir_eval_extget_def,AllCaseEqs()]
-QED
-
-(* ===================== *)
-
 (* Equivalence for sets of vars *)
 val bir_env_EQ_FOR_VARS_def = Define `
   bir_env_EQ_FOR_VARS vs env1 env2 <=>

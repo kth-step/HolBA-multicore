@@ -30,32 +30,34 @@ Theorem bir_is_valid_labels_blocks_EQ_EL:
 Proof
   SIMP_TAC list_ss [bir_is_valid_labels_def, bir_labels_of_program_def] >>
   REPEAT STRIP_TAC >>
-  MP_TAC (Q.ISPEC `MAP (\bl. bir_label_of_block bl) (p:(('a, 'b, 'c) bir_generic_block_t) list)` listTheory.EL_ALL_DISTINCT_EL_EQ) >>
+  MP_TAC (Q.ISPEC `MAP (\bl. bir_label_of_block bl) (p:(('a, 'b) bir_generic_block_t) list)` listTheory.EL_ALL_DISTINCT_EL_EQ) >>
   ASM_SIMP_TAC list_ss [GSYM LEFT_EXISTS_IMP_THM] >>
   Q.EXISTS_TAC `n1` >> Q.EXISTS_TAC `n2` >>
   ASM_SIMP_TAC list_ss [listTheory.EL_MAP]
 QED
 
-val bir_is_valid_labels_blocks_EQ = store_thm ("bir_is_valid_labels_blocks_EQ",
-  ``!p bl1 bl2. (bir_is_valid_labels (BirProgram p) /\ MEM bl1 p /\ MEM bl2 p /\
-                (bir_label_of_block bl1 = bir_label_of_block bl2)) ==> (bl1 = bl2)``,
+Theorem bir_is_valid_labels_blocks_EQ:
+  !p bl1 bl2. (bir_is_valid_labels (BirProgram p) /\ MEM bl1 p /\ MEM bl2 p /\
+                (bir_label_of_block bl1 = bir_label_of_block bl2)) ==> (bl1 = bl2)
+Proof
+METIS_TAC [listTheory.MEM_EL, bir_is_valid_labels_blocks_EQ_EL]
+QED
 
-METIS_TAC [listTheory.MEM_EL, bir_is_valid_labels_blocks_EQ_EL]);
 
-
-val bir_get_program_block_info_by_label_valid_THM = store_thm ("bir_get_program_block_info_by_label_valid_THM",
-  ``(!p l. ((bir_get_program_block_info_by_label (BirProgram p) l = NONE) <=> (!bl. MEM bl p ==> (bir_label_of_block bl <> l)))) /\
+Theorem bir_get_program_block_info_by_label_valid_THM:
+  (!p l. ((bir_get_program_block_info_by_label (BirProgram p) l = NONE) <=> (!bl. MEM bl p ==> (bir_label_of_block bl <> l)))) /\
 
     (!p l i bl. bir_is_valid_labels (BirProgram p) ==>
           ((bir_get_program_block_info_by_label (BirProgram p) l = SOME (i, bl)) <=>
-           ((i:num) < LENGTH p) /\ (EL i p = bl) /\ (bir_label_of_block bl = l)))``,
-
+           ((i:num) < LENGTH p) /\ (EL i p = bl) /\ (bir_label_of_block bl = l)))
+Proof
 SIMP_TAC (list_ss++boolSimps.EQUIV_EXTRACT_ss) [bir_get_program_block_info_by_label_def,
   INDEX_FIND_EQ_NONE, listTheory.EVERY_MEM, INDEX_FIND_EQ_SOME_0] >>
 REPEAT STRIP_TAC >>
 `j' < LENGTH p` by DECIDE_TAC >>
 `j' = i` by METIS_TAC[bir_is_valid_labels_blocks_EQ_EL] >>
-FULL_SIMP_TAC arith_ss []);
+FULL_SIMP_TAC arith_ss []
+QED
 
 
 
@@ -107,24 +109,27 @@ Definition bir_is_valid_pc_def:
            bir_is_valid_index_of_block bl pc.bpc_index
 End
 
-val bir_is_valid_pc_of_valid_blocks = store_thm ("bir_is_valid_pc_of_valid_blocks",
-  ``!p pc. bir_is_valid_labels (BirProgram p) ==>
+Theorem bir_is_valid_pc_of_valid_blocks:
+  !p pc. bir_is_valid_labels (BirProgram p) ==>
            (bir_is_valid_pc (BirProgram p) pc <=> (?bl. MEM bl p /\ (pc.bpc_label = bir_label_of_block bl) /\
-             (bir_is_valid_index_of_block bl pc.bpc_index)))``,
+             (bir_is_valid_index_of_block bl pc.bpc_index)))
+Proof
 SIMP_TAC std_ss [bir_is_valid_pc_def, bir_is_valid_index_of_block_def, bir_get_program_block_info_by_label_valid_THM,
   listTheory.MEM_EL, GSYM LEFT_EXISTS_AND_THM] >>
-METIS_TAC[]);
+METIS_TAC[]
+QED
 
 
-val bir_get_program_block_info_by_label_valid_pc = store_thm ("bir_get_program_block_info_by_label_valid_pc",
-  ``!p pc. bir_is_valid_pc p pc ==> IS_SOME (bir_get_program_block_info_by_label p pc.bpc_label)``,
+Theorem bir_get_program_block_info_by_label_valid_pc:
+  !p pc. bir_is_valid_pc p pc ==> IS_SOME (bir_get_program_block_info_by_label p pc.bpc_label)
+Proof
+SIMP_TAC std_ss [bir_is_valid_pc_def, GSYM LEFT_FORALL_IMP_THM]
+QED
 
-SIMP_TAC std_ss [bir_is_valid_pc_def, GSYM LEFT_FORALL_IMP_THM]);
 
-
-val bir_get_current_statement_IS_SOME = store_thm ("bir_get_current_statement_IS_SOME",
-  ``!p pc. IS_SOME (bir_get_current_statement p pc) <=> bir_is_valid_pc p pc``,
-
+Theorem bir_get_current_statement_IS_SOME:
+  !p pc. IS_SOME (bir_get_current_statement p pc) <=> bir_is_valid_pc p pc
+Proof
 REPEAT GEN_TAC >>
 Cases_on `bir_get_program_block_info_by_label p pc.bpc_label` >> (
   ASM_SIMP_TAC std_ss [bir_get_current_statement_def, bir_is_valid_pc_def,
@@ -135,7 +140,7 @@ Cases_on `SND x` >> (
   fs[] >>
   SIMP_TAC (arith_ss++boolSimps.LIFT_COND_ss) []
 )
-);
+QED
 
 
 
@@ -164,7 +169,7 @@ Cases_on `pc.bpc_index < LENGTH b.bb_statements` >> (
   eq_tac >> (
     rpt strip_tac
   ) >- (
-    ASSUME_TAC (ISPEC ``b:('a, 'b) bir_generic_stmt_block_t`` bir_generic_stmt_block_t_literal_nchotomy) >>
+    ASSUME_TAC (ISPEC ``b:'a bir_generic_stmt_block_t`` bir_generic_stmt_block_t_literal_nchotomy) >>
     gs[]
   ) >>
   gs[]
@@ -197,7 +202,7 @@ Cases_on `pc.bpc_index < LENGTH b.bb_statements` >> (
 eq_tac >> (
   rpt strip_tac
 ) >- (
-  ASSUME_TAC (ISPEC ``b:('a, 'b) bir_generic_stmt_block_t`` bir_generic_stmt_block_t_literal_nchotomy) >>
+  ASSUME_TAC (ISPEC ``b:'a bir_generic_stmt_block_t`` bir_generic_stmt_block_t_literal_nchotomy) >>
   gs[]
 ) >> (
   gs[]
@@ -234,34 +239,37 @@ QED
    valid for all valid programs
    ------------------------------------------------------------------------- *)
 
-val bir_is_valid_pc_block_pc = store_thm ("bir_is_valid_pc_block_pc",
-``!l p. bir_is_valid_pc p (bir_block_pc l) <=>
-        MEM l (bir_labels_of_program p)``,
-
+Theorem bir_is_valid_pc_block_pc:
+  !l p. bir_is_valid_pc p (bir_block_pc l) <=>
+        MEM l (bir_labels_of_program p)
+Proof
 SIMP_TAC (std_ss++holBACore_ss) [bir_is_valid_pc_def,
-  bir_get_program_block_info_by_label_MEM, bir_block_pc_def, bir_is_valid_index_of_block_0]);
+  bir_get_program_block_info_by_label_MEM, bir_block_pc_def, bir_is_valid_index_of_block_0]
+QED
 
 
-val bir_pc_first_valid = store_thm ("bir_pc_first_valid",
-  ``!p. bir_is_valid_program p ==> bir_is_valid_pc p (bir_pc_first p)``,
-
+Theorem bir_pc_first_valid:
+  !p. bir_is_valid_program p ==> bir_is_valid_pc p (bir_pc_first p)
+Proof
 Cases >> rename1 `BirProgram p` >>
 SIMP_TAC std_ss [bir_pc_first_def, bir_is_valid_pc_block_pc] >>
 Cases_on `p` >> (
   SIMP_TAC list_ss [bir_is_valid_program_def, bir_labels_of_program_def,
     bir_program_is_empty_def]
-));
+)
+QED
 
 
-val bir_is_valid_pc_label_OK = store_thm ("bir_is_valid_pc_label_OK",
-  ``!p pc. bir_is_valid_pc p pc ==> MEM pc.bpc_label (bir_labels_of_program p)``,
-
+Theorem bir_is_valid_pc_label_OK:
+  !p pc. bir_is_valid_pc p pc ==> MEM pc.bpc_label (bir_labels_of_program p)
+Proof
 Cases_on `p` >> rename1 `BirProgram p` >>
 SIMP_TAC std_ss [bir_is_valid_pc_def, listTheory.MEM_MAP,
   GSYM LEFT_FORALL_IMP_THM, bir_labels_of_program_def,
   bir_get_program_block_info_by_label_THM] >>
 SIMP_TAC std_ss [listTheory.MEM_EL, GSYM RIGHT_EXISTS_AND_THM] >>
-METIS_TAC[]);
+METIS_TAC[]
+QED
 
 
 
@@ -275,11 +283,12 @@ val bir_is_valid_state_def = Define `bir_is_valid_state p st <=>
   ((bir_is_well_typed_env st.bst_environ) /\ bir_is_valid_pc p st.bst_pc)`;
 
 (* The initial state is valid for all valid programs *)
-val bir_state_init_valid = store_thm ("bir_state_init_valid",
-  ``!p. bir_is_valid_program p ==> bir_is_valid_state p (bir_state_init p)``,
-
+Theorem bir_state_init_valid:
+  !p. bir_is_valid_program p ==> bir_is_valid_state p (bir_state_init p)
+Proof
 SIMP_TAC (std_ss++holBACore_ss++holBACore_ss) [bir_is_valid_state_def, bir_state_init_def,
-  bir_pc_first_valid, bir_env_oldTheory.bir_is_well_typed_env_THM]);
+  bir_pc_first_valid, bir_env_oldTheory.bir_is_well_typed_env_THM]
+QED
 
 (* TODO: (Re)Move? *)
 Theorem bir_get_current_statement_NONE_BBlock_Ext:
@@ -297,25 +306,26 @@ Cases_on `x` >> (
 QED
 
 
-val bir_exec_step_invalid_pc_THM = store_thm ("bir_exec_step_invalid_pc_THM",
- ``!p st ext_st.
+Theorem bir_exec_step_invalid_pc_THM:
+  !p st.
    ~bir_is_valid_pc p st.bst_pc ==>
-    (bir_exec_step p (st, ext_st) = (if (bir_state_is_terminated st) then st else bir_state_set_failed st, ext_st))``,
+    (bir_exec_step p st = if (bir_state_is_terminated st) then st else bir_state_set_failed st)
+Proof
 metis_tac[bir_exec_step_def, bir_get_current_statement_IS_SOME, optionTheory.option_CLAUSES]
-);
+QED
 
 
 (* valid states allow some nice rewrite for bir_exec_step *)
 (* Only holds if current block is not an extern block *)
 Theorem bir_exec_step_valid_THM:
-  !p st ext_st.
+  !p st.
      ~bir_current_block_is_extern p st.bst_pc ==>
      bir_is_valid_pc p st.bst_pc ==>
      if bir_state_is_terminated st then
-       bir_exec_step p (st, ext_st) = (st, ext_st)
+       bir_exec_step p st = st
      else
        ?stmt. bir_get_current_statement p st.bst_pc = SOME (BSGen stmt) /\
-              bir_exec_step p (st, ext_st) = bir_exec_stmt p stmt (st,ext_st)
+              bir_exec_step p st = bir_exec_stmt p stmt st
 Proof
 rpt strip_tac >>
 FULL_SIMP_TAC std_ss [bir_exec_step_def, bir_current_block_is_extern_BSExt] >>
@@ -325,19 +335,20 @@ Cases_on `x` >> fs[]
 QED
 
 
-val bir_exec_step_state_valid_THM = store_thm ("bir_exec_step_state_valid_THM",
- ``!p st ext_st.
+Theorem bir_exec_step_state_valid_THM:
+  !p st.
      ~bir_current_block_is_extern p st.bst_pc ==>
      bir_is_valid_pc p st.bst_pc ==>
      (if bir_state_is_terminated st then
-        (bir_exec_step p (st, ext_st) = (st, ext_st))
+        (bir_exec_step p st = st)
       else
         (?stmt. (bir_get_current_statement p st.bst_pc = SOME (BSGen stmt)) /\
-                (bir_exec_step p (st, ext_st) = (bir_exec_stmt p stmt (st, ext_st)))))``,
-
+                (bir_exec_step p st = (bir_exec_stmt p stmt st))))
+Proof
 REPEAT STRIP_TAC >>
-MP_TAC (Q.SPECL [`p`, `st`, `ext_st`] bir_exec_step_valid_THM) >>
-ASM_SIMP_TAC std_ss [bir_exec_step_def, bir_exec_stmt_def]);
+MP_TAC (Q.SPECL [`p`, `st`] bir_exec_step_valid_THM) >>
+ASM_SIMP_TAC std_ss [bir_exec_step_def, bir_exec_stmt_def]
+QED
 
 
 (* -------------------------------------------------------------------------
@@ -345,46 +356,39 @@ ASM_SIMP_TAC std_ss [bir_exec_step_def, bir_exec_stmt_def]);
    ------------------------------------------------------------------------- *)
 
 val bir_exec_stmtB_well_typed_env_assign = prove (
-  ``!st v ex ext_st. bir_is_well_typed_env st.bst_environ ==>
-              bir_is_well_typed_env (bir_exec_stmt_assign v ex (st,ext_st)).bst_environ``,
+  ``!st v ex. bir_is_well_typed_env st.bst_environ ==>
+              bir_is_well_typed_env (bir_exec_stmt_assign v ex st).bst_environ``,
 METIS_TAC[bir_env_oldTheory.bir_is_well_typed_env_THM]);
 
 
 val bir_exec_stmtB_well_typed_env_assert = prove (
-  ``!st ex ext_st. bir_is_well_typed_env st.bst_environ ==>
-            bir_is_well_typed_env (bir_exec_stmt_assert ex (st,ext_st)).bst_environ``,
+  ``!st ex. bir_is_well_typed_env st.bst_environ ==>
+            bir_is_well_typed_env (bir_exec_stmt_assert ex st).bst_environ``,
 METIS_TAC[bir_env_oldTheory.bir_is_well_typed_env_THM]);
 
 
 val bir_exec_stmtB_well_typed_env_assume = prove (
-  ``!st ex ext_st. bir_is_well_typed_env st.bst_environ ==>
-            bir_is_well_typed_env (bir_exec_stmt_assume ex (st,ext_st)).bst_environ``,
+  ``!st ex. bir_is_well_typed_env st.bst_environ ==>
+            bir_is_well_typed_env (bir_exec_stmt_assume ex st).bst_environ``,
 METIS_TAC[bir_env_oldTheory.bir_is_well_typed_env_THM]);
 
-(*
-val bir_exec_stmtB_well_typed_env_extput = prove (
-  ``!st ext_map en ex ext_st.
-      bir_is_well_typed_env st.bst_environ ==>
-      bir_is_well_typed_env (FST (bir_exec_stmt_ext_put ext_map en ex (st,ext_st))).bst_environ``,
-METIS_TAC[bir_env_oldTheory.bir_is_well_typed_env_THM]);
-*)
-
-val bir_exec_stmtB_well_typed_env = store_thm ("bir_exec_stmtB_well_typed_env",
-``!st stmt ext_st. bir_is_well_typed_env st.bst_environ ==>
-            bir_is_well_typed_env (FST (bir_exec_stmtB stmt (st,ext_st))).bst_environ``,
-
+Theorem bir_exec_stmtB_well_typed_env:
+  !st stmt. bir_is_well_typed_env st.bst_environ ==>
+            bir_is_well_typed_env (bir_exec_stmtB stmt st).bst_environ
+Proof
 REPEAT STRIP_TAC >>
 Cases_on `stmt` >> (
   ASM_SIMP_TAC std_ss [bir_exec_stmtB_def,
     bir_exec_stmtB_well_typed_env_assign,
     bir_exec_stmtB_well_typed_env_assume,
     bir_exec_stmtB_well_typed_env_assert]
-));
+)
+QED
 
 
-val bir_exec_stmtB_pc_unchanged = store_thm ("bir_exec_stmtB_pc_unchanged",
-``!st ext_st stmt. (FST (bir_exec_stmtB stmt (st, ext_st))).bst_pc = st.bst_pc``,
-
+Theorem bir_exec_stmtB_pc_unchanged:
+  !st stmt. (bir_exec_stmtB stmt st).bst_pc = st.bst_pc
+Proof
 REPEAT STRIP_TAC >>
 Cases_on `stmt` >> (
   ASM_SIMP_TAC std_ss [bir_exec_stmtB_def, LET_DEF,
@@ -392,53 +396,59 @@ Cases_on `stmt` >> (
     bir_exec_stmt_assign_def, bir_exec_stmt_assert_def] >>
   REPEAT CASE_TAC >>
   FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_state_set_typeerror_def]
-));
+)
+QED
 
-val bir_exec_stmtB_valid_state_invar = store_thm ("bir_exec_stmtB_valid_state_invar",
-``!p st ext_st stmt. bir_is_valid_state p st ==>
-              bir_is_valid_state p (FST (bir_exec_stmtB stmt (st, ext_st)))``,
-
+Theorem bir_exec_stmtB_valid_state_invar:
+  !p st stmt. bir_is_valid_state p st ==>
+              bir_is_valid_state p (bir_exec_stmtB stmt st)
+Proof
 SIMP_TAC std_ss [bir_is_valid_state_def,
-  bir_exec_stmtB_pc_unchanged, bir_exec_stmtB_well_typed_env]);
+  bir_exec_stmtB_pc_unchanged, bir_exec_stmtB_well_typed_env]
+QED
 
 
-val bir_exec_stmt_jmp_to_label_valid_pc = store_thm ("bir_exec_stmt_jmp_to_label_valid_pc",
-  ``!p st l. bir_is_valid_pc p st.bst_pc ==>
-             bir_is_valid_pc p (bir_exec_stmt_jmp_to_label p l st).bst_pc``,
+Theorem bir_exec_stmt_jmp_to_label_valid_pc:
+  !p st l. bir_is_valid_pc p st.bst_pc ==>
+             bir_is_valid_pc p (bir_exec_stmt_jmp_to_label p l st).bst_pc
+Proof
 SIMP_TAC std_ss [bir_exec_stmt_jmp_to_label_def] >>
 REPEAT STRIP_TAC >>
 COND_CASES_TAC >| [
   FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_is_valid_pc_block_pc],
 
   FULL_SIMP_TAC (std_ss++holBACore_ss) []
-]);
+]
+QED
 
 
-val bir_exec_stmt_jmp_valid_pc = store_thm ("bir_exec_stmt_jmp_valid_pc",
-  ``!p st ext_st l. bir_is_valid_pc p st.bst_pc ==>
-             bir_is_valid_pc p (bir_exec_stmt_jmp p l (st, ext_st)).bst_pc``,
+Theorem bir_exec_stmt_jmp_valid_pc:
+  !p st l. bir_is_valid_pc p st.bst_pc ==>
+             bir_is_valid_pc p (bir_exec_stmt_jmp p l st).bst_pc
+Proof
 SIMP_TAC std_ss [bir_exec_stmt_jmp_def] >>
 REPEAT STRIP_TAC >> CASE_TAC >> (
   ASM_SIMP_TAC (std_ss++bir_TYPES_ss) [
      bir_exec_stmt_jmp_to_label_valid_pc,
      bir_state_set_typeerror_def]
-));
+)
+QED
 
 
 val bir_exec_stmtE_valid_pc_jmp = prove (
-  ``!p st ext_st l. bir_is_valid_pc p st.bst_pc ==>
-             bir_is_valid_pc p (bir_exec_stmtE p (BStmt_Jmp l) (st, ext_st)).bst_pc``,
+  ``!p st l. bir_is_valid_pc p st.bst_pc ==>
+             bir_is_valid_pc p (bir_exec_stmtE p (BStmt_Jmp l) st).bst_pc``,
 SIMP_TAC std_ss [bir_exec_stmtE_def, bir_exec_stmt_jmp_valid_pc]);
 
 
 val bir_exec_stmtE_valid_pc_cjmp = prove (
-  ``!p st ext_st ex l1 l2.
+  ``!p st ex l1 l2.
        bir_is_valid_pc p st.bst_pc ==>
-       bir_is_valid_pc p (bir_exec_stmtE p (BStmt_CJmp ex l1 l2) (st, ext_st)).bst_pc``,
+       bir_is_valid_pc p (bir_exec_stmtE p (BStmt_CJmp ex l1 l2) st).bst_pc``,
 SIMP_TAC std_ss [bir_exec_stmtE_def, bir_exec_stmt_cjmp_def] >>
 REPEAT STRIP_TAC >>
-Cases_on `option_CASE (bir_eval_exp ex st.bst_environ ext_st) NONE bir_dest_bool_val` >- (
-  Cases_on `bir_eval_exp ex st.bst_environ ext_st` >> (
+Cases_on `option_CASE (bir_eval_exp ex st.bst_environ) NONE bir_dest_bool_val` >- (
+  Cases_on `bir_eval_exp ex st.bst_environ` >> (
     ASM_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_state_set_typeerror_def, LET_DEF]
   )
 ) >>
@@ -449,33 +459,34 @@ Cases_on `c` >> (
 
 
 val bir_exec_stmtE_valid_pc_halt = prove (
-  ``!p st ex ext_st.
+  ``!p st ex.
       bir_is_valid_pc p st.bst_pc ==>
-      bir_is_valid_pc p (bir_exec_stmtE p (BStmt_Halt ex) (st, ext_st)).bst_pc``,
+      bir_is_valid_pc p (bir_exec_stmtE p (BStmt_Halt ex) st).bst_pc``,
   SIMP_TAC (std_ss++holBACore_ss) [bir_exec_stmtE_def, bir_exec_stmt_halt_def] >>
   REPEAT STRIP_TAC >>
-  Cases_on `bir_eval_exp ex st.bst_environ ext_st` >> (
+  Cases_on `bir_eval_exp ex st.bst_environ` >> (
     ASM_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_state_set_typeerror_def, LET_DEF]
   )
 );
 
 
-val bir_exec_stmtE_valid_pc = store_thm ("bir_exec_stmtE_valid_pc",
-``!p st ext_st stmt. bir_is_valid_pc p st.bst_pc ==>
-              bir_is_valid_pc p (bir_exec_stmtE p stmt (st, ext_st)).bst_pc``,
-
+Theorem bir_exec_stmtE_valid_pc:
+  !p st stmt. bir_is_valid_pc p st.bst_pc ==>
+              bir_is_valid_pc p (bir_exec_stmtE p stmt st).bst_pc
+Proof
 REPEAT STRIP_TAC >>
 Cases_on `stmt` >> (
   ASM_SIMP_TAC std_ss [
     bir_exec_stmtE_valid_pc_cjmp,
     bir_exec_stmtE_valid_pc_jmp,
     bir_exec_stmtE_valid_pc_halt]
-));
+)
+QED
 
 
-val bir_exec_stmtE_env_unchanged = store_thm ("bir_exec_stmtE_env_unchanged",
-``!p st ext_st stmt. (bir_exec_stmtE p stmt (st, ext_st)).bst_environ = st.bst_environ``,
-
+Theorem bir_exec_stmtE_env_unchanged:
+  !p st stmt. (bir_exec_stmtE p stmt st).bst_environ = st.bst_environ
+Proof
 REPEAT STRIP_TAC >>
 Cases_on `stmt` >> (
   SIMP_TAC std_ss [bir_exec_stmtE_def,
@@ -484,7 +495,7 @@ Cases_on `stmt` >> (
     bir_state_set_typeerror_def] >>
   REPEAT CASE_TAC >>
   SIMP_TAC (std_ss++holBACore_ss) [LET_DEF] >>
-  Cases_on `bir_eval_exp b st.bst_environ ext_st` >> (
+  Cases_on `bir_eval_exp b st.bst_environ` >> (
     SIMP_TAC (std_ss++holBACore_ss) [LET_DEF]
   ) >> (
     rename1 `bir_dest_bool_val x''` >> Cases_on `bir_dest_bool_val x''`
@@ -494,22 +505,24 @@ Cases_on `stmt` >> (
     COND_CASES_TAC >>
     SIMP_TAC (std_ss++holBACore_ss) [LET_DEF]
   )
-));
+)
+QED
 
 
-val bir_exec_stmtE_valid_state_invar = store_thm ("bir_exec_stmtE_valid_state_invar",
-``!p st ext_st stmt. bir_is_valid_state p st ==>
-              bir_is_valid_state p (bir_exec_stmtE p stmt (st, ext_st))``,
-
+Theorem bir_exec_stmtE_valid_state_invar:
+  !p st stmt. bir_is_valid_state p st ==>
+              bir_is_valid_state p (bir_exec_stmtE p stmt st)
+Proof
 SIMP_TAC std_ss [bir_is_valid_state_def,
-  bir_exec_stmtE_env_unchanged, bir_exec_stmtE_valid_pc]);
+  bir_exec_stmtE_env_unchanged, bir_exec_stmtE_valid_pc]
+QED
 
 
-val bir_exec_stmtE_block_pc = store_thm ("bir_exec_stmtE_block_pc",
-``!p st ext_st stmt.
-  ~(bir_state_is_terminated (bir_exec_stmtE p stmt (st, ext_st))) ==>
-  ((bir_exec_stmtE p stmt (st, ext_st)).bst_pc.bpc_index = 0)``,
-
+Theorem bir_exec_stmtE_block_pc:
+  !p st stmt.
+  ~(bir_state_is_terminated (bir_exec_stmtE p stmt st)) ==>
+  ((bir_exec_stmtE p stmt st).bst_pc.bpc_index = 0)
+Proof
 REPEAT GEN_TAC >>
 Cases_on `stmt` >> (
   SIMP_TAC std_ss [bir_exec_stmtE_def,
@@ -518,7 +531,7 @@ Cases_on `stmt` >> (
     bir_state_set_typeerror_def] >>
   REPEAT CASE_TAC >>
   SIMP_TAC (std_ss++holBACore_ss) [bir_block_pc_def, LET_DEF] >>
-  Cases_on `bir_eval_exp b st.bst_environ ext_st` >> (
+  Cases_on `bir_eval_exp b st.bst_environ` >> (
     SIMP_TAC (std_ss++holBACore_ss) [bir_block_pc_def, LET_DEF]
   ) >> (
     rename1 `bir_dest_bool_val x''` >> Cases_on `bir_dest_bool_val x''`
@@ -528,15 +541,16 @@ Cases_on `stmt` >> (
     COND_CASES_TAC >>
     SIMP_TAC (std_ss++holBACore_ss) [bir_block_pc_def, LET_DEF]
   )
-));
+)
+QED
 
 (* TODO: Relax to allowing some kind of well-formed extern block? *)
-val bir_exec_step_valid_pc = store_thm ("bir_exec_step_valid_pc",
-``!p st ext_st.
+Theorem bir_exec_step_valid_pc:
+  !p st.
   ~bir_current_block_is_extern p st.bst_pc ==>
-  (bir_is_valid_pc p (FST (bir_exec_step p (st, ext_st))).bst_pc <=>
-    bir_is_valid_pc p st.bst_pc)``,
-
+  (bir_is_valid_pc p (bir_exec_step p st).bst_pc <=>
+    bir_is_valid_pc p st.bst_pc)
+Proof
 REPEAT STRIP_TAC >>
 Cases_on `bir_state_is_terminated st` >- (
   FULL_SIMP_TAC std_ss [bir_exec_step_def, bir_exec_step_def]
@@ -547,31 +561,30 @@ EQ_TAC >> REPEAT STRIP_TAC >- (
   REV_FULL_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_state_set_failed_def]
 ) >>
 IMP_RES_TAC bir_exec_step_state_valid_THM >>
-QSPECL_X_ASSUM ``!ext_st. _`` [`ext_st`] >>
 REV_FULL_SIMP_TAC std_ss [] >>
 Cases_on `stmt` >> (
   ASM_SIMP_TAC std_ss [bir_exec_stmt_def, bir_exec_stmtE_valid_pc, LET_DEF]
 ) >>
-rename1 `bir_exec_stmtB stmt (st, ext_st)` >>
-Q.ABBREV_TAC `st'_tup = bir_exec_stmtB stmt (st, ext_st)` >>
-PairCases_on `st'_tup` >>
-rename1 `(st', ext_st') = bir_exec_stmtB stmt (st,ext_st)` >>
+rename1 `bir_exec_stmtB stmt st` >>
+Q.ABBREV_TAC `st' = bir_exec_stmtB stmt st` >>
+rename1 `st' = bir_exec_stmtB stmt st` >>
 subgoal `st'.bst_pc = st.bst_pc` >- (
-  subgoal `(FST (bir_exec_stmtB stmt (st,ext_st))).bst_pc = st.bst_pc` >- (
+  subgoal `(bir_exec_stmtB stmt st).bst_pc = st.bst_pc` >- (
     fs[bir_exec_stmtB_pc_unchanged]
   ) >>
   gvs[pairTheory.FST]
 ) >>
 fs[] >>
-COND_CASES_TAC >> ASM_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_pc_next_valid]);
+COND_CASES_TAC >> ASM_SIMP_TAC (std_ss++bir_TYPES_ss) [bir_pc_next_valid]
+QED
 
 
-val bir_exec_step_well_typed_env = store_thm ("bir_exec_step_well_typed_env",
-``!p st ext_st.
+Theorem bir_exec_step_well_typed_env:
+  !p st.
   ~bir_current_block_is_extern p st.bst_pc ==>
   bir_is_well_typed_env st.bst_environ ==>
-  bir_is_well_typed_env (FST (bir_exec_step p (st, ext_st))).bst_environ``,
-
+  bir_is_well_typed_env (bir_exec_step p st).bst_environ
+Proof
 REPEAT STRIP_TAC >>
 ASM_SIMP_TAC (std_ss++boolSimps.LIFT_COND_ss) [bir_exec_step_def, bir_exec_step_def] >>
 CASE_TAC >> (
@@ -586,25 +599,23 @@ Cases_on `stmt` >> (
   ASM_SIMP_TAC std_ss [bir_exec_stmt_def, LET_DEF,
     bir_exec_stmtE_env_unchanged]
 ) >>
-Cases_on `bir_exec_stmtB a (st,ext_st)` >>
-subgoal `(FST (bir_exec_stmtB a (st,ext_st))).bst_environ = q.bst_environ` >- (
-  fs[pairTheory.FST]
-) >>
 fs[] >>
 CASE_TAC >> (
   fs[] >>
   metis_tac[pairTheory.FST, bir_exec_stmtB_well_typed_env]
-));
+)
+QED
 
 
-val bir_exec_step_valid_state_invar = store_thm ("bir_exec_step_valid_state_invar",
-``!p st ext_st.
+Theorem bir_exec_step_valid_state_invar:
+  !p st.
   ~bir_current_block_is_extern p st.bst_pc ==>
   bir_is_valid_state p st ==>
-  bir_is_valid_state p (FST (bir_exec_step p (st, ext_st)))``,
-
+  bir_is_valid_state p (bir_exec_step p st)
+Proof
 SIMP_TAC std_ss [bir_is_valid_state_def,
-  bir_exec_step_well_typed_env, bir_exec_step_valid_pc]);
+  bir_exec_step_well_typed_env, bir_exec_step_valid_pc]
+QED
 
 
 val _ = export_theory();
