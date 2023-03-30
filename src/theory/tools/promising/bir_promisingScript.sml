@@ -54,6 +54,13 @@ val mem_read_def = Define‘
    | NONE => NONE
 ’;
 
+
+Theorem mem_read_zero:
+  !M l. mem_read M l 0 = SOME $ BVal_Imm $ Imm64 0w
+Proof
+  fs[mem_read_def,mem_get_def,mem_default_value_def,mem_default_def]
+QED
+
 val mem_is_loc_def = Define‘
    mem_is_loc M 0 l = T
    /\
@@ -121,6 +128,12 @@ Proof
   >> fs[]
 QED
 
+Theorem mem_get_mem_read_imp:
+  !M l t m. mem_get M l t = SOME m ==> mem_read M l t = SOME m.val
+Proof
+  fs[mem_read_def]
+QED
+
 Theorem mem_get_LENGTH:
   !t M l v. mem_get M l t = SOME v ==> t <= LENGTH M
 Proof
@@ -179,6 +192,27 @@ Proof
   >> gs[AllCaseEqs()]
 QED
 
+Theorem mem_is_cid_append:
+  !t M M' cid. t <= LENGTH M ==> mem_is_cid (M ++ M') t cid = mem_is_cid M t cid
+Proof
+  Cases >> rpt gen_tac >> fs[mem_is_cid_def,listTheory.oEL_THM,rich_listTheory.EL_APPEND1]
+QED
+
+Theorem mem_read_mem_is_loc_imp:
+  !t l M msg. mem_read M l t = SOME msg ==> mem_is_loc M t l
+Proof
+  Cases >> fs[mem_is_loc_def,mem_read_def,mem_get_def,AllCaseEqs(),PULL_EXISTS]
+QED
+
+Theorem mem_get_mem_is_cid:
+  !t M l msg cid.
+  mem_get M l t = SOME msg
+  /\ mem_is_cid M t cid
+  ==> msg.cid = cid /\ msg.loc = l
+Proof
+  Cases >> csimp[mem_get_def,mem_is_cid_def,AllCaseEqs(),PULL_EXISTS]
+QED
+
 (* Note that this currently does not take into account ARM *)
 val mem_read_view_def = Define‘
   mem_read_view (f:fwdb_t) t = if f.fwdb_time = t ∧ ~f.fwdb_xcl then f.fwdb_view else t
@@ -225,6 +259,19 @@ val fulfil_atomic_ok_def = Define`
      (mem_is_loc M t_r l ==>
        !t'. (t_r < t' /\ t' < t_w /\ mem_is_loc M t' l) ==> mem_is_cid M t' cid)
 `;
+
+Theorem fulfil_atomic_ok_append:
+  !M M' l cid t t'.
+  t' <= LENGTH M /\ t <= LENGTH M
+  ==> fulfil_atomic_ok (M ++ M') l cid t t'
+  = fulfil_atomic_ok M l cid t t'
+Proof
+  rpt strip_tac
+  >> fs[fulfil_atomic_ok_def,mem_is_loc_append,mem_is_cid_def,mem_is_cid_append]
+  >> rw[EQ_IMP_THM]
+  >> first_x_assum irule
+  >> gs[mem_is_loc_append]
+QED
 
 val env_update_cast64_def = Define‘
   env_update_cast64 varname (BVal_Imm v) vartype env =
@@ -291,41 +338,37 @@ QED
 Theorem bir_exec_stmt_cjmp_mc_invar =
   GSYM $ SIMP_RULE (srw_ss()) [] bir_exec_stmt_cjmp_mc_invar'
 
+(* success value for a store *)
+Definition v_succ_def:
+  v_succ = Imm64 0w
+End
+
+(* failure value for a store *)
+Definition v_fail_def:
+  v_fail = Imm64 1w
+End
+
 Definition fulfil_update_env_def:
-  fulfil_update_env p s =
-    case bir_get_current_statement p s.bst_pc of
-    | SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ _ _ F _ _
-      => SOME s.bst_environ
-    | SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ _ _ T _ _
-      => bir_env_update (bir_var_name var_succ) (BVal_Imm (Imm64 0w))
-          (bir_var_type var_succ) s.bst_environ
-    | _ => NONE
+  fulfil_update_env var_succ xcl env =
+  if xcl then
+    bir_env_update (bir_var_name var_succ) (BVal_Imm v_succ)
+      (bir_var_type var_succ) env
+  else SOME env
 End
 
 Definition fulfil_update_viewenv_def:
-  fulfil_update_viewenv p s v_post =
-    case bir_get_current_statement p s.bst_pc of
-    | SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ _ _ T _ _
-      => SOME (s.bst_viewenv |+ (var_succ, v_post))
-    | SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ _ _ F _ _
-      => SOME s.bst_viewenv
-    | _ => NONE
+  fulfil_update_viewenv var_succ xcl v_post viewenv =
+  SOME $ if xcl then viewenv |+ (var_succ,v_post) else viewenv
 End
 
 Definition xclfail_update_env_def:
-  xclfail_update_env p s =
-    case bir_get_current_statement p s.bst_pc of
-    | SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ _ _ T _ _
-      => bir_env_update (bir_var_name var_succ) (BVal_Imm (Imm64 1w)) (bir_var_type var_succ) s.bst_environ
-    | _ => NONE
+  xclfail_update_env var_succ env =
+    bir_env_update (bir_var_name var_succ) (BVal_Imm v_fail)
+      (bir_var_type var_succ) env
 End
 
 Definition xclfail_update_viewenv_def:
-  xclfail_update_viewenv p s =
-    case bir_get_current_statement p s.bst_pc of
-    | SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ _ _ T _ _
-        => SOME (s.bst_viewenv |+ (var_succ, 0))
-    | _ => NONE
+  xclfail_update_viewenv var_succ viewenv = SOME $ viewenv |+ (var_succ,0n)
 End
 
 (* reading at time stamp  t  at location  l  from memory  M  would not see a
@@ -344,6 +387,32 @@ Proof
   >> first_x_assum drule
   >> fs[mem_is_loc_append]
 QED
+
+Theorem latest_t_dec:
+  !l M t to to'.
+  latest_t l M t to /\ to' <= MAX t to ==> latest_t l M t to'
+Proof
+  rw[latest_t_def]
+QED
+
+Theorem latest_t_add:
+  !l M t to to'.
+  latest_t l M t to /\ latest_t l M to to' ==> latest_t l M t to'
+Proof
+  rw[latest_t_def]
+  >> ntac 2 $ first_x_assum $ drule_at_then Any assume_tac
+  >> fs[GSYM arithmeticTheory.NOT_LESS]
+  >> qmatch_assum_rename_tac `~A ==> B`
+  >> Cases_on `A` >> fs[]
+QED
+
+Theorem latest_t_append_eq:
+  !t l M M' to.
+    to <= LENGTH M ==> latest_t l (M ++ M') t to = latest_t l M t to
+Proof
+  rw[latest_t_def,mem_is_loc_append]
+QED
+
 
 (* function that can be reused in abstract models, e.g. like
    s' = (bir_state_fulful_view_updates s t loc v_addr v_data acq rel xcl) s'
@@ -376,6 +445,27 @@ Definition bir_state_read_view_updates_def:
   |>
 End
 
+Definition is_read_def:
+  is_read BM_Read = T /\
+  is_read BM_ReadWrite = T /\
+  is_read _ = F
+End
+
+Definition is_write_def:
+  is_write BM_ReadWrite = T /\
+  is_write BM_Write = T /\
+  is_write _ = F
+End
+
+Definition fence_updates_def:
+  fence_updates K1 K2 s =
+    let v = MAX (if is_read K1 then s.bst_v_rOld else 0) (if is_write K1 then s.bst_v_wOld else 0)
+    in
+      s with <| bst_v_rNew := MAX s.bst_v_rNew (if is_read K2 then v else 0);
+                bst_v_wNew := MAX s.bst_v_wNew (if is_write K2 then v else 0);
+             |>
+End
+
 (* core-local steps that don't affect memory *)
 Inductive clstep:
 (* read *)
@@ -394,9 +484,7 @@ Inductive clstep:
  /\ s' = (bir_state_read_view_updates s t l v_addr v_post acq rel xcl s)
           with <| bst_viewenv updated_by (\env. FUPDATE env (var, v_post));
                   bst_environ := new_env;
-                  bst_pc := if xcl
-                            then (bir_pc_next o bir_pc_next) s.bst_pc
-                            else bir_pc_next s.bst_pc |>
+                  bst_pc updated_by bir_pc_next |>
  ==>
   clstep p cid tp s M [] s')
 
@@ -405,12 +493,12 @@ Inductive clstep:
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ a_e v_e T acq rel
  /\ s.bst_status = BST_Running
- /\  SOME new_env = xclfail_update_env p s
- /\  SOME new_viewenv = xclfail_update_viewenv p s
+ /\  SOME new_env = xclfail_update_env var_succ s.bst_environ
+ /\  SOME new_viewenv = xclfail_update_viewenv var_succ s.bst_viewenv
  /\  s' = s with <| bst_environ := new_env;
                     bst_viewenv := new_viewenv;
                     bst_xclb := NONE;
-                    bst_pc := (bir_pc_next o bir_pc_next o bir_pc_next) s.bst_pc |>
+                    bst_pc updated_by bir_pc_next |>
  ==>
 clstep p cid tp s M [] s')
 
@@ -437,16 +525,14 @@ clstep p cid tp s M [] s')
                  else 0)
  /\ (MAX v_pre (s.bst_coh l) < t)
  /\ v_post = t
- /\ SOME new_env = fulfil_update_env p s
+ /\ SOME new_env = fulfil_update_env var_succ xcl s.bst_environ
  (* TODO: Update viewenv by v_post or something else? *)
- /\ SOME new_viewenv = fulfil_update_viewenv p s v_post
+ /\ SOME new_viewenv = fulfil_update_viewenv var_succ xcl v_post s.bst_viewenv
  /\ s' = (bir_state_fulful_view_updates s t l v_addr v_data acq rel xcl s)
            with <| bst_viewenv := new_viewenv;
                    bst_prom updated_by (FILTER (\t'. t' <> t));
                    bst_environ := new_env;
-                   bst_pc := if xcl
-                             then (bir_pc_next o bir_pc_next o bir_pc_next) s.bst_pc
-                             else bir_pc_next s.bst_pc |>
+                   bst_pc updated_by bir_pc_next |>
  ==>
   clstep p cid tp s M [t] s')
 
@@ -497,19 +583,16 @@ clstep p cid tp s M [] s')
                      bst_fwdb    updated_by (l =+ <| fwdb_time := t_w;
                                                      fwdb_view := MAX v_addr v_data;
                                                      fwdb_xcl := T |>);
-                     bst_pc updated_by (bir_pc_next o bir_pc_next) |>
+                     bst_pc updated_by bir_pc_next |>
  ==>
  clstep p cid tp s M [t_w] s')
 
 /\ (* fence *)
-(!p s s' K1 K2 M cid v tp.
+(!p s s' K1 K2 M cid tp.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Fence K1 K2
    /\ s.bst_status = BST_Running
-   /\ v = MAX (if is_read K1 then s.bst_v_rOld else 0) (if is_write K1 then s.bst_v_wOld else 0)
-   /\ s' = s with <| bst_v_rNew := MAX s.bst_v_rNew (if is_read K2 then v else 0);
-                     bst_v_wNew := MAX s.bst_v_wNew (if is_write K2 then v else 0);
-                     bst_pc updated_by bir_pc_next |>
+   /\ s' = fence_updates K1 K2 (s with bst_pc updated_by bir_pc_next)
 ==>
   clstep p cid tp s M [] s')
 
@@ -548,6 +631,10 @@ clstep p cid tp s M [] s')
   bir_get_current_statement p s.bst_pc = SOME $ BSExt R
     /\ R (s,(tp,M)) s'
     /\ s.bst_status = BST_Running
+    (* well-formedness of ext functionality *)
+    /\ EVERY (λx. MEM x s.bst_prom) s'.bst_prom
+    /\ (!l. s.bst_coh l <= s'.bst_coh l)
+    /\ EVERY (λx. 0 < x /\ x <= LENGTH M) s'.bst_prom
 ==>
   clstep p cid tp s M [] s')
 End

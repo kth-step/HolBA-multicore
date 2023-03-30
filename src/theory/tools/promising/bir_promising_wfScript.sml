@@ -8,34 +8,69 @@ open bir_programTheory;
 open bir_valuesTheory;
 open bir_expTheory;
 open finite_mapTheory;
+open bir_init_progTheory;
 
 val _ = new_theory "bir_promising_wf";
 
+(* move to promising *)
+
+Theorem mem_get_eq:
+  !t M l l' msg msg'.
+  mem_get M l t = SOME msg
+  /\ mem_get M l' t = SOME msg'
+  /\ 0 < t
+  ==> l = l' /\ msg = msg'
+Proof
+  Cases >> fs[mem_get_def,AllCaseEqs(),listTheory.oEL_THM]
+QED
+
+Theorem bmc_exec_general_stmt_exists:
+  !stm p s s'.
+  bmc_exec_general_stmt p stm s = SOME s'
+  <=> ?e e'.
+  stm = BStmtB $ BMCStmt_Assert e /\ bir_exec_stmt_assert e s = s'
+  \/ stm = BStmtB $ BMCStmt_Assume e' /\ bir_exec_stmt_assume e' s = s'
+  \/ (?e. stm = BStmtE $ BStmt_Halt e /\ bir_exec_stmt_halt e s = s')
+  \/ ?e. stm = BStmtE $ BStmt_Jmp e /\ bir_exec_stmt_jmp p e s = s'
+Proof
+  Cases
+  >> rw[bmc_exec_general_stmt_def,AllCaseEqs(),EQ_IMP_THM]
+  >> fs[bir_exec_stmtB_def,bir_exec_stmtE_def]
+QED
+
 Theorem bir_exec_stmt_jmp_bst_eq:
   !s p lbl.
-     (bir_exec_stmt_jmp p lbl s).bst_v_rNew   = (FST s).bst_v_rNew
-  /\ (bir_exec_stmt_jmp p lbl s).bst_v_rOld   = (FST s).bst_v_rOld
-  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wNew   = (FST s).bst_v_wNew
-  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wOld   = (FST s).bst_v_wOld
-  /\ (bir_exec_stmt_jmp p lbl s).bst_v_Rel    = (FST s).bst_v_Rel
-  /\ (bir_exec_stmt_jmp p lbl s).bst_viewenv  = (FST s).bst_viewenv
-  /\ (!l. (bir_exec_stmt_jmp p lbl s).bst_coh l = (FST s).bst_coh l)
+     (bir_exec_stmt_jmp p lbl s).bst_v_rNew     = s.bst_v_rNew
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_rOld     = s.bst_v_rOld
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wNew     = s.bst_v_wNew
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_wOld     = s.bst_v_wOld
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_Rel      = s.bst_v_Rel
+  /\ (bir_exec_stmt_jmp p lbl s).bst_viewenv    = s.bst_viewenv
+  /\ (!l. (bir_exec_stmt_jmp p lbl s).bst_coh l = s.bst_coh l)
 Proof
-  PairCases
-  >> rw[bir_exec_stmt_jmp_def]
+  rw[bir_exec_stmt_jmp_def]
   >> CASE_TAC
   >> fs[bir_state_set_typeerror_def,bir_exec_stmt_jmp_to_label_def]
   >> CASE_TAC
   >> fs[]
 QED
 
-Definition latest_def:
-  latest l 0 M = 0
-  /\ latest l (SUC t) M =
+(* return the first element from list 'M' satisfying P given index *)
+Definition latestP_def:
+  latestP P 0 M = 0
+  /\ latestP P (SUC t) M =
   case oEL t M of
     SOME msg =>
-      if l = msg.loc then SUC t else latest l t M
-  | _ => latest l t M
+      if P msg then SUC t else latestP P t M
+  | _ => latestP P t M
+End
+
+Definition latest_def:
+  latest l = latestP (λmsg. l = msg.loc)
+End
+
+Definition latest_core_def:
+  latest_core l cid = latestP (λmsg. msg.loc = l /\ msg.cid = cid)
 End
 
 Definition well_formed_fwdb_def:
@@ -76,6 +111,7 @@ Definition well_formed_def:
      /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
      /\ EVERY (λt. t <= LENGTH M) s.bst_prom
      /\ EVERY ($< 0) s.bst_prom
+     /\ EVERY (λt. mem_is_cid M t cid) s.bst_prom
      /\ ALL_DISTINCT s.bst_prom
      /\ (!t msg.
            (oEL t M = SOME msg
@@ -83,34 +119,37 @@ Definition well_formed_def:
             /\ s.bst_coh(msg.loc) < t)
            ==>
            MEM (SUC t) s.bst_prom)
+     /\ (!t l msg.
+      mem_get M l t = SOME msg /\ ~MEM t s.bst_prom /\ msg.cid = cid
+      ==> t <= s.bst_coh l)
 End
 
 (* well-formed external block relation *)
 Definition wf_ext_fwdb_def:
-  wf_ext_fwdb p cid tp s e M =
-    !R s' e'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
-    /\ R (s,(tp,M),e) (s',e')
+  wf_ext_fwdb p cid tp s M =
+    !R s'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
+    /\ R (s,(tp,M)) s'
     /\ (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
     ==> (!l. well_formed_fwdb l M (s'.bst_coh l) (s'.bst_fwdb l))
 End
 
 Definition wf_ext_xclb_def:
-  wf_ext_xclb p cid tp s e M =
-    !R s' e'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
-    /\ R (s,(tp,M),e) (s',e')
+  wf_ext_xclb p cid tp s M =
+    !R s'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
+    /\ R (s,(tp,M)) s'
     /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
     ==> (!xclb. s'.bst_xclb = SOME xclb ==> well_formed_xclb M s'.bst_coh xclb)
 End
 
 Definition wf_ext_def:
-  wf_ext p cid tp s e M =
-    !R s' e'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
-    /\ R (s,(tp,M),e) (s',e')
+  wf_ext p cid tp s M =
+    !R s'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
+    /\ R (s,(tp,M)) s'
     /\ well_formed cid M s ==> well_formed cid M s'
 End
 
 Definition wf_ext_p_def:
-  wf_ext_p p cid = !M s tp e. wf_ext p cid tp s e M
+  wf_ext_p p cid = !M s tp. wf_ext p cid tp s M
 End
 
 Definition well_formed_cores_def:
@@ -125,32 +164,80 @@ Definition well_formed_ext_cores_def:
       ==> wf_ext_p p cid
 End
 
-Theorem latest_bound:
-!l t M.
-  latest l t M <= t
+Theorem latestP_bound:
+  !P t M. latestP P t M <= t
 Proof
-  Induct_on ‘t’ >> fs[latest_def]
+  Induct_on ‘t’ >> fs[latestP_def]
   >> rpt strip_tac
-  >> ‘latest l t M <= t’ by fs[]
+  >> ‘latestP P t M <= t’ by fs[]
   >> Cases_on ‘oEL t M’
-  >> Cases_on ‘l = x.loc’
+  >> Cases_on ‘P x’
+  >> fs[]
+QED
+
+Theorem latest_bound:
+  !l t M. latest l t M <= t
+Proof
+  fs[latest_def,latestP_bound]
+QED
+
+Theorem latestP_zero:
+  !P M. latestP P 0 M = 0
+Proof
+  fs[latestP_def]
+QED
+
+Definition mem_getP_def:
+  mem_getP P default M 0 = SOME default /\
+  mem_getP P default M (SUC t) =
+    case oEL t M of
+      NONE => NONE
+    | SOME m => if P m then SOME m else NONE
+End
+
+Theorem mem_getP_mem_get:
+  !t M l. mem_getP (λx. l = x.loc) (mem_default l) M t = mem_get M l t
+Proof
+  Cases >> rw[mem_get_def,mem_getP_def]
+  >> BasicProvers.every_case_tac
+  >> fs[]
+QED
+
+Theorem latestP_exact:
+!P t M msg default.
+  mem_getP P default M t = SOME msg
+  ==> latestP P t M = t
+Proof
+  Cases_on ‘t’
+  >> rpt strip_tac
+  >> fs[latestP_def,mem_getP_def]
+  >> rpt CASE_TAC
   >> fs[]
 QED
 
 Theorem latest_exact:
 !l t M msg.
   mem_get M l t = SOME msg
-  ==>
-  latest l t M = t
+  ==> latest l t M = t
 Proof
-  Cases_on ‘t’
+  rpt strip_tac
+  >> fs[latest_def,GSYM mem_getP_mem_get]
+  >> drule_then irule latestP_exact
+QED
+
+Theorem mem_get_latestP_exact:
+  !t M l m cid.
+    mem_get M l t = SOME m
+    /\ m.loc = l /\ m.cid = cid
+    ==> latestP (λmsg. msg.loc = l ∧ msg.cid = cid) t M = t
+Proof
+  Cases
   >> rpt strip_tac
-  >> fs[latest_def]
-  >> Cases_on ‘oEL n M’
-  >- fs[mem_get_def]
-  >> ‘x = msg’ by fs[mem_get_def]
-  >> ‘l = msg.loc’ by (drule mem_get_SOME >> fs[])
-  >> gvs[]
+  >> irule latestP_exact
+  >> fs[GSYM mem_getP_mem_get,mem_getP_def]
+  >> qmatch_asmsub_rename_tac `oEL n M`
+  >> Cases_on `oEL n M`
+  >> gs[]
 QED
 
 Theorem latest_exact':
@@ -164,17 +251,52 @@ Proof
   >> drule_then irule latest_exact
 QED
 
+Theorem latestP_sound:
+  !default P t M. P default ==> ?msg.
+            mem_getP P default M (latestP P t M) = SOME msg
+            /\ P msg
+Proof
+  Induct_on ‘t’ >- fs[latestP_def,mem_getP_def]
+  >> rpt strip_tac
+  >> fs[latestP_def]
+  >> CASE_TAC
+  >> fs[]
+  >> qmatch_asmsub_abbrev_tac `oEL t M = SOME x`
+  >> Cases_on ‘P x’ >- fs[mem_getP_def]
+  >> fs[]
+QED
+
 Theorem latest_sound:
   !l t M. ?msg.
             mem_get M l (latest l t M) = SOME msg
             /\ msg.loc = l
 Proof
-  Induct_on ‘t’ >- fs[latest_def, mem_get_def, mem_default_def]
-  >> rpt strip_tac
-  >> fs[latest_def]
-  >> Cases_on ‘oEL t M’
+  rw[GSYM mem_getP_mem_get,latestP_sound,latest_def]
+  >> qmatch_goalsub_abbrev_tac `mem_getP P (mem_default l) M (latestP _ t M)`
+  >> qspecl_then [`mem_default l`,`P`,`t`,`M`] mp_tac latestP_sound
+  >> impl_tac >- fs[Abbr`P`,mem_default_def]
   >> fs[]
-  >> Cases_on ‘l = x.loc’ >- fs[mem_get_def]
+QED
+
+Theorem latestP_is_latestP:
+  !t P default M t' msg.
+    latestP P t M <= t' /\ t' <= t
+    /\ mem_getP P default M t' = SOME msg
+    /\ P default
+    ==> t' = latestP P t M
+Proof
+  Induct_on ‘t’ >- fs[latestP_def]
+  >> rpt strip_tac
+  >> qmatch_asmsub_abbrev_tac `mem_getP P default M t'`
+  >> qspecl_then [`default`,‘P’, ‘SUC t’, ‘M’] assume_tac latestP_sound
+  >> gs[]
+  >> Cases_on ‘t' = SUC t’
+  >- (imp_res_tac latestP_exact >> gvs[])
+  >> ‘t' <= t’ by decide_tac
+  >> fs[latestP_def]
+  >> BasicProvers.every_case_tac
+  >> gs[]
+  >> first_x_assum drule_all
   >> fs[]
 QED
 
@@ -185,38 +307,66 @@ Theorem latest_is_latest:
     ==>
     t' = latest l t M
 Proof
-  Induct_on ‘t’ >- fs[latest_def]
-  >> rpt strip_tac
-  >> qspecl_then [‘l’, ‘SUC t’, ‘M’] assume_tac latest_sound
-  >> Cases_on ‘t' = SUC t’ >- fs[latest_exact]
-  >> ‘t' <= t’ by decide_tac
-  >> fs[latest_def]
-  >> Cases_on ‘oEL t M’
-  >> Cases_on ‘l = x.loc’
+  rpt strip_tac
+  >> fs[latest_def,GSYM mem_getP_mem_get]
+  >> drule latestP_is_latestP
+  >> rpt $ disch_then drule
+  >> fs[mem_default_def]
+QED
+
+Theorem latestP_monotonicity:
+  !P M t1 t2. t1 <= t2 ==> latestP P t1 M <= latestP P t2 M
+Proof
+  Induct_on `t2`
+  >> rw[latestP_def]
+  >> CASE_TAC
   >> fs[]
+  >- (
+    dxrule_then strip_assume_tac $ iffLR arithmeticTheory.LESS_OR_EQ
+    >> fs[]
+    >> simp[latestP_def]
+  )
+  >> rw[]
+  >- (
+    irule arithmeticTheory.LESS_EQ_TRANS
+    >> irule_at Any latestP_bound
+    >> fs[]
+  )
+  >> dxrule_then strip_assume_tac $ iffLR arithmeticTheory.LESS_OR_EQ
+  >> fs[]
+  >> simp[latestP_def]
 QED
 
 Theorem latest_monotonicity:
-!l M t1 t2.
-  t1 <= t2 ==> latest l t1 M <= latest l t2 M
+  !l M t1 t2.
+    t1 <= t2 ==> latest l t1 M <= latest l t2 M
+Proof
+  fs[latest_def,latestP_monotonicity]
+QED
+
+Theorem latestP_spec:
+  !P default t M l1.
+    l1 = latestP P t M
+    /\ P default
+    ==>
+    ?msg.
+      mem_getP P default M l1 = SOME msg
+      /\ P msg
+      /\
+      !t'. l1 < t' /\ t' <= t
+           ==>
+           mem_getP P default M t' = NONE
 Proof
   rpt strip_tac
-  >> ‘?msg.mem_get M l (latest l t2 M) = SOME msg /\ msg.loc = l’
-    by fs[latest_sound]
-  >> ‘latest l t1 M <= t1’ by fs[latest_bound]
-  >> ‘latest l t2 M <= t2’ by fs[latest_bound]
-  >> Cases_on ‘t1 <= latest l t2 M’
-  >| [fs[]
-      ,
-      ‘latest l t2 M < t1’ by decide_tac
-      >> ‘?msg.mem_get M l (latest l t1 M) = SOME msg /\ msg.loc = l’
-        by fs[latest_sound]
-      >> spose_not_then assume_tac
-      >> ‘latest l t2 M <= latest l t1 M’ by decide_tac
-      >> ‘latest l t1 M <= t2’ by decide_tac
-      >> ‘latest l t1 M = latest l t2 M’
-         by (irule latest_is_latest >> fs[])
-      >> fs[]]
+  >> qspecl_then [`default`,‘P’, ‘t’, ‘M’] assume_tac latestP_sound
+  >> spose_not_then strip_assume_tac
+  >> gs[]
+  >> Cases_on ‘mem_getP P default M t'’ >- fs[]
+  >> qpat_x_assum `_:num < _` mp_tac
+  >> fs[arithmeticTheory.NOT_LESS]
+  >> drule_then mp_tac latestP_exact
+  >> disch_then $ PURE_ONCE_REWRITE_TAC o single o GSYM
+  >> fs[latestP_monotonicity]
 QED
 
 Theorem latest_spec:
@@ -231,15 +381,13 @@ Theorem latest_spec:
            ==>
            mem_get M l t' = NONE)
 Proof
-  rpt strip_tac
-  >> qspecl_then [‘l’, ‘t’, ‘M’] assume_tac latest_sound
-  >> fs[]
+  REWRITE_TAC[latest_def,GSYM mem_getP_mem_get]
   >> rpt strip_tac
-  >> spose_not_then assume_tac
-  >> Cases_on ‘mem_get M l t'’ >- fs[]
-  >> ‘latest l t' M = t'’ by fs[latest_exact]
-  >> ‘latest l t' M <= latest l t M’ by fs[latest_monotonicity]
-  >> rw[]
+  >> qmatch_goalsub_abbrev_tac `mem_getP P def`
+  >> drule_then (qspec_then `def` mp_tac) latestP_spec
+  >> impl_tac
+  >- fs[Abbr`P`,Abbr`def`,mem_default_def]
+  >> fs[]
 QED
 
 Theorem latest_idempotency:
@@ -252,39 +400,104 @@ Proof
   >> fs[latest_exact]
 QED
 
+Theorem latestP_max:
+!P M t1 t2.
+   latestP P t1 M <= latestP P (MAX t1 t2) M
+   /\ latestP P t2 M <= latestP P (MAX t1 t2) M
+Proof
+  rpt strip_tac
+  >> irule latestP_monotonicity
+  >> fs[arithmeticTheory.MAX_DEF]
+QED
+
 Theorem latest_max:
 !l M t1 t2.
    latest l t1 M <= latest l (MAX t1 t2) M
    /\ latest l t2 M <= latest l (MAX t1 t2) M
 Proof
-  fs[latest_monotonicity]
+  fs[latestP_monotonicity,latest_def]
+QED
+
+Theorem latestP_APPEND:
+  !t P M M'. t <= LENGTH M
+  ==> latestP P t (M ++ M') = latestP P t M
+Proof
+  Induct >> rw[latestP_def,listTheory.oEL_THM,rich_listTheory.EL_APPEND1]
 QED
 
 Theorem latest_APPEND:
   !t l M M'. t <= LENGTH M
   ==> latest l t (M ++ M') = latest l t M
 Proof
-  Induct >> rw[latest_def,listTheory.oEL_THM,rich_listTheory.EL_APPEND1]
+  fs[latest_def,latestP_APPEND]
+QED
+
+Theorem latestP_mem_get:
+  !P t M m l.
+    mem_get M l (latestP P t M) = SOME m /\ 0 < latestP P t M
+    /\ (!m. P m ==> m.loc = l) ==> P m
+Proof
+  Induct_on `t` >> rw[mem_get_def,latestP_def]
+  >> BasicProvers.every_case_tac
+  >> gs[]
+  >~ [`mem_get M l (SUC t) = _`]
+  >- gs[mem_get_def]
+  >> first_x_assum drule_all
+  >> fs[]
+QED
+
+Theorem latest_t_latest_is_lowest:
+  !t t' to l M.
+  latest_t l M t to /\ t <= t' /\ t' <= to ==> latest l t' M = latest l t M
+Proof
+  ntac 2 gen_tac
+  >> Induct_on `t' - t`
+  >> rw[]
+  >- (dxrule_all arithmeticTheory.LESS_EQUAL_ANTISYM >> fs[])
+  >> Cases_on `t'` >> fs[]
+  >> CONV_TAC $ LAND_CONV $ ONCE_REWRITE_CONV[latest_def]
+  >> ONCE_REWRITE_TAC[cj 2 latestP_def]
+  >> fs[GSYM latest_def]
+  >> `~mem_is_loc M (SUC n) l` by fs[latest_t_def]
+  >> fs[mem_is_loc_def]
+  >> BasicProvers.every_case_tac
+  >> fs[]
+  >> first_x_assum irule
+  >> qhdtm_x_assum `latest_t` $ irule_at Any
+  >> fs[]
+QED
+
+Theorem well_formed_fwdb_time_LEQ_mem:
+  !cid M s l. well_formed cid M s ==> (s.bst_fwdb l).fwdb_time <= LENGTH M
+Proof
+  rw[well_formed_fwdb_def,well_formed_def]
+  >> qmatch_goalsub_rename_tac `s.bst_fwdb l`
+  >> ntac 2 $ first_x_assum $ qspec_then `l` strip_assume_tac
+  >> irule arithmeticTheory.LESS_EQ_TRANS
+  >> qpat_x_assum `_.bst_coh _ <= _` $ irule_at Any
+  >> irule arithmeticTheory.LESS_EQ_TRANS
+  >> qpat_x_assum `_ <= latest _ _ _` $ irule_at Any
+  >> fs[latest_bound]
 QED
 
 Theorem clstep_preserves_wf_fwdb:
-  !p cid tp s e M prom s' e'.
+  !p cid tp s M prom s'.
   (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
-  /\ wf_ext_fwdb p cid tp s e M
-  /\ clstep p cid tp (s,e) M prom (s',e')
+  /\ wf_ext_fwdb p cid tp s M
+  /\ clstep p cid tp s M prom s'
   ==>
   (!l. well_formed_fwdb l M (s'.bst_coh l) (s'.bst_fwdb l))
 Proof
   rpt strip_tac
   >> fs[clstep_cases]
-  >> fs[well_formed_fwdb_def, latest_def, bir_state_read_view_updates_def,
-    bir_state_fulful_view_updates_def]
+  >> fs[well_formed_fwdb_def, bir_state_read_view_updates_def,
+    bir_state_fulful_view_updates_def,fence_updates_def]
   >~ [`BMCStmt_Load`]
   >- (
     qmatch_asmsub_abbrev_tac `latest_t l' M t _`
-    >> qmatch_goalsub_abbrev_tac `latest l _ _`
-    >> Cases_on ‘l = l'’ >> fs[combinTheory.APPLY_UPDATE_THM]
+    >> qmatch_goalsub_abbrev_tac `s.bst_fwdb l`
     >> ‘(s.bst_fwdb l').fwdb_time ≤ latest l' (s.bst_coh l') M’ by fs[]
+    >> Cases_on ‘l = l'’ >> fs[combinTheory.APPLY_UPDATE_THM]
     >> suff_tac “latest l' (s.bst_coh l') M <=
                 latest l'
                         (MAX (s.bst_coh l')
@@ -309,20 +522,13 @@ Proof
   >- (
     Cases_on ‘l = l'’
     >- (
-      EVAL_TAC
+      fs[combinTheory.APPLY_UPDATE_THM]
       >> ‘mem_read M l t_w = SOME v_w’ by fs[mem_read_def]
-      >> fs[]
+      >> gs[]
       >> ‘t_w = latest l t_w M’  by fs[latest_exact]
-      >> ‘latest l' t_w M <= latest l' t_w M’
-         suffices_by gvs[]
-      >> fs[latest_max]
+      >> gs[]
     )
-    >> EVAL_TAC
-    >> fs[]
-    >> ‘?v.mem_read M l (s.bst_fwdb l).fwdb_time = SOME v’ by fs[]
-    >> qexists_tac ‘v’
-    >> ‘?m. mem_get M l (s.bst_fwdb l).fwdb_time = SOME m /\ m.val = v’ by fs[mem_get_mem_read]
-    >> fs[]
+    >> fs[combinTheory.APPLY_UPDATE_THM]
   )
   >~ [`BStmt_CJmp`]
   >- fs[bir_exec_stmt_cjmp_mc_invar]
@@ -347,6 +553,22 @@ Proof
   >> irule arithmeticTheory.LESS_EQ_TRANS
   >> irule_at Any latest_bound
   >> goal_assum drule
+QED
+
+Theorem well_formed_xclb_time_leq_coh:
+  !M s l cid.
+    well_formed cid M s
+    /\ IS_SOME s.bst_xclb
+    /\ IS_SOME $ mem_read M l (THE s.bst_xclb).xclb_time
+    /\ 0 < (THE s.bst_xclb).xclb_time
+    ==> (THE s.bst_xclb).xclb_time <= s.bst_coh l
+Proof
+  rw[well_formed_def,well_formed_xclb_def,combinTheory.APPLY_UPDATE_THM,optionTheory.IS_SOME_EXISTS,FORALL_AND_THM,IMP_CONJ_THM]
+  >> imp_res_tac mem_read_mem_is_loc_imp
+  >> irule arithmeticTheory.LESS_EQ_TRANS
+  >> irule_at Any latest_bound
+  >> first_x_assum $ irule_at Any
+  >> gs[]
 QED
 
 Theorem well_formed_xclb_bst_coh_update:
@@ -415,9 +637,9 @@ Proof
 QED
 
 Theorem bir_eval_exp_view_bound:
-  !l a_e s M v_addr ext.
+  !l a_e s M v_addr.
     well_formed_viewenv s.bst_viewenv M
-    /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv ext
+    /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv
     ==>
     v_addr <= LENGTH M
 Proof
@@ -425,15 +647,15 @@ Proof
 QED
 
 Theorem clstep_preserves_wf_xclb:
-  !p cid tp s e M prom s' e'.
+  !p cid tp s M prom s'.
     (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
     /\ (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
     /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
-    /\ wf_ext_xclb p cid tp s e M
-    /\ clstep p cid tp (s,e) M prom (s',e')
+    /\ wf_ext_xclb p cid tp s M
+    /\ clstep p cid tp s M prom s'
     ==> (!xclb. s'.bst_xclb = SOME xclb ==> well_formed_xclb M s'.bst_coh xclb)
 Proof
-  rw[clstep_cases] >> fs[]
+  rw[clstep_cases] >> fs[fence_updates_def]
   >~ [`BStmt_CJmp`]
   >- fs[bir_exec_stmt_cjmp_mc_invar]
   >~ [`bmc_exec_general_stmt`]
@@ -490,24 +712,24 @@ Proof
 QED
 
 Theorem clstep_preserves_wf:
-  !p cid tp s e M prom s' e'.
+  !p cid tp s M prom s'.
   well_formed cid M s
-  /\ wf_ext p cid tp s e M
-  /\ clstep p cid tp (s,e) M prom (s',e')
+  /\ wf_ext p cid tp s M
+  /\ clstep p cid tp s M prom s'
 ==>
   well_formed cid M s'
 Proof
   rpt strip_tac
-  >> drule_at_then (Pat `clstep _ _ _ _ _`) assume_tac clstep_preserves_wf_fwdb
-  >> drule_at (Pat `clstep _ _ _ _ _`) clstep_preserves_wf_xclb
+  >> drule_at_then (Pat `clstep`) assume_tac clstep_preserves_wf_fwdb
+  >> drule_at (Pat `clstep`) clstep_preserves_wf_xclb
   >> gs[wf_ext_def,wf_ext_fwdb_def,wf_ext_xclb_def,well_formed_def,
     bir_state_fulful_view_updates_def,bir_state_read_view_updates_def,
-    combinTheory.APPLY_UPDATE_THM,clstep_cases]
+    combinTheory.APPLY_UPDATE_THM,clstep_cases,fence_updates_def]
   >~ [`BMCStmt_Load var a_e opt_cast xcl acq rel`]
   >- (
     disch_then kall_tac (* removes wf_xclb *)
     >> qmatch_asmsub_rename_tac
-      `(SOME l,v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv e`
+      `(SOME l,v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv`
     >> ‘v_addr <= LENGTH M’
      by (fs[bir_eval_exp_view_def]
          >> drule bir_eval_view_of_exp_wf
@@ -546,9 +768,9 @@ Proof
   >~ [`BMCStmt_Store`,`xclfail_update_env`]
   >- (
     gvs[xclfail_update_env_def,xclfail_update_viewenv_def,AllCaseEqs(),well_formed_viewenv_def,FLOOKUP_UPDATE]
-    >> rw[] >> gvs[] >> metis_tac[]
+    >> rw[] >> gvs[] >> res_tac
   )
-  >~ [`BMCStmt_Store`]
+  >~ [`BMCStmt_Store`,`fulfil_update_env`]
   >- (
     disch_then kall_tac (* removes wf_xclb *)
     >> conj_tac
@@ -559,6 +781,7 @@ Proof
     >> conj_tac
     >- (
       gen_tac
+      >> qmatch_goalsub_rename_tac `l = l'`
       >> fs[listTheory.EVERY_MEM]
       >> first_assum drule
       >> first_assum $ qspec_then `l` mp_tac
@@ -583,15 +806,26 @@ Proof
     >> conj_tac >- rw[listTheory.MEM_FILTER]
     >> conj_tac >- fs[listTheory.EVERY_MEM,listTheory.MEM_FILTER]
     >> conj_tac >- fs[listTheory.EVERY_MEM,listTheory.MEM_FILTER]
+    >> conj_tac >- fs[listTheory.EVERY_MEM,listTheory.MEM_FILTER]
     >> conj_tac >- fs[listTheory.FILTER_ALL_DISTINCT]
-    >> gvs[combinTheory.APPLY_UPDATE_THM]
+    >> conj_tac
+    >- (
+      gvs[combinTheory.APPLY_UPDATE_THM]
+      >> rw[]
+      >> first_x_assum drule
+      >> fs[]
+      >> rw[listTheory.MEM_FILTER]
+      >> spose_not_then assume_tac
+      >> Cases_on `v_post`
+      >> gs[mem_read_def,mem_get_def]
+    )
+    >> dsimp[listTheory.MEM_FILTER]
+    >> drule_then assume_tac mem_get_eq
     >> rw[]
-    >> first_x_assum drule
+    >> irule arithmeticTheory.LESS_IMP_LESS_OR_EQ
+    >> irule arithmeticTheory.LESS_EQ_LESS_TRANS
+    >> qpat_x_assum `_.bst_coh _ < _` $ irule_at Any
     >> fs[]
-    >> rw[listTheory.MEM_FILTER]
-    >> spose_not_then assume_tac
-    >> Cases_on `v_post`
-    >> gs[mem_read_def,mem_get_def]
   )
   >~ [`BMCStmt_Amo`]
   >- (
@@ -611,13 +845,30 @@ Proof
       >> goal_assum drule
       >> fs[]
     )
-    >> rw[combinTheory.APPLY_UPDATE_THM,listTheory.MEM_FILTER,listTheory.FILTER_ALL_DISTINCT]
-    >> gs[listTheory.EVERY_MEM,listTheory.MEM_FILTER]
-    >> first_x_assum drule
-    >> gvs[]
-    >> spose_not_then assume_tac
-    >> Cases_on `t_w`
-    >> gs[mem_read_def,mem_get_def]
+    >> conj_tac >- rw[combinTheory.APPLY_UPDATE_THM,listTheory.MEM_FILTER,listTheory.FILTER_ALL_DISTINCT]
+    >> conj_tac >- rw[combinTheory.APPLY_UPDATE_THM,listTheory.MEM_FILTER,listTheory.FILTER_ALL_DISTINCT]
+    >> conj_tac >- rw[combinTheory.APPLY_UPDATE_THM,listTheory.MEM_FILTER,listTheory.FILTER_ALL_DISTINCT]
+    >> conj_tac >- rw[combinTheory.APPLY_UPDATE_THM,listTheory.MEM_FILTER,listTheory.FILTER_ALL_DISTINCT]
+    >> conj_tac >- gs[listTheory.EVERY_MEM,listTheory.MEM_FILTER]
+    >> conj_tac >- gs[listTheory.EVERY_MEM,listTheory.MEM_FILTER]
+    >> conj_tac >- gs[listTheory.EVERY_MEM,listTheory.MEM_FILTER]
+    >> conj_tac >- simp[listTheory.FILTER_ALL_DISTINCT]
+    >> conj_tac >- (
+      rw[combinTheory.APPLY_UPDATE_THM,listTheory.MEM_FILTER,listTheory.FILTER_ALL_DISTINCT]
+      >> gs[listTheory.EVERY_MEM,listTheory.MEM_FILTER]
+      >> first_x_assum drule
+      >> gvs[]
+      >> spose_not_then assume_tac
+      >> Cases_on `t_w`
+      >> gs[mem_read_def,mem_get_def]
+    )
+    >> dsimp[listTheory.MEM_FILTER]
+    >> drule_then assume_tac mem_get_eq
+    >> rw[]
+    >> irule arithmeticTheory.LESS_IMP_LESS_OR_EQ
+    >> irule arithmeticTheory.LESS_EQ_LESS_TRANS
+    >> qpat_x_assum `_.bst_coh _ < _` $ irule_at Any
+    >> fs[]
   )
   >~ [`BMCStmt_Fence`]
   >- rw[]
@@ -636,14 +887,7 @@ Proof
   >~ [`BMCStmt_Assign`]
   >- (
     drule_then irule well_formed_viewenv_UPDATE
-    >> drule_all bir_eval_exp_view_bound
-    >> fs[]
-  )
-  >~ [`BSExt R`]
-  >- (
-    disch_then assume_tac
-    >> first_x_assum $ drule_then strip_assume_tac
-    >> gs[]
+    >> drule_all_then irule bir_eval_exp_view_bound
   )
 QED
 
@@ -703,15 +947,30 @@ Proof
   >> simp[well_formed_def]
   >> drule_then (fs o single) well_formed_append
   >> fs[well_formed_def]
+  >> conj_tac
+  >- (
+    fs[listTheory.EVERY_MEM] >> rw[]
+    >> res_tac
+    >> fs[mem_is_cid_append]
+  )
+  >> conj_tac
+  >- (
+    qx_gen_tac `t` >> rw[]
+    >> Cases_on `t = LENGTH M`
+    >- gs[listTheory.oEL_THM,rich_listTheory.EL_APPEND2]
+    >> qmatch_asmsub_rename_tac `oEL t (M ++ _) = SOME msg'`
+    >> `oEL t M = SOME msg'` by (
+      gs[listTheory.oEL_THM,arithmeticTheory.NOT_NUM_EQ,rich_listTheory.EL_APPEND1]
+    )
+    >> first_x_assum drule
+    >> fs[]
+  )
   >> qx_gen_tac `t` >> rw[]
   >> Cases_on `t = LENGTH M`
-  >- gs[listTheory.oEL_THM,rich_listTheory.EL_APPEND2]
-  >> qmatch_asmsub_rename_tac `oEL t (M ++ _) = SOME msg'`
-  >> `oEL t M = SOME msg'` by (
-    gs[listTheory.oEL_THM,arithmeticTheory.NOT_NUM_EQ,rich_listTheory.EL_APPEND1]
-  )
-  >> first_x_assum drule
-  >> fs[]
+  >> imp_res_tac mem_get_LENGTH
+  >> fs[mem_get_append]
+  >> dxrule_then strip_assume_tac $ iffLR arithmeticTheory.LESS_OR_EQ
+  >> gs[mem_get_append,mem_get_def,listTheory.oEL_THM,GSYM arithmeticTheory.ADD1,rich_listTheory.EL_APPEND2]
 QED
 
 Theorem well_formed_promise_self:
@@ -726,28 +985,47 @@ Proof
   >> fs[well_formed_def]
   >> conj_tac
   >- (
+    conj_tac
+    >- (
+      fs[listTheory.EVERY_MEM] >> rw[]
+      >> res_tac
+      >> fs[mem_is_cid_append]
+    )
+    >> simp[GSYM arithmeticTheory.ADD1,mem_is_cid_def,listTheory.oEL_THM,rich_listTheory.EL_APPEND2]
+  )
+  >> conj_tac
+  >- (
     rw[listTheory.ALL_DISTINCT_APPEND]
     >> spose_not_then assume_tac
     >> fs[listTheory.EVERY_MEM]
     >> res_tac
     >> fs[]
   )
-  >> qx_gen_tac `t` >> rw[]
-  >> Cases_on `t = LENGTH M`
-  >> gs[]
-  >> qmatch_asmsub_rename_tac `oEL t (M ++ _) = SOME msg'`
-  >> `oEL t M = SOME msg'` by (
-    gs[listTheory.oEL_THM,arithmeticTheory.NOT_NUM_EQ,rich_listTheory.EL_APPEND1]
+  >> conj_tac
+  >- (
+    qx_gen_tac `t` >> rw[]
+    >> Cases_on `t = LENGTH M`
+    >> gs[]
+    >> qmatch_asmsub_rename_tac `oEL t (M ++ _) = SOME msg'`
+    >> `oEL t M = SOME msg'` by (
+      gs[listTheory.oEL_THM,arithmeticTheory.NOT_NUM_EQ,rich_listTheory.EL_APPEND1]
+    )
+    >> first_x_assum drule
+    >> fs[]
   )
-  >> first_x_assum drule
-  >> fs[]
+  >> qx_gen_tac `t` >> rw[]
+  >> Cases_on `t <= LENGTH M`
+  >> gs[mem_get_append,arithmeticTheory.NOT_LESS_EQUAL]
+  >> qmatch_asmsub_rename_tac `mem_get _ _ t`
+  >> Cases_on `t`
+  >> fs[mem_get_def,listTheory.oEL_THM]
 QED
 
 Theorem cstep_preserves_wf:
-!p cid s M prom s' M' tp e e'.
+!p cid s M prom s' M' tp.
   well_formed cid M s
   /\ wf_ext_p p cid
-  /\ cstep p cid tp (s,e) M prom (s',e') M'
+  /\ cstep p cid tp s M prom s' M'
   ==> well_formed cid M' s'
 Proof
   rw[cstep_cases]
@@ -759,10 +1037,10 @@ Proof
 QED
 
 Theorem cstep_seq_preserves_wf:
-!p cid s M s' M' tp e e'.
+!p cid s M s' M' tp.
   well_formed cid M s
   /\ wf_ext_p p cid
-  /\ cstep_seq p cid tp ((s,e), M) ((s',e'), M')
+  /\ cstep_seq p cid tp (s,M) (s', M')
   ==> well_formed cid M' s'
 Proof
   rw[cstep_seq_cases]
@@ -770,26 +1048,25 @@ Proof
     drule_at_then Any irule clstep_preserves_wf
     >> fs[wf_ext_p_def]
   )
-  >> qmatch_asmsub_rename_tac `clstep p cid tp s'' M' [t] (s',e')`
-  >> PairCases_on `s''`
+  >> qmatch_asmsub_rename_tac `clstep p cid tp s'' M' [t] s'`
   >> drule_at_then Any irule clstep_preserves_wf
   >> drule_at_then Any (irule_at Any) cstep_preserves_wf
   >> fs[wf_ext_p_def]
 QED
 
 Theorem cstep_seq_rtc_preserves_wf:
-  !p cid s M s' M' e e' tp.
+  !p cid s M s' M' tp.
   well_formed cid M s
   /\ wf_ext_p p cid
-  /\ cstep_seq_rtc p cid tp ((s,e),M) ((s',e'),M')
+  /\ cstep_seq_rtc p cid tp (s,M) (s',M')
   ==> well_formed cid M' s'
 Proof
   qsuff_tac `
     !p cid tp sM sM'.
     cstep_seq_rtc p cid tp sM sM'
-    ==> well_formed cid (SND sM) (FST $ FST sM)
+    ==> well_formed cid (SND sM) (FST sM)
     ==> wf_ext_p p cid
-    ==> well_formed cid (SND sM') (FST $ FST sM')
+    ==> well_formed cid (SND sM') (FST sM')
   `
   >- (
     fs[pairTheory.FORALL_PROD,pairTheory.LAMBDA_PROD,pairTheory.ELIM_UNCURRY,AND_IMP_INTRO]
@@ -804,11 +1081,15 @@ Proof
   >> fs[]
 QED
 
+Theorem cstep_seq_NRC_wf =
+  Ho_Rewrite.REWRITE_RULE[arithmeticTheory.RTC_eq_NRC,cstep_seq_rtc_def,PULL_EXISTS]
+  cstep_seq_rtc_preserves_wf
+
 Theorem parstep_preserves_wf:
-!cid cores M cores' M' ext ext'.
+!cid cores M cores' M'.
   well_formed_cores cores M
   /\ well_formed_ext_cores cores
-  /\ parstep cid cores ext M cores' ext' M'
+  /\ parstep cid cores M cores' M'
   ==> well_formed_cores cores' M'
 Proof
   rw[parstep_cases]
@@ -825,6 +1106,7 @@ Theorem wf_init_state:
   !cid p. well_formed cid [] $ bmc_state_init p
 Proof
   fs[bir_init_progTheory.bmc_state_init_def,well_formed_def,well_formed_viewenv_def,well_formed_fwdb_def,mem_read_def,listTheory.oEL_THM,mem_get_def]
+  >> Cases >> fs[mem_get_def,listTheory.oEL_THM]
 QED
 
 Definition init_def:
@@ -839,6 +1121,314 @@ Proof
   rw[well_formed_cores_def,init_def]
   >> first_x_assum $ drule_then $ fs o single
   >> fs[wf_init_state]
+QED
+
+(* lifting reflexive-transitive pre-post conditions to cstep_seq *)
+
+Theorem cstep_transitive_cstep_seq:
+  !p cid tp R.
+  reflexive R /\ transitive R
+  /\ (!s M prom s' M'. cstep p cid tp s M prom s' M' ==> R (s,M) (s',M'))
+  /\ (!s M prom s'. clstep p cid tp s M prom s' ==> R (s,M) (s',M))
+  ==> !sM sM'. cstep_seq p cid tp sM sM' ==> R sM sM'
+Proof
+  rpt gen_tac >> strip_tac
+  >> rpt PairCases >> strip_tac
+  >> fs[cstep_seq_cases]
+  >> res_tac
+  >> dxrule_then irule $ iffLR relationTheory.transitive_def
+  >> rpt $ goal_assum drule
+QED
+
+Theorem cstep_transitive_cstep_seq_rtc:
+  !p cid tp R.
+  reflexive R /\ transitive R
+  /\ (!s M prom s' M'. cstep p cid tp s M prom s' M' ==> R (s,M) (s',M'))
+  /\ (!s M prom s'. clstep p cid tp s M prom s' ==> R (s,M) (s',M))
+  ==> !sM sM'. cstep_seq_rtc p cid tp sM sM' ==> R sM sM'
+Proof
+  rpt gen_tac >> strip_tac
+  >> reverse $ qsuff_tac `!sM sM'. cstep_seq p cid tp sM sM' ==> R sM sM'`
+  >- (
+    qmatch_asmsub_rename_tac `cstep p cid tp`
+    >> qmatch_asmsub_rename_tac `transitive R`
+    >> qspecl_then [`p`,`cid`,`tp`,`R`] mp_tac cstep_transitive_cstep_seq
+    >> impl_tac >- (rw[] >> res_tac)
+    >> fs[]
+  )
+  >> rpt $ PRED_ASSUM is_forall kall_tac >> strip_tac
+  >> fs[cstep_seq_rtc_def]
+  >> ho_match_mp_tac relationTheory.RTC_INDUCT
+  >> fs[relationTheory.reflexive_def,relationTheory.transitive_def]
+  >> rpt Cases >> strip_tac
+  >> first_x_assum $ dxrule_then assume_tac
+  >> first_x_assum irule
+  >> rpt $ goal_assum drule
+QED
+
+(* properties *)
+
+Theorem clstep_coh_mono:
+  !p cid tp s M prom s' l.
+  clstep p cid tp s M prom s' ==> s.bst_coh l <= s'.bst_coh l
+Proof
+  rw[clstep_cases]
+  >> fs[bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,combinTheory.APPLY_UPDATE_THM,bmc_exec_general_stmt_exists,bir_exec_stmt_assert_def,bir_exec_stmt_assume_def,bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bir_exec_stmt_halt_def,bir_state_set_typeerror_def,AllCaseEqs(),fence_updates_def]
+  >> rw[] >> fs[]
+  >> BasicProvers.every_case_tac
+  >> fs[]
+QED
+
+Theorem cstep_coh_mono:
+  !p cid tp s M prom s' M' l.
+  cstep p cid tp s M prom s' M' ==> s.bst_coh l <= s'.bst_coh l
+Proof
+  rw[cstep_cases] >> fs[]
+  >> drule clstep_coh_mono >> fs[]
+QED
+
+Theorem cstep_seq_rtc_coh_mono:
+  !p cid tp sM sM' l. cstep_seq_rtc p cid tp sM sM'
+  ==> (FST sM).bst_coh l <= (FST sM').bst_coh l
+Proof
+  ntac 3 gen_tac
+  >> fs[GSYM PULL_FORALL]
+  >> qho_match_abbrev_tac `!sM sM'. cstep_seq_rtc p cid tp sM sM' ==> R sM sM'`
+  >> qspecl_then [`p`,`cid`,`tp`,`R`] mp_tac cstep_transitive_cstep_seq_rtc
+  >> impl_tac
+  >> fs[relationTheory.reflexive_def]
+  >> unabbrev_all_tac
+  >> rw[relationTheory.reflexive_def]
+  >- (
+    fs[relationTheory.transitive_def]
+    >> rpt PairCases >> rw[]
+    >> qmatch_goalsub_rename_tac `_.bst_coh l`
+    >> ntac 2 $ first_x_assum $ qspec_then `l` assume_tac
+    >> irule arithmeticTheory.LESS_EQ_TRANS
+    >> rpt $ goal_assum drule
+  )
+  >> imp_res_tac cstep_coh_mono
+  >> imp_res_tac clstep_coh_mono
+  >> fs[]
+QED
+
+Theorem cstep_seq_NRC_coh_mono =
+  Ho_Rewrite.REWRITE_RULE[arithmeticTheory.RTC_eq_NRC,cstep_seq_rtc_def,PULL_EXISTS]
+  cstep_seq_rtc_coh_mono
+
+(* monotony of memory *)
+
+Theorem cstep_mem_mono:
+  !p cid tp s M prom s' M'.
+  cstep p cid tp s M prom s' M'
+  ==> LENGTH M <= LENGTH M' /\ IS_PREFIX M' M
+Proof
+  rw[rich_listTheory.IS_PREFIX_APPEND,cstep_cases] >> fs[]
+QED
+
+Theorem cstep_seq_mem_mono:
+  !p cid tp s M s' M'.
+  cstep_seq p cid tp (s,M) (s',M')
+  ==> LENGTH M <= LENGTH M' /\ IS_PREFIX M' M
+Proof
+  rpt gen_tac >> strip_tac
+  >> fs[cstep_seq_cases]
+  >> drule cstep_mem_mono
+  >> fs[]
+QED
+
+Theorem cstep_seq_rtc_mem_mono:
+  !p cid tp sM sM'. cstep_seq_rtc p cid tp sM sM'
+  ==> LENGTH $ SND sM <= LENGTH $ SND sM' /\ IS_PREFIX (SND sM') (SND sM)
+Proof
+  ntac 3 gen_tac
+  >> fs[GSYM PULL_FORALL]
+  >> qho_match_abbrev_tac `!sM sM'. cstep_seq_rtc p cid tp sM sM' ==> R sM sM'`
+  >> qspecl_then [`p`,`cid`,`tp`,`R`] mp_tac cstep_transitive_cstep_seq_rtc
+  >> impl_tac
+  >> fs[relationTheory.reflexive_def]
+  >> unabbrev_all_tac
+  >> rw[]
+  >- (
+    fs[relationTheory.transitive_def]
+    >> rpt PairCases >> rw[]
+    >> irule rich_listTheory.IS_PREFIX_TRANS
+    >> rpt $ goal_assum drule
+  )
+  >> fs[cstep_cases]
+QED
+
+Theorem cstep_seq_NRC_mem_mono =
+  Ho_Rewrite.REWRITE_RULE[arithmeticTheory.RTC_eq_NRC,cstep_seq_rtc_def,PULL_EXISTS]
+  cstep_seq_rtc_mem_mono
+
+(* promset decreases monotonically *)
+
+Theorem cstep_seq_prom_subset:
+  !p cid tp s M s' M'.
+  cstep_seq p cid tp (s,M) (s',M')
+  (* /\ well_formed cid M s /\ wf_ext_p p cid *)
+  ==> (set s'.bst_prom) SUBSET (set s.bst_prom)
+Proof
+  rw[cstep_seq_cases,cstep_cases]
+  >- (
+  (*
+    drule_at (Pat `clstep`) clstep_preserves_wf
+    >> impl_tac >- fs[wf_ext_p_def]
+    >> strip_tac *)
+    gvs[clstep_cases,bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,listTheory.LIST_TO_SET_FILTER,pred_setTheory.INTER_SUBSET,fence_updates_def]
+    >~ [`BStmt_CJmp`]
+    >- (
+      fs[bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def]
+      >> BasicProvers.every_case_tac
+      >> fs[bir_state_set_typeerror_def]
+    )
+    >~ [`BSGen stmt`]
+    >- (
+      fs[bmc_exec_general_stmt_exists,bir_exec_stmtB_def,bir_exec_stmtE_def,bir_exec_stmt_assert_def,bir_exec_stmt_assume_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bir_exec_stmt_halt_def]
+      >> BasicProvers.every_case_tac
+      >> gvs[bir_state_set_typeerror_def]
+    )
+    >~ [`BSExt R`]
+    >- fs[listTheory.EVERY_MEM,listTheory.MEM_SET_TO_LIST,pred_setTheory.SUBSET_DEF]
+  )
+  >> gs[clstep_cases,listTheory.LIST_TO_SET_FILTER,pred_setTheory.INTER_SUBSET,bir_state_fulful_view_updates_def,pred_setTheory.UNION_OVER_INTER]
+  >> fs[pred_setTheory.INTER_DEF]
+QED
+
+Theorem cstep_seq_rtc_prom_subset:
+  !p cid tp sM sM'.
+  cstep_seq_rtc p cid tp sM sM'
+  ==> (set (FST sM').bst_prom) SUBSET (set (FST sM).bst_prom)
+Proof
+  ntac 3 gen_tac
+  >> fs[GSYM PULL_FORALL]
+  >> qho_match_abbrev_tac `!sM sM'. cstep_seq_rtc p cid tp sM sM' ==> R sM sM'`
+  >> fs[cstep_seq_rtc_def]
+  >> ho_match_mp_tac relationTheory.RTC_INDUCT
+  >> conj_tac >> rpt PairCases
+  >> unabbrev_all_tac
+  >> rw[]
+  >> drule_then assume_tac cstep_seq_prom_subset
+  >> irule pred_setTheory.SUBSET_TRANS
+  >> rpt $ goal_assum drule
+QED
+
+Theorem cstep_seq_NRC_prom_subset =
+  Ho_Rewrite.REWRITE_RULE[arithmeticTheory.RTC_eq_NRC,cstep_seq_rtc_def,PULL_EXISTS]
+  cstep_seq_rtc_prom_subset
+
+Theorem cstep_seq_is_clstep:
+  !p cid tp s1 M1 s2 M2 t.
+  cstep_seq p cid tp (s1,M1) (s2,M2)
+  /\ MEM t s1.bst_prom
+  /\ ~MEM t s2.bst_prom
+  ==> clstep p cid tp s1 M1 [t] s2 /\ M1 = M2
+Proof
+  rpt gen_tac >> strip_tac
+  >> gs[cstep_cases,cstep_seq_cases]
+  >- (
+    drule_then strip_assume_tac $ iffLR clstep_cases
+    >> qhdtm_x_assum `clstep` mp_tac
+    >> gs[]
+    >- gs[bir_state_read_view_updates_def,bir_state_fulful_view_updates_def]
+    >~ [`bir_state_fulful_view_updates`]
+    >- gs[listTheory.MEM_FILTER,bir_state_fulful_view_updates_def]
+    >> gvs[listTheory.MEM_FILTER,bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bmc_exec_general_stmt_exists,bir_exec_stmt_assume_def,bir_exec_stmt_assert_def,AllCaseEqs(),bir_state_set_typeerror_def,bir_exec_stmt_halt_def,fence_updates_def]
+    >> qmatch_asmsub_rename_tac `R (s,(tp,M1)) s'`
+    >> cheat
+  )
+  (* discharging two promises, needs well_formedness assumption that t <> LENGTH M1 + 1  *)
+  >> cheat
+QED
+
+(* in the certifying trace there exists the step where a promise is discharged *)
+
+Theorem is_certified_promise_disch:
+  !cid M s p tp t.
+  is_certified p cid tp s M
+  /\ MEM t s.bst_prom
+  ==>
+    ?n m sM2 sM3 sM4. NRC (cstep_seq p cid tp) m (s,M) sM2
+    /\ cstep_seq p cid tp sM2 sM3
+    /\ NRC (cstep_seq p cid tp) n sM3 sM4
+    /\ MEM t (FST sM2).bst_prom
+    /\ ~MEM t (FST sM3).bst_prom
+    /\ NULL (FST sM4).bst_prom
+Proof
+  rpt strip_tac
+  >> fs[is_certified_def,cstep_seq_rtc_def]
+  >> dxrule_then strip_assume_tac arithmeticTheory.RTC_NRC
+  >> qmatch_asmsub_rename_tac `NRC (cstep_seq p cid tp) n (s,M) (s',M')`
+  >> Cases_on `0 < n` >> gvs[]
+  >> Cases_on `!m. m <= n ==> !s'' M''.
+    NRC (cstep_seq p cid tp) m (s,M) (s'',M'')
+    /\ NRC (cstep_seq p cid tp) (n - m) (s'',M'') (s',M')
+    ==> MEM t s''.bst_prom`
+  >- (first_x_assum $ drule_at Any >> fs[])
+  >> PRED_ASSUM is_neg $ mp_tac o SIMP_RULE std_ss [NOT_FORALL_THM]
+  >> qho_match_abbrev_tac `(?m. P m) ==> _`
+  >> disch_then assume_tac
+  >> dxrule_then strip_assume_tac arithmeticTheory.WOP
+  >> qmatch_asmsub_rename_tac `P m`
+  >> `0 < m /\ m <= n` by (
+    unabbrev_all_tac
+    >> fs[] >> Cases_on `m` >> gvs[]
+  )
+  >> `PRE m < m` by decide_tac
+  >> unabbrev_all_tac
+  >> Cases_on `m` >> gs[DISJ_EQ_IMP,arithmeticTheory.NRC_SUC_RECURSE_LEFT]
+  >> rpt $ goal_assum drule
+  >> fs[]
+  >> first_x_assum irule
+  >> qmatch_asmsub_rename_tac `cstep_seq p cid tp z (s'',M'')`
+  >> PairCases_on `z`
+  >> fs[]
+  >> goal_assum $ dxrule_at Any
+  >> dxrule_at (Pos $ el 2) $
+    Ho_Rewrite.REWRITE_RULE[PULL_EXISTS] $ iffRL $ cj 2 arithmeticTheory.NRC
+  >> disch_then dxrule
+  >> qmatch_goalsub_abbrev_tac `NRC _ (SUC m)`
+  >> `SUC m = n - n'` by (unabbrev_all_tac >> decide_tac)
+  >> fs[]
+QED
+
+Theorem is_certified_promises:
+  !cid M s p tp l t msg.
+  is_certified p cid tp s M
+  /\ MEM t s.bst_prom
+  /\ mem_get M l t = SOME msg /\ msg.cid = cid
+  ==> s.bst_coh l < t
+Proof
+  spose_not_then strip_assume_tac
+  >> drule_all_then strip_assume_tac is_certified_promise_disch
+  >> qmatch_asmsub_rename_tac `cstep_seq p cid tp sM2 sM3`
+  >> PairCases_on `sM2` >> PairCases_on `sM3`
+  >> fs[]
+  >> dxrule_then (drule_all_then strip_assume_tac) cstep_seq_is_clstep
+  >> qmatch_asmsub_rename_tac `NRC (cstep_seq p cid tp) m (s,M) (s1,M1)`
+  >> qspecl_then [`p`,`cid`,`tp`,`(s,M)`,`(s1,M1)`,`m`] assume_tac cstep_seq_NRC_mem_mono
+  >> gvs[clstep_cases,bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,listTheory.MEM_FILTER,bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bmc_exec_general_stmt_exists,bir_exec_stmt_assume_def,bir_exec_stmt_assert_def,AllCaseEqs(),bir_state_set_typeerror_def,bir_exec_stmt_halt_def]
+  >> `t <= LENGTH M` by (
+    imp_res_tac mem_get_LENGTH
+  )
+  >> qmatch_asmsub_rename_tac `_.bst_coh l`
+  >> qspecl_then [`p`,`cid`,`tp`,`(s,M)`,`(s1,M1)`,`l`,`m`] assume_tac cstep_seq_NRC_coh_mono
+  >> gvs[rich_listTheory.IS_PREFIX_APPEND,mem_get_append]
+  >> drule_then (rev_drule_then assume_tac) mem_get_eq
+  >> gvs[]
+QED
+
+Theorem is_certified_promises':
+  !cid M s p tp l t msg.
+  is_certified p cid tp s M
+  ==>
+  EVERY (λt. !l. mem_get M l t = SOME msg /\ msg.cid = cid ==> s.bst_coh l < t) s.bst_prom
+Proof
+  fs[listTheory.EVERY_MEM]
+  >> rpt strip_tac
+  >> drule_all is_certified_promises
+  >> fs[]
 QED
 
 val _ = export_theory ();
