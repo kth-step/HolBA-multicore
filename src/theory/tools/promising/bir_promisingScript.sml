@@ -206,8 +206,8 @@ val bir_eval_view_of_exp = Define‘
    This is so as not to change the definition of bir_eval_exp
 *)
 val bir_eval_exp_view_def = Define‘
-  bir_eval_exp_view exp env viewenv ext =
-  (bir_eval_exp exp env ext, bir_eval_view_of_exp exp viewenv)
+  bir_eval_exp_view exp env viewenv =
+  (bir_eval_exp exp env, bir_eval_view_of_exp exp viewenv)
 ’;
 
 val exp_is_load_def = Define `
@@ -240,28 +240,28 @@ Definition bmc_exec_general_stmt_def:
     => SOME $ bir_exec_stmtB (BStmt_Assume e) s
   | BStmtE $ BStmt_Jmp e
   (* hack until observations are expressed by a put statement *)
-    => SOME (bir_exec_stmtE p (BStmt_Jmp e) s, SND s)
+    => SOME $ bir_exec_stmtE p (BStmt_Jmp e) s
   | BStmtE $ BStmt_Halt e
-    => SOME (bir_exec_stmtE p (BStmt_Halt e) s,SND s)
+    => SOME $ bir_exec_stmtE p (BStmt_Halt e) s
   | _ => NONE
 End
 
 Theorem bmc_exec_general_stmt_mc_invar:
   !s s' stm p.
   bmc_exec_general_stmt p stm s = SOME s' ==>
-  (FST s).bst_viewenv = (FST s').bst_viewenv /\
-  (FST s).bst_coh     = (FST s').bst_coh /\
-  (FST s).bst_v_rOld  = (FST s').bst_v_rOld /\
-  (FST s).bst_v_wOld  = (FST s').bst_v_wOld /\
-  (FST s).bst_v_rNew  = (FST s').bst_v_rNew /\
-  (FST s).bst_v_wNew  = (FST s').bst_v_wNew /\
-  (FST s).bst_v_CAP   = (FST s').bst_v_CAP /\
-  (FST s).bst_v_Rel   = (FST s').bst_v_Rel /\
-  (FST s).bst_prom    = (FST s').bst_prom /\
-  (FST s).bst_fwdb    = (FST s').bst_fwdb /\
-  (FST s).bst_xclb    = (FST s').bst_xclb
+  s.bst_viewenv = s'.bst_viewenv /\
+  s.bst_coh     = s'.bst_coh /\
+  s.bst_v_rOld  = s'.bst_v_rOld /\
+  s.bst_v_wOld  = s'.bst_v_wOld /\
+  s.bst_v_rNew  = s'.bst_v_rNew /\
+  s.bst_v_wNew  = s'.bst_v_wNew /\
+  s.bst_v_CAP   = s'.bst_v_CAP /\
+  s.bst_v_Rel   = s'.bst_v_Rel /\
+  s.bst_prom    = s'.bst_prom /\
+  s.bst_fwdb    = s'.bst_fwdb /\
+  s.bst_xclb    = s'.bst_xclb
 Proof
-  ntac 2 Cases >> ntac 2 Induct
+  ntac 2 gen_tac >> ntac 2 Induct
   >> rpt gen_tac >> strip_tac
   >> fs[bmc_exec_general_stmt_def,bir_exec_stmtB_def,pairTheory.ELIM_UNCURRY,AllCaseEqs()]
   >> fs[pairTheory.ELIM_UNCURRY,AllCaseEqs(),bir_exec_stmtB_def,bir_exec_stmtE_def,bir_exec_stmt_jmp_def,bir_exec_stmt_assign_def,bir_exec_stmt_assert_def,bir_state_set_typeerror_def,bir_exec_stmt_assume_def,bir_exec_stmt_jmp_to_label_def,bir_exec_stmt_halt_def]
@@ -271,19 +271,19 @@ QED
 Theorem bir_exec_stmt_cjmp_mc_invar':
   !s cond_e lbl1 lbl2 p s'.
   bir_exec_stmt_cjmp p cond_e lbl1 lbl2 s = s' ==>
-  (FST s).bst_viewenv = s'.bst_viewenv /\
-  (FST s).bst_coh     = s'.bst_coh /\
-  (FST s).bst_v_rOld  = s'.bst_v_rOld /\
-  (FST s).bst_v_wOld  = s'.bst_v_wOld /\
-  (FST s).bst_v_rNew  = s'.bst_v_rNew /\
-  (FST s).bst_v_wNew  = s'.bst_v_wNew /\
-  (FST s).bst_v_CAP   = s'.bst_v_CAP /\
-  (FST s).bst_v_Rel   = s'.bst_v_Rel /\
-  (FST s).bst_prom    = s'.bst_prom /\
-  (FST s).bst_fwdb    = s'.bst_fwdb /\
-  (FST s).bst_xclb    = s'.bst_xclb
+  s.bst_viewenv = s'.bst_viewenv /\
+  s.bst_coh     = s'.bst_coh /\
+  s.bst_v_rOld  = s'.bst_v_rOld /\
+  s.bst_v_wOld  = s'.bst_v_wOld /\
+  s.bst_v_rNew  = s'.bst_v_rNew /\
+  s.bst_v_wNew  = s'.bst_v_wNew /\
+  s.bst_v_CAP   = s'.bst_v_CAP /\
+  s.bst_v_Rel   = s'.bst_v_Rel /\
+  s.bst_prom    = s'.bst_prom /\
+  s.bst_fwdb    = s'.bst_fwdb /\
+  s.bst_xclb    = s'.bst_xclb
 Proof
-  PairCases >> rpt gen_tac >> strip_tac
+  rpt gen_tac >> strip_tac
   >> fs[bir_exec_stmt_cjmp_def,pairTheory.ELIM_UNCURRY,AllCaseEqs(),bir_state_set_typeerror_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def]
   >> gvs[]
 QED
@@ -379,11 +379,11 @@ End
 (* core-local steps that don't affect memory *)
 Inductive clstep:
 (* read *)
-(!p s s' v a_e xcl acq rel M l (t:num) v_pre v_post v_addr var new_env cid opt_cast ext tp.
+(!p s s' v a_e xcl acq rel M l (t:num) v_pre v_post v_addr var new_env cid opt_cast tp.
     bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Load var a_e opt_cast xcl acq rel
  /\ s.bst_status = BST_Running
- /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv ext
+ /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv
  /\ mem_read M l t = SOME v
  /\ v_pre = MAX (MAX (MAX v_addr s.bst_v_rNew) (if (acq /\ rel) then s.bst_v_Rel else 0))
                (if (acq /\ rel) then (MAX s.bst_v_rOld s.bst_v_wOld) else 0)
@@ -398,10 +398,10 @@ Inductive clstep:
                             then (bir_pc_next o bir_pc_next) s.bst_pc
                             else bir_pc_next s.bst_pc |>
  ==>
-  clstep p cid tp (s,ext) M [] (s',ext))
+  clstep p cid tp s M [] s')
 
 /\ (* exclusive-failure *)
-(!p s s' M var_succ a_e v_e acq rel cid new_env new_viewenv ext tp.
+(!p s s' M var_succ a_e v_e acq rel cid new_env new_viewenv tp.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ a_e v_e T acq rel
  /\ s.bst_status = BST_Running
@@ -412,15 +412,15 @@ Inductive clstep:
                     bst_xclb := NONE;
                     bst_pc := (bir_pc_next o bir_pc_next o bir_pc_next) s.bst_pc |>
  ==>
-clstep p cid tp (s,ext) M [] (s',ext))
+clstep p cid tp s M [] s')
 
 /\ (* fulfil *)
-(!p s s' M v var_succ a_e xcl acq rel l (t:num) v_pre v_post v_addr v_data v_e cid new_env new_viewenv ext tp.
+(!p s s' M v var_succ a_e xcl acq rel l (t:num) v_pre v_post v_addr v_data v_e cid new_env new_viewenv tp.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ a_e v_e xcl acq rel
  /\ s.bst_status = BST_Running
- /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv ext
- /\ (SOME v, v_data) = bir_eval_exp_view v_e s.bst_environ s.bst_viewenv ext
+ /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv
+ /\ (SOME v, v_data) = bir_eval_exp_view v_e s.bst_environ s.bst_viewenv
  /\ (xcl ==> s.bst_xclb <> NONE /\ fulfil_atomic_ok M l cid (THE s.bst_xclb).xclb_time t)
  /\ MEM t s.bst_prom
  /\ mem_get M l t = SOME <| loc := l; val := v; cid := cid  |>
@@ -448,15 +448,15 @@ clstep p cid tp (s,ext) M [] (s',ext))
                              then (bir_pc_next o bir_pc_next o bir_pc_next) s.bst_pc
                              else bir_pc_next s.bst_pc |>
  ==>
-  clstep p cid tp (s,ext) M [t] (s',ext))
+  clstep p cid tp s M [t] s')
 
 /\ (* AMO fulfil *)
-(!p cid s s' M acq rel var l a_e v_r v_w v_e v_rPre v_rPost v_wPre v_wPost (t_w:num) (t_r :num) new_environ new_viewenv ext tp.
+(!p cid s s' M acq rel var l a_e v_r v_w v_e v_rPre v_rPost v_wPre v_wPost (t_w:num) (t_r :num) new_environ new_viewenv tp.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Amo var a_e v_e acq rel
    /\ s.bst_status = BST_Running
    (* Get location *)
-   /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv ext
+   /\ (SOME l, v_addr) = bir_eval_exp_view a_e s.bst_environ s.bst_viewenv
    (* Read part *)
    /\ mem_read M l t_r = SOME v_r (* v_r value read *)
    /\ v_rPre = MAX v_addr (
@@ -469,7 +469,7 @@ clstep p cid tp (s,ext) M [] (s',ext))
    (* Write part *)
    /\ MEM t_w s.bst_prom
    (* v_w value to write, v_e value expression *)
-   /\ (SOME v_w, v_data) = bir_eval_exp_view v_e new_environ new_viewenv ext
+   /\ (SOME v_w, v_data) = bir_eval_exp_view v_e new_environ new_viewenv
    /\ mem_get M l t_w = SOME <| loc := l; val := v_w; cid := cid |>
    /\ v_wPre = MAX v_addr (
         MAX v_data (
@@ -499,10 +499,10 @@ clstep p cid tp (s,ext) M [] (s',ext))
                                                      fwdb_xcl := T |>);
                      bst_pc updated_by (bir_pc_next o bir_pc_next) |>
  ==>
- clstep p cid tp (s,ext) M [t_w] (s',ext))
+ clstep p cid tp s M [t_w] s')
 
 /\ (* fence *)
-(!p s s' K1 K2 M cid v ext tp.
+(!p s s' K1 K2 M cid v tp.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Fence K1 K2
    /\ s.bst_status = BST_Running
@@ -511,45 +511,45 @@ clstep p cid tp (s,ext) M [] (s',ext))
                      bst_v_wNew := MAX s.bst_v_wNew (if is_write K2 then v else 0);
                      bst_pc updated_by bir_pc_next |>
 ==>
-  clstep p cid tp (s,ext) M [] (s',ext))
+  clstep p cid tp s M [] s')
 
 /\ (* branch (conditional jump) *)
-(!p s s' M cid v s2 v_addr cond_e lbl1 lbl2 ext tp.
+(!p s s' M cid v s2 v_addr cond_e lbl1 lbl2 tp.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtE $ BStmt_CJmp cond_e lbl1 lbl2
    /\ s.bst_status = BST_Running
-    /\ (SOME v, v_addr) = bir_eval_exp_view cond_e s.bst_environ s.bst_viewenv ext
-    /\ s2 = bir_exec_stmt_cjmp p cond_e lbl1 lbl2 (s,ext)
+    /\ (SOME v, v_addr) = bir_eval_exp_view cond_e s.bst_environ s.bst_viewenv
+    /\ s2 = bir_exec_stmt_cjmp p cond_e lbl1 lbl2 s
     /\ s' = s2 with <| bst_v_CAP := MAX s.bst_v_CAP v_addr |>
 ==>
-  clstep p cid tp (s,ext) M [] (s',ext))
+  clstep p cid tp s M [] s')
 
 /\ (* register-to-register operation *)
-(!p s s' var M cid v v_val e new_env ext tp.
+(!p s s' var M cid v v_val e new_env tp.
   bir_get_current_statement p s.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Assign var e
  /\ s.bst_status = BST_Running
- /\ (SOME v, v_val) = bir_eval_exp_view e s.bst_environ s.bst_viewenv ext
+ /\ (SOME v, v_val) = bir_eval_exp_view e s.bst_environ s.bst_viewenv
  /\ SOME new_env = env_update_cast64 (bir_var_name var) v (bir_var_type var) (s.bst_environ)
  /\ s' = s with <| bst_environ := new_env;
                    bst_viewenv updated_by (λe. FUPDATE e (var,v_val));
                    bst_pc      updated_by bir_pc_next |>
-==> clstep p cid tp (s,ext) M [] (s',ext))
+==> clstep p cid tp s M [] s')
 
 /\ (* Other BIR single steps *)
-(!p s s' M cid stm ext ext' tp.
+(!p s s' M cid stm tp.
   bir_get_current_statement p s.bst_pc = SOME $ BSGen stm
-    /\ bmc_exec_general_stmt p stm (s,ext) = SOME (s',ext')
+    /\ bmc_exec_general_stmt p stm s = SOME s'
     /\ s.bst_status = BST_Running
 ==>
-  clstep p cid tp (s,ext) M [] (s',ext))
+  clstep p cid tp s M [] s')
 
 /\ (* external functionality *)
-(!p s s' M cid ext ext' tp R.
+(!p s s' M cid tp R.
   bir_get_current_statement p s.bst_pc = SOME $ BSExt R
-    /\ R (s,(tp,M),ext) (s',ext')
+    /\ R (s,(tp,M)) s'
     /\ s.bst_status = BST_Running
 ==>
-  clstep p cid tp (s,ext) M [] (s',ext'))
+  clstep p cid tp s M [] s')
 End
 
 
@@ -563,10 +563,9 @@ Inductive cstep:
 
 /\ (* promise *)
 (!p cid s M s' t msg tp.
-   (msg.cid = cid
+   msg.cid = cid
    /\ t = LENGTH M + 1
-   /\ FST s' = (FST s) with bst_prom updated_by (\pr. pr ++ [t]))
-   /\ SND s = SND s'
+   /\ s' = s with bst_prom updated_by (\pr. pr ++ [t])
 ==>
   cstep p cid tp s M [t] s' (M ++ [msg]))
 End
@@ -594,7 +593,7 @@ End
 (* cstep_seq invariant *)
 
 Theorem bir_exec_stmt_jmp_bst_prom:
-  !st ext p lbl. st.bst_prom = (bir_exec_stmt_jmp p lbl (st,ext)).bst_prom
+  !st p lbl. st.bst_prom = (bir_exec_stmt_jmp p lbl st).bst_prom
 Proof
   rw[bir_exec_stmt_jmp_def]
   >> CASE_TAC
@@ -606,11 +605,11 @@ QED
 Definition is_certified_def:
   is_certified p cid tp s M = ?s' M'.
     cstep_seq_rtc p cid tp (s, M) (s', M')
-    /\ (FST s').bst_prom = []
+    /\ s'.bst_prom = []
 End
 
 val _ = Datatype `core_t =
-  Core num (('a, 'ext_state_t, 'shared_state_t) bir_generic_program_t) bir_state_t
+  Core num (('a, 'shared_state_t) bir_generic_program_t) bir_state_t
 `;
 
 val get_core_cid = Define‘
@@ -642,14 +641,14 @@ val atomicity_ok_def = Define`
 
 (* system step *)
 Inductive parstep:
-(!p cid s s' ext ext' M M' cores prom tp.
+(!p cid s s' M M' cores prom tp.
    FLOOKUP cores cid = SOME (Core cid p s)
     /\ atomicity_ok cid cores
     /\ tp = FRANGE $ get_core_state o_f (cores \\ cid)
-    /\ cstep p cid tp (s,ext) M prom (s',ext') M'
-    /\ is_certified p cid tp (s',ext') M'
+    /\ cstep p cid tp s M prom s' M'
+    /\ is_certified p cid tp s' M'
 ==>
-   parstep cid cores ext M (FUPDATE cores (cid, Core cid p s')) ext' M')
+   parstep cid cores M (FUPDATE cores (cid, Core cid p s')) M')
 End
 
 val _ = export_theory();
