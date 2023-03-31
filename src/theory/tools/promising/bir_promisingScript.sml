@@ -25,6 +25,10 @@ val _ = Datatype‘
     |>
 ’;
 
+(* type abbreviation for abstract and concrete programs *)
+Type proga_t = ``:(('a list) # num list) bmc_program_t``
+Type progc_t = ``:(mem_msg_t) proga_t``
+
 (* Default value of memory *)
 val mem_default_value_def = Define ‘
   mem_default_value = BVal_Imm (Imm64 0w)
@@ -293,6 +297,23 @@ Definition bmc_exec_general_stmt_def:
   | _ => NONE
 End
 
+Theorem bir_exec_stmt_jmp_to_label_mc_invar:
+  !p pc s.
+  (bir_exec_stmt_jmp_to_label p pc s).bst_viewenv = s.bst_viewenv /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_coh     = s.bst_coh /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_v_rOld  = s.bst_v_rOld /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_v_wOld  = s.bst_v_wOld /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_v_rNew  = s.bst_v_rNew /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_v_wNew  = s.bst_v_wNew /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_v_CAP   = s.bst_v_CAP /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_v_Rel   = s.bst_v_Rel /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_prom    = s.bst_prom /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_fwdb    = s.bst_fwdb /\
+  (bir_exec_stmt_jmp_to_label p pc s).bst_xclb    = s.bst_xclb
+Proof
+  fs[bir_exec_stmt_jmp_to_label_def,COND_RAND]
+QED
+
 Theorem bmc_exec_general_stmt_mc_invar:
   !s s' stm p.
   bmc_exec_general_stmt p stm s = SOME s' ==>
@@ -395,7 +416,7 @@ Proof
   rw[latest_t_def]
 QED
 
-Theorem latest_t_add:
+Theorem latest_t_trans:
   !l M t to to'.
   latest_t l M t to /\ latest_t l M to to' ==> latest_t l M t to'
 Proof
@@ -466,10 +487,14 @@ Definition fence_updates_def:
              |>
 End
 
+Definition remove_prom_def:
+  remove_prom prom = FILTER (λt. ~MEM t prom)
+End
+
 (* core-local steps that don't affect memory *)
 Inductive clstep:
 (* read *)
-(!p s s' v a_e xcl acq rel M l (t:num) v_pre v_post v_addr var new_env cid opt_cast tp.
+(!p s s' v a_e xcl acq rel M l (t:num) v_pre v_post v_addr var new_env cid opt_cast.
     bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Load var a_e opt_cast xcl acq rel
  /\ s.bst_status = BST_Running
@@ -486,10 +511,10 @@ Inductive clstep:
                   bst_environ := new_env;
                   bst_pc updated_by bir_pc_next |>
  ==>
-  clstep p cid tp s M [] s')
+  clstep p cid s M [] s')
 
 /\ (* exclusive-failure *)
-(!p s s' M var_succ a_e v_e acq rel cid new_env new_viewenv tp.
+(!p s s' M var_succ a_e v_e acq rel cid new_env new_viewenv.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ a_e v_e T acq rel
  /\ s.bst_status = BST_Running
@@ -500,10 +525,10 @@ Inductive clstep:
                     bst_xclb := NONE;
                     bst_pc updated_by bir_pc_next |>
  ==>
-clstep p cid tp s M [] s')
+clstep p cid s M [] s')
 
 /\ (* fulfil *)
-(!p s s' M v var_succ a_e xcl acq rel l (t:num) v_pre v_post v_addr v_data v_e cid new_env new_viewenv tp.
+(!p s s' M v var_succ a_e xcl acq rel l (t:num) v_pre v_post v_addr v_data v_e cid new_env new_viewenv.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ a_e v_e xcl acq rel
  /\ s.bst_status = BST_Running
@@ -530,14 +555,14 @@ clstep p cid tp s M [] s')
  /\ SOME new_viewenv = fulfil_update_viewenv var_succ xcl v_post s.bst_viewenv
  /\ s' = (bir_state_fulful_view_updates s t l v_addr v_data acq rel xcl s)
            with <| bst_viewenv := new_viewenv;
-                   bst_prom updated_by (FILTER (\t'. t' <> t));
+                   bst_prom updated_by (remove_prom [t]);
                    bst_environ := new_env;
                    bst_pc updated_by bir_pc_next |>
  ==>
-  clstep p cid tp s M [t] s')
+  clstep p cid s M [t] s')
 
 /\ (* AMO fulfil *)
-(!p cid s s' M acq rel var l a_e v_r v_w v_e v_rPre v_rPost v_wPre v_wPost (t_w:num) (t_r :num) new_environ new_viewenv tp.
+(!p cid s s' M acq rel var l a_e v_r v_w v_e v_rPre v_rPost v_wPre v_wPost (t_w:num) (t_r :num) new_environ new_viewenv.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Amo var a_e v_e acq rel
    /\ s.bst_status = BST_Running
@@ -572,7 +597,7 @@ clstep p cid tp s M [] s')
    (* State update *)
    /\ s' = s with <| bst_viewenv := new_viewenv;
                      bst_environ := new_environ;
-                     bst_prom    updated_by (FILTER (\t'. t' <> t_w));
+                     bst_prom updated_by (remove_prom [t_w]);
                      bst_coh     updated_by (l =+ v_wPost);
                      bst_v_Rel   updated_by (MAX (if acq /\ rel then v_wPost else 0));
                      bst_v_rOld  updated_by (MAX v_rPost);
@@ -585,19 +610,19 @@ clstep p cid tp s M [] s')
                                                      fwdb_xcl := T |>);
                      bst_pc updated_by bir_pc_next |>
  ==>
- clstep p cid tp s M [t_w] s')
+ clstep p cid s M [t_w] s')
 
 /\ (* fence *)
-(!p s s' K1 K2 M cid tp.
+(!p s s' K1 K2 M cid.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtB $ BMCStmt_Fence K1 K2
    /\ s.bst_status = BST_Running
    /\ s' = fence_updates K1 K2 (s with bst_pc updated_by bir_pc_next)
 ==>
-  clstep p cid tp s M [] s')
+  clstep p cid s M [] s')
 
 /\ (* branch (conditional jump) *)
-(!p s s' M cid v s2 v_addr cond_e lbl1 lbl2 tp.
+(!p s s' M cid v s2 v_addr cond_e lbl1 lbl2.
    bir_get_current_statement p s.bst_pc
     = SOME $ BSGen $ BStmtE $ BStmt_CJmp cond_e lbl1 lbl2
    /\ s.bst_status = BST_Running
@@ -605,10 +630,10 @@ clstep p cid tp s M [] s')
     /\ s2 = bir_exec_stmt_cjmp p cond_e lbl1 lbl2 s
     /\ s' = s2 with <| bst_v_CAP := MAX s.bst_v_CAP v_addr |>
 ==>
-  clstep p cid tp s M [] s')
+  clstep p cid s M [] s')
 
 /\ (* register-to-register operation *)
-(!p s s' var M cid v v_val e new_env tp.
+(!p s s' var M cid v v_val e new_env.
   bir_get_current_statement p s.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Assign var e
  /\ s.bst_status = BST_Running
  /\ (SOME v, v_val) = bir_eval_exp_view e s.bst_environ s.bst_viewenv
@@ -616,65 +641,69 @@ clstep p cid tp s M [] s')
  /\ s' = s with <| bst_environ := new_env;
                    bst_viewenv updated_by (λe. FUPDATE e (var,v_val));
                    bst_pc      updated_by bir_pc_next |>
-==> clstep p cid tp s M [] s')
+==> clstep p cid s M [] s')
 
 /\ (* Other BIR single steps *)
-(!p s s' M cid stm tp.
+(!p s s' M cid stm.
   bir_get_current_statement p s.bst_pc = SOME $ BSGen stm
     /\ bmc_exec_general_stmt p stm s = SOME s'
     /\ s.bst_status = BST_Running
 ==>
-  clstep p cid tp s M [] s')
+  clstep p cid s M [] s')
 
 /\ (* external functionality *)
-(!p s s' M cid tp R.
+(!p s s' M cid R.
   bir_get_current_statement p s.bst_pc = SOME $ BSExt R
-    /\ R (s,(tp,M)) s'
+    /\ R (s,(M,prom)) s'
     /\ s.bst_status = BST_Running
     (* well-formedness of ext functionality *)
-    /\ EVERY (λx. MEM x s.bst_prom) s'.bst_prom
     /\ (!l. s.bst_coh l <= s'.bst_coh l)
-    /\ EVERY (λx. 0 < x /\ x <= LENGTH M) s'.bst_prom
+    /\ s'.bst_prom = remove_prom prom s.bst_prom
+    /\ (set prom) SUBSET (set s.bst_prom)
+    /\ EVERY (λt. t <= LENGTH M /\ ?l. mem_is_loc M t l
+      /\ s.bst_coh l < t /\ t <= s'.bst_coh l) prom
+    /\ MEM s'.bst_pc.bpc_label (bir_labels_of_program p)
 ==>
-  clstep p cid tp s M [] s')
+  clstep p cid s M prom s')
 End
 
 
 (* core steps *)
 Inductive cstep:
 (* execute *)
-(!p cid s M s' prom tp.
-  clstep p cid tp s M prom s'
+(!p cid s M s' prom P.
+  clstep p cid s M prom s'
 ==>
-  cstep p cid tp s M prom s' M)
+  cstep P p cid s M prom s' M)
 
 /\ (* promise *)
-(!p cid s M s' t msg tp.
+(!p cid s M s' t msg P.
    msg.cid = cid
    /\ t = LENGTH M + 1
    /\ s' = s with bst_prom updated_by (\pr. pr ++ [t])
+   /\ P M msg
 ==>
-  cstep p cid tp s M [t] s' (M ++ [msg]))
+  cstep P p cid s M [t] s' (M ++ [msg]))
 End
 
 (* core steps seq *)
 Inductive cstep_seq:
 (* seq *)
-(!p cid s M s' prom tp.
-  clstep p cid tp s M (prom:num list) s'
+(!p cid s M s' prom.
+  clstep p cid s M (prom:num list) s'
 ==>
-  cstep_seq p cid tp (s, M) (s', M))
+  cstep_seq p cid (s, M) (s', M))
 
 /\ (* write *)
-(!p cid s M s' s'' M' t tp.
-  (cstep p cid tp s M [t] s' M' /\ ~(M = M')
-  /\ clstep p cid tp s' M' [t] s'')
+(!p cid s M s' s'' M' t.
+  (cstep (λmem msg. T) p cid s M [t] s' M' /\ ~(M = M')
+  /\ clstep p cid s' M' [t] s'')
 ==>
-  cstep_seq p cid tp (s, M) (s'', M'))
+  cstep_seq p cid (s, M) (s'', M'))
 End
 
 Definition cstep_seq_rtc_def:
-  cstep_seq_rtc p cid tp = RTC $ cstep_seq p cid tp
+  cstep_seq_rtc p cid = RTC $ cstep_seq p cid
 End
 
 (* cstep_seq invariant *)
@@ -690,8 +719,8 @@ Proof
 QED
 
 Definition is_certified_def:
-  is_certified p cid tp s M = ?s' M'.
-    cstep_seq_rtc p cid tp (s, M) (s', M')
+  is_certified p cid s M = ?s' M'.
+    cstep_seq_rtc p cid (s, M) (s', M')
     /\ s'.bst_prom = []
 End
 
@@ -728,14 +757,12 @@ val atomicity_ok_def = Define`
 
 (* system step *)
 Inductive parstep:
-(!p cid s s' M M' cores prom tp.
+(!p cid s s' M M' cores prom P.
    FLOOKUP cores cid = SOME (Core cid p s)
-    /\ atomicity_ok cid cores
-    /\ tp = FRANGE $ get_core_state o_f (cores \\ cid)
-    /\ cstep p cid tp s M prom s' M'
-    /\ is_certified p cid tp s' M'
+    /\ cstep P p cid s M prom s' M'
+    /\ is_certified p cid s' M'
 ==>
-   parstep cid cores M (FUPDATE cores (cid, Core cid p s')) M')
+   parstep P cid cores M (FUPDATE cores (cid, Core cid p s')) M')
 End
 
 val _ = export_theory();

@@ -14,6 +14,13 @@ val _ = new_theory "bir_promising_wf";
 
 (* move to promising *)
 
+Theorem mem_get_mem_is_loc:
+  !t M l l' msg.
+  mem_get M l t = SOME msg /\ mem_is_loc M t l' /\ 0 < t ==> l = l'
+Proof
+  Cases >> csimp[mem_get_def,mem_is_loc_def,listTheory.oEL_THM,AllCaseEqs()]
+QED
+
 Theorem mem_get_eq:
   !t M l l' msg msg'.
   mem_get M l t = SOME msg
@@ -46,6 +53,7 @@ Theorem bir_exec_stmt_jmp_bst_eq:
   /\ (bir_exec_stmt_jmp p lbl s).bst_v_wOld     = s.bst_v_wOld
   /\ (bir_exec_stmt_jmp p lbl s).bst_v_Rel      = s.bst_v_Rel
   /\ (bir_exec_stmt_jmp p lbl s).bst_viewenv    = s.bst_viewenv
+  /\ (bir_exec_stmt_jmp p lbl s).bst_prom       = s.bst_prom
   /\ (!l. (bir_exec_stmt_jmp p lbl s).bst_coh l = s.bst_coh l)
 Proof
   rw[bir_exec_stmt_jmp_def]
@@ -126,30 +134,30 @@ End
 
 (* well-formed external block relation *)
 Definition wf_ext_fwdb_def:
-  wf_ext_fwdb p cid tp s M =
-    !R s'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
-    /\ R (s,(tp,M)) s'
+  wf_ext_fwdb p cid s M =
+    !R s' prom. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
+    /\ R (s,(M,prom)) s'
     /\ (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
     ==> (!l. well_formed_fwdb l M (s'.bst_coh l) (s'.bst_fwdb l))
 End
 
 Definition wf_ext_xclb_def:
-  wf_ext_xclb p cid tp s M =
-    !R s'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
-    /\ R (s,(tp,M)) s'
+  wf_ext_xclb p cid s M =
+    !R s' prom. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
+    /\ R (s,(M,prom)) s'
     /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
     ==> (!xclb. s'.bst_xclb = SOME xclb ==> well_formed_xclb M s'.bst_coh xclb)
 End
 
 Definition wf_ext_def:
-  wf_ext p cid tp s M =
-    !R s'. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
-    /\ R (s,(tp,M)) s'
+  wf_ext p cid s M =
+    !R s' prom. bir_get_current_statement p s.bst_pc = SOME $ BSExt R
+    /\ R (s,(M,prom)) s'
     /\ well_formed cid M s ==> well_formed cid M s'
 End
 
 Definition wf_ext_p_def:
-  wf_ext_p p cid = !M s tp. wf_ext p cid tp s M
+  wf_ext_p p cid = !M s. wf_ext p cid s M
 End
 
 Definition well_formed_cores_def:
@@ -481,10 +489,10 @@ Proof
 QED
 
 Theorem clstep_preserves_wf_fwdb:
-  !p cid tp s M prom s'.
+  !p cid s M prom s'.
   (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
-  /\ wf_ext_fwdb p cid tp s M
-  /\ clstep p cid tp s M prom s'
+  /\ wf_ext_fwdb p cid s M
+  /\ clstep p cid s M prom s'
   ==>
   (!l. well_formed_fwdb l M (s'.bst_coh l) (s'.bst_fwdb l))
 Proof
@@ -539,7 +547,7 @@ Proof
   )
   >~ [`BSExt R`]
   >- (
-    gs[wf_ext_fwdb_def,well_formed_fwdb_def]
+    gvs[wf_ext_fwdb_def,well_formed_fwdb_def,COND_RAND]
     >> first_x_assum drule
     >> fs[]
   )
@@ -647,12 +655,12 @@ Proof
 QED
 
 Theorem clstep_preserves_wf_xclb:
-  !p cid tp s M prom s'.
+  !p cid s M prom s'.
     (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
     /\ (!l. well_formed_fwdb l M (s.bst_coh l) (s.bst_fwdb l))
     /\ (!xclb. s.bst_xclb = SOME xclb ==> well_formed_xclb M s.bst_coh xclb)
-    /\ wf_ext_xclb p cid tp s M
-    /\ clstep p cid tp s M prom s'
+    /\ wf_ext_xclb p cid s M
+    /\ clstep p cid s M prom s'
     ==> (!xclb. s'.bst_xclb = SOME xclb ==> well_formed_xclb M s'.bst_coh xclb)
 Proof
   rw[clstep_cases] >> fs[fence_updates_def]
@@ -706,25 +714,34 @@ Proof
   >- (rpt strip_tac >> fs[well_formed_xclb_bst_coh_update])
   >~ [`BSExt R`]
   >- (
-    gs[wf_ext_xclb_def]
-    >> first_x_assum $ drule_all_then irule
+    gs[wf_ext_xclb_def,COND_RAND]
+    >> first_x_assum drule
+    >> fs[]
   )
 QED
 
 Theorem clstep_preserves_wf:
-  !p cid tp s M prom s'.
+  !p cid s M prom s'.
   well_formed cid M s
-  /\ wf_ext p cid tp s M
-  /\ clstep p cid tp s M prom s'
+  /\ wf_ext p cid s M
+  /\ clstep p cid s M prom s'
 ==>
   well_formed cid M s'
 Proof
   rpt strip_tac
   >> drule_at_then (Pat `clstep`) assume_tac clstep_preserves_wf_fwdb
   >> drule_at (Pat `clstep`) clstep_preserves_wf_xclb
+  >> gs[clstep_cases]
+  >~ [`BSExt R`]
+  >- (
+    fs[wf_ext_def,COND_RAND] 
+    >> rw[]
+    >> first_x_assum drule >> fs[]
+    >> simp[well_formed_def]
+  )
   >> gs[wf_ext_def,wf_ext_fwdb_def,wf_ext_xclb_def,well_formed_def,
     bir_state_fulful_view_updates_def,bir_state_read_view_updates_def,
-    combinTheory.APPLY_UPDATE_THM,clstep_cases,fence_updates_def]
+    combinTheory.APPLY_UPDATE_THM,fence_updates_def,remove_prom_def]
   >~ [`BMCStmt_Load var a_e opt_cast xcl acq rel`]
   >- (
     disch_then kall_tac (* removes wf_xclb *)
@@ -1022,10 +1039,10 @@ Proof
 QED
 
 Theorem cstep_preserves_wf:
-!p cid s M prom s' M' tp.
+!p cid s M prom s' M' P.
   well_formed cid M s
   /\ wf_ext_p p cid
-  /\ cstep p cid tp s M prom s' M'
+  /\ cstep P p cid s M prom s' M'
   ==> well_formed cid M' s'
 Proof
   rw[cstep_cases]
@@ -1037,10 +1054,10 @@ Proof
 QED
 
 Theorem cstep_seq_preserves_wf:
-!p cid s M s' M' tp.
+!p cid s M s' M'.
   well_formed cid M s
   /\ wf_ext_p p cid
-  /\ cstep_seq p cid tp (s,M) (s', M')
+  /\ cstep_seq p cid (s,M) (s', M')
   ==> well_formed cid M' s'
 Proof
   rw[cstep_seq_cases]
@@ -1048,22 +1065,22 @@ Proof
     drule_at_then Any irule clstep_preserves_wf
     >> fs[wf_ext_p_def]
   )
-  >> qmatch_asmsub_rename_tac `clstep p cid tp s'' M' [t] s'`
+  >> qmatch_asmsub_rename_tac `clstep p cid s'' M' [t] s'`
   >> drule_at_then Any irule clstep_preserves_wf
   >> drule_at_then Any (irule_at Any) cstep_preserves_wf
   >> fs[wf_ext_p_def]
 QED
 
 Theorem cstep_seq_rtc_preserves_wf:
-  !p cid s M s' M' tp.
+  !p cid s M s' M'.
   well_formed cid M s
   /\ wf_ext_p p cid
-  /\ cstep_seq_rtc p cid tp (s,M) (s',M')
+  /\ cstep_seq_rtc p cid (s,M) (s',M')
   ==> well_formed cid M' s'
 Proof
   qsuff_tac `
-    !p cid tp sM sM'.
-    cstep_seq_rtc p cid tp sM sM'
+    !p cid sM sM'.
+    cstep_seq_rtc p cid sM sM'
     ==> well_formed cid (SND sM) (FST sM)
     ==> wf_ext_p p cid
     ==> well_formed cid (SND sM') (FST sM')
@@ -1072,7 +1089,7 @@ Proof
     fs[pairTheory.FORALL_PROD,pairTheory.LAMBDA_PROD,pairTheory.ELIM_UNCURRY,AND_IMP_INTRO]
     >> metis_tac[]
   )
-  >> ntac 3 gen_tac
+  >> ntac 2 gen_tac
   >> REWRITE_TAC[cstep_seq_rtc_def]
   >> ho_match_mp_tac relationTheory.RTC_INDUCT
   >> fs[pairTheory.FORALL_PROD,pairTheory.LAMBDA_PROD,pairTheory.ELIM_UNCURRY]
@@ -1081,15 +1098,24 @@ Proof
   >> fs[]
 QED
 
+Theorem parstep_preserves_prog_cid:
+!cid p cid' cores P M cores' M' cid'' s.
+  parstep P cid cores M cores' M'
+  /\ FLOOKUP cores cid' = SOME $ Core cid'' p s
+  ==> ?s'. FLOOKUP cores cid' = SOME $ Core cid'' p s'
+Proof
+  fs[parstep_cases,PULL_EXISTS]
+QED
+
 Theorem cstep_seq_NRC_wf =
   Ho_Rewrite.REWRITE_RULE[arithmeticTheory.RTC_eq_NRC,cstep_seq_rtc_def,PULL_EXISTS]
   cstep_seq_rtc_preserves_wf
 
 Theorem parstep_preserves_wf:
-!cid cores M cores' M'.
+!cid cores M cores' M' P.
   well_formed_cores cores M
   /\ well_formed_ext_cores cores
-  /\ parstep cid cores M cores' M'
+  /\ parstep P cid cores M cores' M'
   ==> well_formed_cores cores' M'
 Proof
   rw[parstep_cases]
@@ -1098,6 +1124,16 @@ Proof
   >> ntac 2 $ first_x_assum $ drule_then strip_assume_tac
   >- drule_all_then irule cstep_preserves_wf
   >> fs[cstep_cases,well_formed_promise_other,well_formed_ext_cores_def]
+QED
+
+Theorem parstep_preserves_wf_ext_cores:
+!cid cores M cores' M' P.
+  well_formed_ext_cores cores
+  /\ parstep P cid cores M cores' M'
+  ==> well_formed_ext_cores cores'
+Proof
+  rw[parstep_cases,well_formed_ext_cores_def]
+  >> gvs[FLOOKUP_UPDATE,COND_RATOR,COND_RAND,COND_EXPAND_OR]
 QED
 
 (* init state *)
@@ -1126,11 +1162,11 @@ QED
 (* lifting reflexive-transitive pre-post conditions to cstep_seq *)
 
 Theorem cstep_transitive_cstep_seq:
-  !p cid tp R.
+  !p cid R.
   reflexive R /\ transitive R
-  /\ (!s M prom s' M'. cstep p cid tp s M prom s' M' ==> R (s,M) (s',M'))
-  /\ (!s M prom s'. clstep p cid tp s M prom s' ==> R (s,M) (s',M))
-  ==> !sM sM'. cstep_seq p cid tp sM sM' ==> R sM sM'
+  /\ (!s M prom s' M'. cstep (λmem msg. T) p cid s M prom s' M' ==> R (s,M) (s',M'))
+  /\ (!s M prom s'. clstep p cid s M prom s' ==> R (s,M) (s',M))
+  ==> !sM sM'. cstep_seq p cid sM sM' ==> R sM sM'
 Proof
   rpt gen_tac >> strip_tac
   >> rpt PairCases >> strip_tac
@@ -1141,20 +1177,17 @@ Proof
 QED
 
 Theorem cstep_transitive_cstep_seq_rtc:
-  !p cid tp R.
+  !p cid R.
   reflexive R /\ transitive R
-  /\ (!s M prom s' M'. cstep p cid tp s M prom s' M' ==> R (s,M) (s',M'))
-  /\ (!s M prom s'. clstep p cid tp s M prom s' ==> R (s,M) (s',M))
-  ==> !sM sM'. cstep_seq_rtc p cid tp sM sM' ==> R sM sM'
+  /\ (!s M prom s' M'. cstep (λmem msg. T) p cid s M prom s' M' ==> R (s,M) (s',M'))
+  /\ (!s M prom s'. clstep p cid s M prom s' ==> R (s,M) (s',M))
+  ==> !sM sM'. cstep_seq_rtc p cid sM sM' ==> R sM sM'
 Proof
   rpt gen_tac >> strip_tac
-  >> reverse $ qsuff_tac `!sM sM'. cstep_seq p cid tp sM sM' ==> R sM sM'`
+  >> reverse $ qsuff_tac `!sM sM'. cstep_seq p cid sM sM' ==> R sM sM'`
   >- (
-    qmatch_asmsub_rename_tac `cstep p cid tp`
-    >> qmatch_asmsub_rename_tac `transitive R`
-    >> qspecl_then [`p`,`cid`,`tp`,`R`] mp_tac cstep_transitive_cstep_seq
-    >> impl_tac >- (rw[] >> res_tac)
-    >> fs[]
+    match_mp_tac cstep_transitive_cstep_seq
+    >> asm_rewrite_tac[]
   )
   >> rpt $ PRED_ASSUM is_forall kall_tac >> strip_tac
   >> fs[cstep_seq_rtc_def]
@@ -1169,8 +1202,8 @@ QED
 (* properties *)
 
 Theorem clstep_coh_mono:
-  !p cid tp s M prom s' l.
-  clstep p cid tp s M prom s' ==> s.bst_coh l <= s'.bst_coh l
+  !p cid s M prom s' l.
+  clstep p cid s M prom s' ==> s.bst_coh l <= s'.bst_coh l
 Proof
   rw[clstep_cases]
   >> fs[bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,combinTheory.APPLY_UPDATE_THM,bmc_exec_general_stmt_exists,bir_exec_stmt_assert_def,bir_exec_stmt_assume_def,bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bir_exec_stmt_halt_def,bir_state_set_typeerror_def,AllCaseEqs(),fence_updates_def]
@@ -1180,29 +1213,23 @@ Proof
 QED
 
 Theorem cstep_coh_mono:
-  !p cid tp s M prom s' M' l.
-  cstep p cid tp s M prom s' M' ==> s.bst_coh l <= s'.bst_coh l
+  !p cid s M prom s' M' l.
+  cstep P p cid s M prom s' M' ==> s.bst_coh l <= s'.bst_coh l
 Proof
   rw[cstep_cases] >> fs[]
   >> drule clstep_coh_mono >> fs[]
 QED
 
 Theorem cstep_seq_rtc_coh_mono:
-  !p cid tp sM sM' l. cstep_seq_rtc p cid tp sM sM'
+  !p cid sM sM' l. cstep_seq_rtc p cid sM sM'
   ==> (FST sM).bst_coh l <= (FST sM').bst_coh l
 Proof
-  ntac 3 gen_tac
+  ntac 2 gen_tac
   >> fs[GSYM PULL_FORALL]
-  >> qho_match_abbrev_tac `!sM sM'. cstep_seq_rtc p cid tp sM sM' ==> R sM sM'`
-  >> qspecl_then [`p`,`cid`,`tp`,`R`] mp_tac cstep_transitive_cstep_seq_rtc
-  >> impl_tac
-  >> fs[relationTheory.reflexive_def]
-  >> unabbrev_all_tac
-  >> rw[relationTheory.reflexive_def]
+  >> ho_match_mp_tac cstep_transitive_cstep_seq_rtc
+  >> rw[relationTheory.reflexive_def,pairTheory.LAMBDA_PROD,relationTheory.transitive_def,pairTheory.FORALL_PROD]
   >- (
-    fs[relationTheory.transitive_def]
-    >> rpt PairCases >> rw[]
-    >> qmatch_goalsub_rename_tac `_.bst_coh l`
+    qmatch_goalsub_rename_tac `_.bst_coh l`
     >> ntac 2 $ first_x_assum $ qspec_then `l` assume_tac
     >> irule arithmeticTheory.LESS_EQ_TRANS
     >> rpt $ goal_assum drule
@@ -1219,40 +1246,33 @@ Theorem cstep_seq_NRC_coh_mono =
 (* monotony of memory *)
 
 Theorem cstep_mem_mono:
-  !p cid tp s M prom s' M'.
-  cstep p cid tp s M prom s' M'
+  !p cid s M prom s' M' P.
+  cstep P p cid s M prom s' M'
   ==> LENGTH M <= LENGTH M' /\ IS_PREFIX M' M
 Proof
   rw[rich_listTheory.IS_PREFIX_APPEND,cstep_cases] >> fs[]
 QED
 
 Theorem cstep_seq_mem_mono:
-  !p cid tp s M s' M'.
-  cstep_seq p cid tp (s,M) (s',M')
+  !p cid s M s' M'.
+  cstep_seq p cid (s,M) (s',M')
   ==> LENGTH M <= LENGTH M' /\ IS_PREFIX M' M
 Proof
   rpt gen_tac >> strip_tac
   >> fs[cstep_seq_cases]
-  >> drule cstep_mem_mono
-  >> fs[]
+  >> drule_then irule cstep_mem_mono
 QED
 
 Theorem cstep_seq_rtc_mem_mono:
-  !p cid tp sM sM'. cstep_seq_rtc p cid tp sM sM'
+  !p cid sM sM'. cstep_seq_rtc p cid sM sM'
   ==> LENGTH $ SND sM <= LENGTH $ SND sM' /\ IS_PREFIX (SND sM') (SND sM)
 Proof
-  ntac 3 gen_tac
+  ntac 2 gen_tac
   >> fs[GSYM PULL_FORALL]
-  >> qho_match_abbrev_tac `!sM sM'. cstep_seq_rtc p cid tp sM sM' ==> R sM sM'`
-  >> qspecl_then [`p`,`cid`,`tp`,`R`] mp_tac cstep_transitive_cstep_seq_rtc
-  >> impl_tac
-  >> fs[relationTheory.reflexive_def]
-  >> unabbrev_all_tac
-  >> rw[]
+  >> ho_match_mp_tac cstep_transitive_cstep_seq_rtc
+  >> rw[relationTheory.reflexive_def,pairTheory.LAMBDA_PROD,relationTheory.transitive_def,pairTheory.FORALL_PROD]
   >- (
-    fs[relationTheory.transitive_def]
-    >> rpt PairCases >> rw[]
-    >> irule rich_listTheory.IS_PREFIX_TRANS
+    irule rich_listTheory.IS_PREFIX_TRANS
     >> rpt $ goal_assum drule
   )
   >> fs[cstep_cases]
@@ -1265,18 +1285,13 @@ Theorem cstep_seq_NRC_mem_mono =
 (* promset decreases monotonically *)
 
 Theorem cstep_seq_prom_subset:
-  !p cid tp s M s' M'.
-  cstep_seq p cid tp (s,M) (s',M')
-  (* /\ well_formed cid M s /\ wf_ext_p p cid *)
+  !p cid s M s' M'.
+  cstep_seq p cid (s,M) (s',M')
   ==> (set s'.bst_prom) SUBSET (set s.bst_prom)
 Proof
   rw[cstep_seq_cases,cstep_cases]
   >- (
-  (*
-    drule_at (Pat `clstep`) clstep_preserves_wf
-    >> impl_tac >- fs[wf_ext_p_def]
-    >> strip_tac *)
-    gvs[clstep_cases,bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,listTheory.LIST_TO_SET_FILTER,pred_setTheory.INTER_SUBSET,fence_updates_def]
+    gvs[clstep_cases,bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,listTheory.LIST_TO_SET_FILTER,pred_setTheory.INTER_SUBSET,fence_updates_def,remove_prom_def]
     >~ [`BStmt_CJmp`]
     >- (
       fs[bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def]
@@ -1289,69 +1304,97 @@ Proof
       >> BasicProvers.every_case_tac
       >> gvs[bir_state_set_typeerror_def]
     )
-    >~ [`BSExt R`]
-    >- fs[listTheory.EVERY_MEM,listTheory.MEM_SET_TO_LIST,pred_setTheory.SUBSET_DEF]
   )
-  >> gs[clstep_cases,listTheory.LIST_TO_SET_FILTER,pred_setTheory.INTER_SUBSET,bir_state_fulful_view_updates_def,pred_setTheory.UNION_OVER_INTER]
+  >> gs[clstep_cases,listTheory.LIST_TO_SET_FILTER,pred_setTheory.INTER_SUBSET,bir_state_fulful_view_updates_def,pred_setTheory.UNION_OVER_INTER,remove_prom_def]
+  >> fs[pred_setTheory.INTER_DEF]
+  >> fs[COND_RAND,listTheory.LIST_TO_SET_FILTER,pred_setTheory.INTER_SUBSET,pred_setTheory.UNION_OVER_INTER]
   >> fs[pred_setTheory.INTER_DEF]
 QED
 
 Theorem cstep_seq_rtc_prom_subset:
-  !p cid tp sM sM'.
-  cstep_seq_rtc p cid tp sM sM'
+  !p cid sM sM'.
+  cstep_seq_rtc p cid sM sM'
   ==> (set (FST sM').bst_prom) SUBSET (set (FST sM).bst_prom)
 Proof
-  ntac 3 gen_tac
-  >> fs[GSYM PULL_FORALL]
-  >> qho_match_abbrev_tac `!sM sM'. cstep_seq_rtc p cid tp sM sM' ==> R sM sM'`
-  >> fs[cstep_seq_rtc_def]
+  ntac 2 gen_tac
+  >> fs[GSYM PULL_FORALL,cstep_seq_rtc_def]
   >> ho_match_mp_tac relationTheory.RTC_INDUCT
-  >> conj_tac >> rpt PairCases
-  >> unabbrev_all_tac
+  >> fs[pairTheory.FORALL_PROD]
   >> rw[]
-  >> drule_then assume_tac cstep_seq_prom_subset
   >> irule pred_setTheory.SUBSET_TRANS
-  >> rpt $ goal_assum drule
+  >> drule_then (irule_at Any) cstep_seq_prom_subset
+  >> goal_assum drule
 QED
 
 Theorem cstep_seq_NRC_prom_subset =
   Ho_Rewrite.REWRITE_RULE[arithmeticTheory.RTC_eq_NRC,cstep_seq_rtc_def,PULL_EXISTS]
   cstep_seq_rtc_prom_subset
 
+Theorem remove_prom_empty:
+  !prom prom'. prom = remove_prom prom' prom
+    /\ (set prom') SUBSET (set prom) ==> prom' = []
+Proof
+  rw[listTheory.FILTER_EQ_ID,remove_prom_def,DISJ_EQ_IMP]
+  >> spose_not_then assume_tac
+  >> fs[listTheory.NOT_NULL_MEM,GSYM listTheory.NULL_EQ,listTheory.EVERY_MEM,pred_setTheory.SUBSET_DEF]
+  >> ntac 2 res_tac
+QED
+
+Theorem COND_COND_eq:
+  !P x x' y y'.
+  (COND P x y) = COND P x' y' <=> (P ==> x = x') /\ (~P ==> y = y')
+Proof
+  Cases >> fs[]
+QED
+
+Theorem MAX_MAX_eq:
+  !a b c. MAX a b = MAX a c <=> (a < b \/ a < c) ==> b = c
+Proof
+  fs[arithmeticTheory.MAX_DEF] >> BasicProvers.every_case_tac >> fs[]
+  >> fs[arithmeticTheory.LESS_OR_EQ,arithmeticTheory.NOT_LESS]
+QED
+
+Theorem MAX_MAX_eq':
+  !a b c. MAX a b = MAX c b <=> (b < a \/ b < c) ==> a = c
+Proof
+  fs[arithmeticTheory.MAX_DEF] >> BasicProvers.every_case_tac >> fs[]
+  >> fs[arithmeticTheory.LESS_OR_EQ,arithmeticTheory.NOT_LESS]
+QED
+
 Theorem cstep_seq_is_clstep:
-  !p cid tp s1 M1 s2 M2 t.
-  cstep_seq p cid tp (s1,M1) (s2,M2)
+  !p cid s1 M1 s2 M2 t.
+  cstep_seq p cid (s1,M1) (s2,M2)
+  /\ well_formed cid M1 s1
   /\ MEM t s1.bst_prom
   /\ ~MEM t s2.bst_prom
-  ==> clstep p cid tp s1 M1 [t] s2 /\ M1 = M2
+  ==> ?prom. clstep p cid s1 M1 prom s2 /\ ~NULL prom /\ M1 = M2
 Proof
   rpt gen_tac >> strip_tac
   >> gs[cstep_cases,cstep_seq_cases]
   >- (
-    drule_then strip_assume_tac $ iffLR clstep_cases
-    >> qhdtm_x_assum `clstep` mp_tac
-    >> gs[]
-    >- gs[bir_state_read_view_updates_def,bir_state_fulful_view_updates_def]
-    >~ [`bir_state_fulful_view_updates`]
-    >- gs[listTheory.MEM_FILTER,bir_state_fulful_view_updates_def]
-    >> gvs[listTheory.MEM_FILTER,bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bmc_exec_general_stmt_exists,bir_exec_stmt_assume_def,bir_exec_stmt_assert_def,AllCaseEqs(),bir_state_set_typeerror_def,bir_exec_stmt_halt_def,fence_updates_def]
-    >> qmatch_asmsub_rename_tac `R (s,(tp,M1)) s'`
-    >> cheat
+    goal_assum drule
+    >> gvs[clstep_cases,bir_state_read_view_updates_def,fence_updates_def,bir_exec_stmt_cjmp_mc_invar,remove_prom_def,listTheory.MEM_FILTER]
+    >> imp_res_tac bmc_exec_general_stmt_mc_invar
+    >> gvs[listTheory.NOT_NULL_MEM,COND_RAND,listTheory.MEM_FILTER]
+    >> goal_assum drule
   )
-  (* discharging two promises, needs well_formedness assumption that t <> LENGTH M1 + 1  *)
-  >> cheat
+  >> qmatch_asmsub_rename_tac `LENGTH M1 + 1`
+  >> qmatch_asmsub_rename_tac `MEM t s1.bst_prom`
+  >> `t <= LENGTH M1` by fs[well_formed_def,listTheory.EVERY_MEM]
+  >> gvs[clstep_cases,bir_state_fulful_view_updates_def,remove_prom_def,listTheory.FILTER_APPEND_DISTRIB,listTheory.MEM_FILTER]
+  >> gvs[COND_RAND,listTheory.MEM_FILTER]
 QED
 
 (* in the certifying trace there exists the step where a promise is discharged *)
 
 Theorem is_certified_promise_disch:
-  !cid M s p tp t.
-  is_certified p cid tp s M
+  !cid M s p t.
+  is_certified p cid s M
   /\ MEM t s.bst_prom
   ==>
-    ?n m sM2 sM3 sM4. NRC (cstep_seq p cid tp) m (s,M) sM2
-    /\ cstep_seq p cid tp sM2 sM3
-    /\ NRC (cstep_seq p cid tp) n sM3 sM4
+    ?n m sM2 sM3 sM4. NRC (cstep_seq p cid) m (s,M) sM2
+    /\ cstep_seq p cid sM2 sM3
+    /\ NRC (cstep_seq p cid) n sM3 sM4
     /\ MEM t (FST sM2).bst_prom
     /\ ~MEM t (FST sM3).bst_prom
     /\ NULL (FST sM4).bst_prom
@@ -1359,18 +1402,18 @@ Proof
   rpt strip_tac
   >> fs[is_certified_def,cstep_seq_rtc_def]
   >> dxrule_then strip_assume_tac arithmeticTheory.RTC_NRC
-  >> qmatch_asmsub_rename_tac `NRC (cstep_seq p cid tp) n (s,M) (s',M')`
+  >> qmatch_asmsub_rename_tac `NRC (cstep_seq p cid) n (s,M) (s',M')`
   >> Cases_on `0 < n` >> gvs[]
   >> Cases_on `!m. m <= n ==> !s'' M''.
-    NRC (cstep_seq p cid tp) m (s,M) (s'',M'')
-    /\ NRC (cstep_seq p cid tp) (n - m) (s'',M'') (s',M')
+    NRC (cstep_seq p cid) m (s,M) (s'',M'')
+    /\ NRC (cstep_seq p cid) (n - m) (s'',M'') (s',M')
     ==> MEM t s''.bst_prom`
   >- (first_x_assum $ drule_at Any >> fs[])
   >> PRED_ASSUM is_neg $ mp_tac o SIMP_RULE std_ss [NOT_FORALL_THM]
-  >> qho_match_abbrev_tac `(?m. P m) ==> _`
+  >> qho_match_abbrev_tac `(?m. P' m) ==> _`
   >> disch_then assume_tac
   >> dxrule_then strip_assume_tac arithmeticTheory.WOP
-  >> qmatch_asmsub_rename_tac `P m`
+  >> qmatch_asmsub_rename_tac `P' m`
   >> `0 < m /\ m <= n` by (
     unabbrev_all_tac
     >> fs[] >> Cases_on `m` >> gvs[]
@@ -1381,54 +1424,75 @@ Proof
   >> rpt $ goal_assum drule
   >> fs[]
   >> first_x_assum irule
-  >> qmatch_asmsub_rename_tac `cstep_seq p cid tp z (s'',M'')`
+  >> qmatch_asmsub_rename_tac `cstep_seq p cid z (s'',M'')`
   >> PairCases_on `z`
   >> fs[]
   >> goal_assum $ dxrule_at Any
-  >> dxrule_at (Pos $ el 2) $
+  >> dxrule_at (Pat `NRC`) $
     Ho_Rewrite.REWRITE_RULE[PULL_EXISTS] $ iffRL $ cj 2 arithmeticTheory.NRC
   >> disch_then dxrule
-  >> qmatch_goalsub_abbrev_tac `NRC _ (SUC m)`
-  >> `SUC m = n - n'` by (unabbrev_all_tac >> decide_tac)
+  >> qmatch_goalsub_rename_tac `NRC _ (SUC $ n - SUC n')`
+  >> `SUC $ n - SUC n' = n - n'` by decide_tac
   >> fs[]
 QED
 
 Theorem is_certified_promises:
-  !cid M s p tp l t msg.
-  is_certified p cid tp s M
+  !cid M s p l t msg.
+  is_certified p cid s M
+  /\ well_formed cid M s
+  /\ wf_ext_p p cid
   /\ MEM t s.bst_prom
   /\ mem_get M l t = SOME msg /\ msg.cid = cid
   ==> s.bst_coh l < t
 Proof
   spose_not_then strip_assume_tac
+  >> qmatch_asmsub_rename_tac `MEM t s.bst_prom`
+  >> `t <= LENGTH M` by fs[well_formed_def,listTheory.EVERY_MEM]
   >> drule_all_then strip_assume_tac is_certified_promise_disch
-  >> qmatch_asmsub_rename_tac `cstep_seq p cid tp sM2 sM3`
+  >> qmatch_asmsub_rename_tac `cstep_seq p cid sM2 sM3`
   >> PairCases_on `sM2` >> PairCases_on `sM3`
-  >> fs[]
+  >> rev_drule_at_then (Pat `NRC`) assume_tac cstep_seq_NRC_wf
+  >> drule_all_then assume_tac cstep_seq_NRC_wf
+  >> fs[arithmeticTheory.NOT_LESS]
   >> dxrule_then (drule_all_then strip_assume_tac) cstep_seq_is_clstep
-  >> qmatch_asmsub_rename_tac `NRC (cstep_seq p cid tp) m (s,M) (s1,M1)`
-  >> qspecl_then [`p`,`cid`,`tp`,`(s,M)`,`(s1,M1)`,`m`] assume_tac cstep_seq_NRC_mem_mono
-  >> gvs[clstep_cases,bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,listTheory.MEM_FILTER,bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bmc_exec_general_stmt_exists,bir_exec_stmt_assume_def,bir_exec_stmt_assert_def,AllCaseEqs(),bir_state_set_typeerror_def,bir_exec_stmt_halt_def]
-  >> `t <= LENGTH M` by (
-    imp_res_tac mem_get_LENGTH
-  )
+  >> qmatch_asmsub_rename_tac `NRC (cstep_seq p cid) m (s,M) (s1,M1)`
+  >> qspecl_then [`p`,`cid`,`(s,M)`,`(s1,M1)`,`m`] assume_tac cstep_seq_NRC_mem_mono
+  >> gvs[clstep_cases,bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bmc_exec_general_stmt_exists,bir_exec_stmt_assume_def,bir_exec_stmt_assert_def,AllCaseEqs(),bir_state_set_typeerror_def,bir_exec_stmt_halt_def,fence_updates_def]
   >> qmatch_asmsub_rename_tac `_.bst_coh l`
-  >> qspecl_then [`p`,`cid`,`tp`,`(s,M)`,`(s1,M1)`,`l`,`m`] assume_tac cstep_seq_NRC_coh_mono
+  >> qspecl_then [`p`,`cid`,`(s,M)`,`(s1,M1)`,`l`,`m`] assume_tac cstep_seq_NRC_coh_mono
+  >~ [`BSExt R`]
+  >- (
+    gs[listTheory.MEM_FILTER,remove_prom_def,listTheory.EVERY_MEM,rich_listTheory.IS_PREFIX_APPEND,bir_exec_stmt_jmp_to_label_mc_invar]
+    >> first_x_assum $ drule_then strip_assume_tac
+    >> gs[mem_is_loc_append]
+    >> `0 < t` by fs[well_formed_def,listTheory.EVERY_MEM]
+    >> drule_all_then (fs o single) mem_get_mem_is_loc
+  )
+  >> gvs[listTheory.MEM_FILTER,remove_prom_def]
   >> gvs[rich_listTheory.IS_PREFIX_APPEND,mem_get_append]
+  >> fs[mem_get_append]
   >> drule_then (rev_drule_then assume_tac) mem_get_eq
+  >> gvs[]
+  >> BasicProvers.every_case_tac
+  >> gvs[]
+  >> fs[listTheory.EVERY_MEM]
+  >> first_x_assum $ drule_then assume_tac
+  >> gs[mem_is_loc_append]
+  >> drule_then (rev_drule_then assume_tac) mem_get_mem_is_loc 
   >> gvs[]
 QED
 
 Theorem is_certified_promises':
-  !cid M s p tp l t msg.
-  is_certified p cid tp s M
+  !cid M s p l t msg.
+  is_certified p cid s M
+  /\ well_formed cid M s
+  /\ wf_ext_p p cid
   ==>
   EVERY (λt. !l. mem_get M l t = SOME msg /\ msg.cid = cid ==> s.bst_coh l < t) s.bst_prom
 Proof
   fs[listTheory.EVERY_MEM]
   >> rpt strip_tac
-  >> drule_all is_certified_promises
-  >> fs[]
+  >> drule_all_then irule is_certified_promises
 QED
 
 val _ = export_theory ();
