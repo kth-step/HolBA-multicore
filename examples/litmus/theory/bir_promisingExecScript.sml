@@ -2075,21 +2075,13 @@ Proof
 QED
 
 Theorem certifiable_view_inv:
-  !p cid sM1 sM2.
-    RTC (λsM1 sM2. cstep_seq p cid sM1 sM2 /\ is_certified p cid (FST sM2) (SND sM2)) sM1 sM2
-    /\ certifiable_view_inv cid sM1
-    ==> certifiable_view_inv cid sM2
+  !p cid s1 M1 s2 M2.
+    cstep_seq p cid (s1, M1) (s2, M2)
+    /\ is_certified p cid s2 M2
+    /\ certifiable_view_inv cid (s1, M1)
+    ==> certifiable_view_inv cid (s2, M2)
 Proof
-  rewrite_tac [GSYM AND_IMP_INTRO]
-  >> gen_tac >> gen_tac
-  >> ho_match_mp_tac RTC_INDUCT
-  >> fs []
-  >> rpt strip_tac
-  >> first_assum irule
-  >> qpat_x_assum ‘_ ==> certifiable_view_inv cid sM2’ kall_tac
-  >> namedCases_on ‘sM1’ ["s1 M1"] >> namedCases_on ‘sM1'’ ["s2 M2"]
-  >> drule is_certified_coh
-  >> strip_tac
+  rpt strip_tac
   >> imp_res_tac certifiable_view_inv_IMP_bir_eval_view_of_exp
   >> fs [cstep_seq_cases]
   >| [ (* clstep *)
