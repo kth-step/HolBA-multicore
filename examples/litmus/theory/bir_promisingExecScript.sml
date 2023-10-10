@@ -1785,6 +1785,14 @@ Proof
   fs [eval_is_certified_f_correctness, is_certified_f_correctness]
 QED
 
+
+(*
+The certified view invariant is necessary to allow us to prove the
+simulation relation between promise - non-promise msg traces.  The
+certified view ensures that every clstep do not use msgs from the
+future.  We prove that all states in certified traces that start with
+a certifiable_view state are certifiable_view states.
+*)
 Definition certifiable_view_inv_def:
   certifiable_view_inv cid (s, M) =
   (~MEM 0 s.bst_prom
@@ -2164,6 +2172,16 @@ Proof
   Induct >> fs [MAXL_def, AC MAX_ASSOC MAX_COMM]
 QED
 
+Theorem sim_view_0:
+  ∀i j ps.
+  sim_view i j ps 0 0
+Proof
+  rpt gen_tac
+  >> fs [sim_view_def]
+  >> qexists_tac ‘[]’
+  >> fs [MAXL_def]
+QED
+
 Theorem sim_view_MAX:
   ∀i j prom v v' w w'.
   sim_view i j prom v v'
@@ -2203,49 +2221,63 @@ Definition sim_viewenv_def:
      ∀r. sim_view_opt i j prom (FLOOKUP viewenv r) (FLOOKUP viewenv' r)
 End
 
-Inductive sim_rel:
-(!i j msg s M s' M'.
-  0 < i ∧ i ≤ j ∧ LENGTH M' < j ∧ LENGTH M = LENGTH M' + 1
-  ∧ mem_get M msg.loc i = SOME msg
-  ∧ MEM i s.bst_prom
-  ∧ s.bst_environ = s'.bst_environ
-  ∧ s.bst_pc = s'.bst_pc
-  ∧ s.bst_status = s'.bst_status
-  ∧ s'.bst_prom = MAP (sim_time i j) $ FILTER (λt. t = i) s.bst_prom
-  ∧ sim_view i j s.bst_prom s.bst_v_rOld s'.bst_v_rOld
-  ∧ sim_view i j s.bst_prom s.bst_v_wOld s'.bst_v_wOld
-  ∧ sim_view i j s.bst_prom s.bst_v_rNew s'.bst_v_rNew
-  ∧ sim_view i j s.bst_prom s.bst_v_wNew s'.bst_v_wNew
-  ∧ sim_view i j s.bst_prom s.bst_v_Rel s'.bst_v_Rel
-  ∧ sim_view i j s.bst_prom s.bst_v_CAP s'.bst_v_CAP
-  ∧ sim_viewenv i j s.bst_prom s.bst_viewenv s'.bst_viewenv
-  ∧ (∀l. sim_view i j s.bst_prom (s.bst_coh l) (s'.bst_coh l))
-  ∧ (∀l t. mem_get M' l t = if t = j then NONE else mem_get M l (sim_time_inv i j t))
-  ==> sim_rel i j msg (s,M) (s',M'))
-∧
-(!i j msg s M s' M'.
-  0 < i ∧ i ≤ j ∧ j ≤ LENGTH M' ∧ LENGTH M = LENGTH M'
-  ∧ mem_get M msg.loc i = SOME msg
-  ∧ ~MEM i s.bst_prom
-  ∧ s.bst_environ = s'.bst_environ
-  ∧ s.bst_pc = s'.bst_pc
-  ∧ s.bst_status = s'.bst_status
-  ∧ s'.bst_prom = MAP (sim_time i j) s.bst_prom
-  ∧ sim_view i j s.bst_prom s.bst_v_rOld s'.bst_v_rOld
-  ∧ sim_view i j s.bst_prom s.bst_v_wOld s'.bst_v_wOld
-  ∧ sim_view i j s.bst_prom s.bst_v_rNew s'.bst_v_rNew
-  ∧ sim_view i j s.bst_prom s.bst_v_wNew s'.bst_v_wNew
-  ∧ sim_view i j s.bst_prom s.bst_v_Rel s'.bst_v_Rel
-  ∧ sim_view i j s.bst_prom s.bst_v_CAP s'.bst_v_CAP
-  ∧ sim_viewenv i j s.bst_prom s.bst_viewenv s'.bst_viewenv
-  ∧ (∀l. sim_view i j s.bst_prom (s.bst_coh l) (s'.bst_coh l))
-  ∧ (∀l t. mem_get M' l t = mem_get M l (sim_time_inv i j t))
-  ==> sim_rel i j msg (s,M) (s',M'))
+Inductive sim_mem:
+  (!i j M M'.
+     LENGTH M = LENGTH M' + 1 /\ LENGTH M' < j
+     /\ (!t. oEl (sim_time i j t) M' = if t = i then NONE else oEL t M)
+     ==> sim_mem i j M M')
+  /\
+  (!i j M M'.
+     LENGTH M = LENGTH M' /\ LENGTH M' >= j
+     /\ (!t. oEl (sim_time i j t) M' = oEL t M)
+     ==> sim_mem i j M M')
 End
 
+Definition sim_prom_def:
+  sim_prom i j ps = MAP (sim_time i j) $ FILTER (λt. t <> i) ps
+End
+
+Definition sim_fwdb_def:
+  sim_fwdb i j ps fwdb fwdb' =
+  (fwdb'.fwdb_time = sim_time i j fwdb.fwdb_time 
+   ∧ fwdb'.fwdb_xcl = fwdb.fwdb_xcl
+   ∧ sim_view i j ps fwdb.fwdb_view fwdb'.fwdb_view)
+End
+           
+Definition sim_rel_def:
+  sim_rel i j (s, M) (s', M') =
+  (0 < i /\ i <= j 
+   /\ (LENGTH M ≠ LENGTH M' <=> MEM i s.bst_prom)
+   /\ sim_mem i j M M'
+   /\ s.bst_environ = s'.bst_environ
+   /\ s.bst_pc = s'.bst_pc
+   /\ s.bst_status = s'.bst_status
+   /\ s'.bst_prom = sim_prom i j s.bst_prom
+   /\ sim_viewenv i j s.bst_prom s.bst_viewenv s'.bst_viewenv
+   /\ (∀l. sim_fwdb i j s.bst_prom (s.bst_fwdb l) (s'.bst_fwdb l))
+   /\ (∀l. sim_view i j s.bst_prom (s.bst_coh l) (s'.bst_coh l))
+   /\ sim_view i j s.bst_prom s.bst_v_rOld s'.bst_v_rOld
+   /\ sim_view i j s.bst_prom s.bst_v_wOld s'.bst_v_wOld
+   /\ sim_view i j s.bst_prom s.bst_v_rNew s'.bst_v_rNew
+   /\ sim_view i j s.bst_prom s.bst_v_wNew s'.bst_v_wNew
+   /\ sim_view i j s.bst_prom s.bst_v_Rel s'.bst_v_Rel
+   /\ sim_view i j s.bst_prom s.bst_v_CAP s'.bst_v_CAP)
+End
+
+Theorem MEM_prom_sim_rel:
+  !i j msg s M s' M' t.
+  sim_rel i j (s,M) (s',M') /\
+  MEM t s.bst_prom /\ t <> i
+  ==> MEM (sim_time i j t) s'.bst_prom
+Proof
+  rpt strip_tac
+  >> fs [sim_rel_def, sim_prom_def, MEM_FILTER, MEM_MAP]
+  >> qexists_tac ‘t’
+  >> fs []
+QED
+
 Theorem MEM_MAXL:
-  ∀l. MAXL l ≠ 0 ⇒
-  MEM (MAXL l) l
+  ∀l. MAXL l ≠ 0 ⇒ MEM (MAXL l) l
 Proof
   Induct
   >| [
@@ -2293,25 +2325,61 @@ Proof
       ]
   ]
 QED
-           
-Theorem sim_rel_clstep_NEQ:
-  !cid p s1 M s2 s1' M' l msg i j.
-  clstep cid p s1 M l s2
-  /\ certifiable_view_inv cid (s1, M)
-  /\ certifiable_view_inv cid (s2, M)
-  /\ sim_rel i j msg (s1,M) (s1',M') 
-  /\ LENGTH M = LENGTH M' + 1
-  ==> ?s2'. clstep cid p s1' M' (MAP (sim_time i j) l) s2'
-              /\ sim_rel i j msg (s2,M) (s2',M')
+
+
+Theorem sim_view_of_exp:
+  ∀i j ps viewenv viewenv'.
+  sim_viewenv i j ps viewenv viewenv'
+  ⇒ ∀e. sim_view i j ps (bir_eval_view_of_exp e viewenv) (bir_eval_view_of_exp e viewenv')
 Proof
   rpt strip_tac
-  >> gs [sim_rel_cases, clstep_cases, bmc_exec_general_stmt_def]
-  >> (TRY $ Q.REFINE_EXISTS_TAC ‘<| bst_pc := s2.bst_pc; bst_environ := s2.bst_environ; bst_status := s2.bst_status;
-                                    bst_v_rOld := s2_v_rOld'; bst_v_wOld := s2_v_wOld'; bst_v_rNew := s2_v_rNew'; bst_v_wNew := s2_v_wNew';
-                                    bst_v_Rel := s2_v_Rel; bst_v_CAP := s2_v_CAP; bst_coh := s2_coh'; bst_viewenv := s2_viewenv';
-                                    bst_xclb := s2_xclb'; bst_fwdb := s2_fwdb; bst_prom := MAP (sim_time i j) $ FILTER (λt. t = i) s2.bst_prom |>’
-      >> fs [bir_state_t_component_equality])
+  >> fs [sim_viewenv_def, sim_view_opt_def]
+  >> Induct_on ‘e’
+  >~ [‘∀r. sim_view i j ps (bir_eval_view_of_exp (BExp_Den r) viewenv)
+                    (bir_eval_view_of_exp (BExp_Den r) viewenv')’]
+  >- (
+  gen_tac
+  >> fs [bir_eval_view_of_exp_def]
+  >> every_case_tac
+  >> (last_x_assum (qspec_then ‘b’ assume_tac)
+      >> rfs [sim_view_opt_def, sim_view_0])
+  )
+  >> (fs [bir_eval_view_of_exp_def, sim_view_MAX, sim_view_0])
+QED
+        
+Theorem sim_view_of_if:
+  ∀i j ps v v' w w'.
+  sim_view i j ps v v'
+  ∧ sim_view i j ps w w'
+  ⇒ ∀P. sim_view i j ps (if P then v else w) (if P then v' else w')
+Proof
+  rpt strip_tac
+  >> full_case_tac
+  >> fs []
+QED
+
+val refine_bir_state = Q.REFINE_EXISTS_TAC
+                         ‘<| bst_pc := s2.bst_pc; bst_environ := s2.bst_environ; bst_status := s2.bst_status;
+                             bst_v_rOld := s2_v_rOld'; bst_v_wOld := s2_v_wOld'; bst_v_rNew := s2_v_rNew'; bst_v_wNew := s2_v_wNew';
+                             bst_v_Rel := s2_v_Rel; bst_v_CAP := s2_v_CAP; bst_coh := s2_coh'; bst_viewenv := s2_viewenv';
+                             bst_xclb := s2_xclb'; bst_fwdb := s2_fwdb; bst_prom := sim_prom i j s2.bst_prom |>’
+
+Theorem sim_rel_clstep:
+  !cid p s1 M s2 s1' M' pf i j.
+  clstep cid p s1 M pf s2
+  /\ certifiable_view_inv cid (s2, M)
+  /\ sim_rel i j (s1,M) (s1',M') 
+  ==> ?s2'. clstep cid p s1' M' (MAP (sim_time i j) pf) s2'
+              /\ sim_rel i j (s2,M) (s2',M')
+Proof
+  rpt strip_tac
+  >> gs [sim_rel_def, clstep_cases, bmc_exec_general_stmt_def]
   >| [ (* load *)
+    refine_bir_state
+    >> fs [PULL_EXISTS, bir_state_t_component_equality, bir_eval_exp_view_def]
+    >> qexistsl_tac [‘v’, ‘l’, ‘t’]
+    >> fs []
+    >> fs [AC CONJ_ASSOC CONJ_COMM]
     cheat
     , (* xclfail *)
     cheat
@@ -2334,25 +2402,23 @@ QED
 
 
 Theorem sim_rel_clstep_EQ:
-  !cid p s1 M s2 s1' M' l msg i j.
-  clstep cid p s1 M l s2
-  /\ certifiable_view_inv cid (s1, M)
+  !cid p s1 M s2 s1' M' pf msg i j.
+  clstep cid p s1 M pf s2
   /\ certifiable_view_inv cid (s2, M)
   /\ LENGTH M = LENGTH M'
   /\ sim_rel i j msg (s1,M) (s1',M') 
-  ==> ?s2'. clstep cid p s1' M' (MAP (sim_time i j) l) s2'
+  ==> ?s2'. clstep cid p s1' M' (MAP (sim_time i j) pf) s2'
               /\ sim_rel i j msg (s2,M) (s2',M')
 Proof
   cheat
 QED
 
 Theorem sim_rel_clstep:
-  !cid p s1 M s2 s1' M' l msg i j.
-  clstep cid p s1 M l s2
-  /\ certifiable_view_inv cid (s1, M)
+  !cid p s1 M s2 s1' M' pf msg i j.
+  clstep cid p s1 M pf s2
   /\ certifiable_view_inv cid (s2, M)
   /\ sim_rel i j msg (s1,M) (s1',M') 
-  ==> ?s2'. clstep cid p s1' M' (MAP (sim_time i j) l) s2'
+  ==> ?s2'. clstep cid p s1' M' (MAP (sim_time i j) pf) s2'
               /\ sim_rel i j msg (s2,M) (s2',M')
 Proof
   rpt strip_tac
@@ -2361,5 +2427,17 @@ Proof
   >> HINT_EXISTS_TAC 
   >> fs []
 QED
+
+Theorem sim_rel_cstep:
+  ∀cid p s1 M1 s2 M2 s1' M1' l msg i j.
+  cstep_seq cid p (s1, M1) (s2, M2)
+  /\ certifiable_view_inv cid (s2, M2)
+  /\ sim_rel i j msg (s1,M1) (s1',M1') 
+  ==> ?s2' M2'. cstep_seq cid p (s1', M2') (s2',M2')
+              /\ sim_rel i j msg (s2,M2) (s2',M2')
+Proof
+QED
+        
+       
 
 val _ = export_theory();
