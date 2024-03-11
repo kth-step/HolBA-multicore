@@ -1,0 +1,29 @@
+INCLUDES = $(HOLDIR)/examples/l3-machine-code/common \
+           $(HOLDIR)/examples/l3-machine-code/arm8/model \
+           $(HOLDIR)/examples/l3-machine-code/arm8/step \
+           $(HOLDIR)/examples/l3-machine-code/m0/model \
+           $(HOLDIR)/examples/l3-machine-code/m0/step \
+           $(HOLDIR)/examples/l3-machine-code/riscv/model \
+           $(HOLDIR)/examples/l3-machine-code/riscv/step \
+           $(HOLBADIR)/src/aux \
+           $(HOLBADIR)/src/theory/bir \
+           $(HOLBADIR)/src/theory/bir-support \
+           $(HOLBADIR)/src/theory/models/l3mod \
+           $(HOLBADIR)/src/shared \
+           $(HOLBADIR)/src/theory/tools/lifter
+
+all: $(DEFAULT_TARGETS) selftest_arm.exe selftest_riscv.exe
+.PHONY: all
+
+selftest_arm.exe: selftest_arm.uo
+	$(HOLMOSMLC) -o $@ $<
+
+selftest_riscv.exe: selftest_riscv.uo
+	$(HOLMOSMLC) -o $@ $<
+
+test: selftest_arm.exe selftest_riscv.exe
+	./selftest_arm.exe
+	./selftest_riscv.exe
+.PHONY: test
+
+EXTRA_CLEANS = selftest_arm.exe selftest_riscv.exe

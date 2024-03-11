@@ -4,6 +4,10 @@ struct
 (* these dependencies probably need cleanup *)
 (* ================================================ *)
 open HolKernel boolLib liteLib simpLib Parse bossLib;
+
+(* FIXME: needed to avoid quse errors *)
+open m0_stepLib;
+
 open bir_inst_liftingTheory
 open bir_lifting_machinesTheory
 open bir_lifting_machinesLib bir_lifting_machinesLib_instances;
@@ -406,7 +410,7 @@ local
 	SOME block => let
                         (* Get labels from block estmt *)
                         val estmt_labels = map dest_BLE_Label (get_block_estmt_labels block)
-                        (* Add labels to blstodo if not already there or in blacklist *)
+                        (* Add labels to blstodo if not already there or in exclude list *)
                         val estmt_labels1 =
                           List.filter (fn l =>
                                         (not (List.exists (fn l' => (cmp_label l l')) ending_label_list))

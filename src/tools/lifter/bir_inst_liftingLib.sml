@@ -946,8 +946,8 @@ fun get_patched_step_hex ms_v hex_code is_multicore =
 (* For debugging (from compute_updates):
 
          val (full_rel_thm, vn_set) =
-           foldl add_imm_up (init_thm, vn_set) (List.take (imm_ups_tm_list, 62));
-         val (v_t, lf_t, SOME res_t) = el 63 imm_ups_tm_list;
+           foldl add_imm_up (init_thm, vn_set) (List.take (imm_ups_tm_list, 19));
+         val (v_t, lf_t, SOME res_t) = el 20 imm_ups_tm_list;
 *)
      fun add_imm_up ((v_t, lf_t, NONE), (full_rel_thm, vn_set)) =
          let

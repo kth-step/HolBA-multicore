@@ -10,6 +10,7 @@ open HolKernel boolLib liteLib simpLib Parse bossLib;
 
 local
     open bir_obs_modelTheory;
+    open bir_block_collectionLib;
 in
 
 
@@ -129,7 +130,7 @@ open bir_cfgLib;
           fun extract_stmts_from_lbl lbl =
               let open bir_programSyntax;
                   val block = Redblackmap.find (bl_dict, lbl)
-                  val (_, _, statements, _) = dest_bir_block block;
+                  val (_, statements, _) = dest_bir_block block;
                   (* statements is a HOL list of BIR statements *)
               in statements end;
 

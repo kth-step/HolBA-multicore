@@ -1,5 +1,8 @@
 open HolKernel Parse boolLib bossLib;
 
+(* FIXME: needed to avoid quse errors *)
+open m0_stepLib;
+
 (* From tools/wp: *)
 open bir_wpLib bir_wp_expLib;
 open bir_wpTheory bir_htTheory;
@@ -230,14 +233,14 @@ val _ =
 val prefix = "add_reg_mem_";
 val first_block_label_tm = ``BL_Address (Imm64 0x0w)``; (* 28 *)
 val ending_lam_disj =  ``BL_Address (Imm64 0x1cw)``; (* 64 *)
-val blacklist = [];
+val elist = [];
 val postcond_tm = ``bir_add_reg_contract_0_post``;
 val defs = [bir_add_reg_prog_def, bir_add_reg_contract_0_post_def,
             bir_add_reg_contract_0_pre_def];
 
 val (bir_add_reg_mem_ht, bir_add_reg_mem_wp_tm) =
   bir_obtain_ht prog_tm first_block_label_tm ending_lam_disj
-                postcond_tm prefix blacklist defs;
+                postcond_tm prefix elist defs;
 
 val bir_add_reg_mem_wp_def = Define `
   bir_add_reg_mem_wp = ^(bir_add_reg_mem_wp_tm)
