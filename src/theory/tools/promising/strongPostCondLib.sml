@@ -91,6 +91,7 @@ Definition bst_pc_tuple_def:
 End
 
 (*
+
 Definition dequeue_def:
   dequeue hd_addr tl_addr reg dequeue_entry jump_after = MAP BBlock_Stmts [
     <|bb_label := BL_Address $ Imm64 dequeue_entry;
@@ -151,25 +152,36 @@ Definition dequeue_def:
   ]
 End
 
-Definition bir_stmts_of_prog_def:
-  bir_stmts_of_prog $ BirProgram p =
-    MAP (λbl.
-      let stmts =
-        case bl of
-        | BBlock_Stmts stmts =>
-          SOME (LENGTH stmts.bb_statements,stmts.bb_statements,stmts.bb_last_statement)
-        | BBlock_Ext R => NONE
-      in
-        (bir_label_of_block bl, stmts)
-      end
-    ) p
-End
-
 *)
+
+(*
+strip_union_insert ``{a; b} ∪ ({c; d} ∪ {} ∪ {e})``;
+*)
+fun strip_union_insert tm =
+  if can pred_setSyntax.dest_insert tm
+  then let
+      val (h, t) = pred_setSyntax.dest_insert tm
+    in
+       [h] @ (strip_union_insert t)
+    end
+  else if can pred_setSyntax.dest_union tm
+  then let
+      val (h, t) = pred_setSyntax.dest_union tm
+    in
+      (strip_union_insert h) @ (strip_union_insert t)
+    end
+  else if same_const tm pred_setSyntax.empty_tm
+    then []
+  else raise ERR "strip_union_insert" "not an enumerated union set"
 
 fun bir_stmts_prog_thm prog =
   EVAL $ mk_icomb(``bir_stmts_of_prog``,prog)
-  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) [listTheory.MAP_APPEND]
+  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) [listTheory.MAP_APPEND,bir_typing_progTheory.bir_stmts_of_block_def]
+  |> strip_union_insert
+
+fun bir_stmts_progs_thm prog =
+  EVAL $ mk_icomb(``bir_stmts_of_progs``,prog)
+  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) [listTheory.MAP_APPEND,bir_typing_progTheory.bir_stmts_of_block_def]
 
 (*
 
@@ -353,6 +365,8 @@ val M_prime = mk_var("M'", ``:mem_msg_t list``)
       mk_icomb (acc_fn fieldn ``:bir_state_t``, arg_term)
   val s_bst_pc = state_rec_fn s "bst_pc"
   val s_prime_bst_pc = state_rec_fn s_prime "bst_pc"
+val index_var = mk_var("index", ``:num``)
+val lbl_var = mk_var("lbl", hd $ dest_fun_ty $ type_of ``Imm64`` )
 val last_imp_pre_tm = ``bst_pc_tuple ^s_bst_pc = (BL_Address $ Imm64 ^lbl_var, ^index_var)``
 val last_imp = fn x => list_mk_forall ([lbl_var,index_var], mk_imp(last_imp_pre_tm,x))
 
@@ -454,20 +468,37 @@ in
   (target, visited_pcs, block_post_cond, constr, cjmp_constr)
 end
 
+(*
 
+open HolKernel Parse boolLib bossLib;
+open bir_programTheory bir_promisingTheory
+     bir_programLib bir_promising_wfTheory;
+
+open example_spinlockTheory
+
+val prog = ``spinlock_concrete``
+val prog = ``spinlock_concrete2 [] jump_after unlock_entry``
+
+*)
 
 val prog = ``BirProgram $ dequeue hd_addr tl_addr reg dequeue_entry jump_after ``
 val prog = ``BirProgram $ dequeue (BExp_Const $ Imm64 42w) (BExp_Const $ Imm64 43w) reg dequeue_entry jump_after ``
-val label_stmts_thm = bir_stmts_prog_thm prog
+val label_stmts_thm = bir_stmts_progs_thm prog
 (* (bir_label_t # option) list *)
-val labels_stmts_list = SPEC_ALL label_stmts_thm |> concl |> rand
- |> listSyntax.dest_list |> fst
- |> map pairSyntax.dest_pair
+
+val labels_stmts_list =
+  SPEC_ALL label_stmts_thm |> concl |> rand
+  |> listSyntax.dest_list |> fst
+  |> map pairSyntax.dest_pair
   handle HOL_ERR _ => raise ERR "function" "cannot destruct hol list of labels and stmts"
 
-(* get current statement of address stmts *)
+(* get block statements at address *)
 (* label # stmt term list # jmp *)
 val addresses_stmts =
+(*
+  val (addr,stmts) = hd $
+  filter (optionSyntax.is_some o snd) labels_stmts_list
+ *)
   filter (optionSyntax.is_some o snd) labels_stmts_list
   |> map (fn (addr,stmts) =>
     let val _::stmts::jmp::_ = pairSyntax.strip_pair $ optionSyntax.dest_some stmts
@@ -482,7 +513,7 @@ val stmt = List.nth (stmts, 0)
 val len = length stmts
 *)
 
-(* assumption that we the control flow is linear for this code *)
+(* assumption that the control flow is linear for this code *)
 
 (* init *)
 
@@ -505,7 +536,7 @@ val (addr,stmts,jmp_stmt) = List.nth (addresses_stmts,4);
 val (constr,cjmp_constr,post_conds,visited_pcs) =
   List.foldl (fn ((addr,stmts,jmp_stmt),(constr,cjmp_constr,post_conds,visited_pcs)) =>
     let
-    (* assume that next addr == target *)
+      (* assume that next addr == target *)
       val (target, visited_pcs, block_post_cond, constr, cjmp_constr) =
         block_constr constr cjmp_constr addr stmts jmp_stmt visited_pcs
       val post_conds = mk_conj(post_conds,block_post_cond)
@@ -517,7 +548,7 @@ val (constr,cjmp_constr,post_conds,visited_pcs) =
   addresses_stmts
 
 (*
-/home/arolle/Projects/Multicore/HOL/src/portableML/Redblackmap.sig
+$HOLDIR/src/portableML/Redblackmap.sig
 wordsSyntax.mk_wordii (255, 8) (* 8w:word4 *)
 *)
 
