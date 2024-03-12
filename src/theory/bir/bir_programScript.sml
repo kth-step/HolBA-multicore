@@ -73,11 +73,6 @@ End
 Type bir_stmt_t = ``:bir_stmt_basic_t bir_generic_stmt_t``
 Type bmc_stmt_t = ``:bmc_stmt_basic_t bir_generic_stmt_t``
 
-val _ = Datatype `bir_mc_tags_t = <|
-  mc_acq            : bool;
-  mc_rel            : bool;
-  mc_atomic         : bool |>`;
-
 val _ = Datatype `bir_programcounter_t = <| bpc_label:bir_label_t; bpc_index:num |>`;
 
 val bir_pc_ss = rewrites (type_rws ``:bir_programcounter_t``);
@@ -134,7 +129,6 @@ Type beb_relation_t =
 
 val _ = Datatype `bir_generic_stmt_block_t = <|
   bb_label          : bir_label_t;
-  bb_mc_tags        : bir_mc_tags_t option;
   bb_statements     : 'a list;
   bb_last_statement : bir_stmt_end_t |>`;
 

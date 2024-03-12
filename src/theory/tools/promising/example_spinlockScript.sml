@@ -173,7 +173,6 @@ Definition lock_def:
   lock lock_addr lock_entry jump_after = MAP BBlock_Stmts [
 (* lr.w.aq	t0,(t2) *)
     <|bb_label := BL_Address $ Imm64 lock_entry;
-      bb_mc_tags := NONE;
       bb_statements := [
       (*
         BMCStmt_Assert
@@ -193,7 +192,7 @@ Definition lock_def:
       bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ lock_entry + 4w|>;
 (* bnez	t0,4 <.L1^B1> *)
     <|bb_label := BL_Address $ Imm64 $ lock_entry + 4w;
-      bb_mc_tags := NONE; bb_statements := [];
+      bb_statements := [];
       bb_last_statement :=
         BStmt_CJmp
           (BExp_UnaryExp BIExp_Not
@@ -204,7 +203,6 @@ Definition lock_def:
           (BLE_Label $ BL_Address $ Imm64 $ lock_entry + 8w)|>;
 (* li	t0,1 *)
     <|bb_label := BL_Address $ Imm64 $ lock_entry + 8w;
-      bb_mc_tags := NONE;
       bb_statements := [
         BMCStmt_Assign (BVar "x5" $ BType_Imm Bit64) (BExp_Const $ Imm64 1w)
       ];
@@ -212,7 +210,6 @@ Definition lock_def:
         BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ lock_entry + 12w|>;
 (* sc.w	t1,t0,(t2) *)
     <|bb_label := BL_Address $ Imm64 $ lock_entry + 12w;
-      bb_mc_tags := NONE;
       bb_statements := [
       (*
         BMCStmt_Assert $ BExp_Aligned Bit64 2 $ BExp_Den $ BVar "x7" $ BType_Imm Bit64;
@@ -227,7 +224,7 @@ Definition lock_def:
         BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ lock_entry + 16w |>;
 (* bnez	t1,4 <.L1^B1> *)
     <|bb_label := BL_Address $ Imm64 $ lock_entry + 16w;
-      bb_mc_tags := NONE; bb_statements := [];
+      bb_statements := [];
       bb_last_statement :=
         BStmt_CJmp
           (BExp_UnaryExp BIExp_Not
@@ -244,18 +241,15 @@ Definition unlock_def:
   unlock lock_addr unlock_entry = MAP BBlock_Stmts [
 (* li	t0,0 *)
     <|bb_label := BL_Address $ Imm64 unlock_entry;
-      bb_mc_tags := NONE;
       bb_statements :=
         [BMCStmt_Assign (BVar "x5" $ BType_Imm Bit64) (BExp_Const $ Imm64 0w)];
       bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ unlock_entry + 4w |>;
 (* fence	rw,w *)
     <|bb_label := BL_Address $ Imm64 $ unlock_entry + 4w ;
-      bb_mc_tags := NONE;
       bb_statements := [BMCStmt_Fence BM_ReadWrite BM_Write];
       bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ unlock_entry + 8w |>;
 (* sw	zero,0(t2) *)
     <|bb_label := BL_Address $ Imm64 $ unlock_entry + 8w;
-      bb_mc_tags := NONE;
       bb_statements := [
       (*
         BMCStmt_Assert
@@ -302,7 +296,6 @@ Definition spinlock_concrete_def:
   = BirProgram $
   [
     BBlock_Stmts <|bb_label := BL_Address (Imm64 0w);
-        bb_mc_tags := NONE;
         bb_statements :=
           [
           (* no-op *)

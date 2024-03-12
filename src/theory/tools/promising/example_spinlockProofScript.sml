@@ -1938,7 +1938,6 @@ Theorem clstep_slc_inv_assumptions_for_trivial_block:
   jump_after = BL_Address $ Imm64 20w (* width of lock + 4w *)
   /\ unlock_entry = 24w (* jump_after + 4w *)
   /\ blocks = [BBlock_Stmts <|bb_label := jump_after;
-        bb_mc_tags := NONE;
         bb_statements := [
           BMCStmt_Assert (BExp_Const $ Imm1 1w) (* no-op *)
         ];
@@ -2737,7 +2736,6 @@ QED
 Definition prog_block_def:
   prog_block jump_after unlock_entry =
     BBlock_Stmts <|bb_label := BL_Address (Imm64 jump_after);
-        bb_mc_tags := NONE;
         bb_statements :=
           [
           (* no-op *)

@@ -742,12 +742,10 @@ val get_core_state = Define‘
 
 val cores_pc_not_atomic_def = Define`
   cores_pc_not_atomic cores =
-    ~?cid p s i bl mc_tags.
+    ~?cid p s i bl.
      FLOOKUP cores cid = SOME (Core cid p s)
      /\ s.bst_pc.bpc_index <> 0
      /\ bir_get_program_block_info_by_label p s.bst_pc.bpc_label = SOME (i, BBlock_Stmts bl)
-     /\ bl.bb_mc_tags = SOME mc_tags
-     /\ mc_tags.mc_atomic = T
 `;
 
 val atomicity_ok_def = Define`

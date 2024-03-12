@@ -95,7 +95,6 @@ End
 Definition dequeue_def:
   dequeue hd_addr tl_addr reg dequeue_entry jump_after = MAP BBlock_Stmts [
     <|bb_label := BL_Address $ Imm64 dequeue_entry;
-      bb_mc_tags := NONE;
       bb_statements := [
         BMCStmt_Load (BVar "R1" $ BType_Imm Bit64)
           tl_addr
@@ -105,7 +104,6 @@ Definition dequeue_def:
       bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ dequeue_entry + 4w
     |>;
     <|bb_label := BL_Address $ Imm64 $ dequeue_entry + 4w;
-      bb_mc_tags := NONE;
       bb_statements := [
         BMCStmt_Load (BVar "R2" $ BType_Imm Bit64)
           hd_addr
@@ -115,7 +113,6 @@ Definition dequeue_def:
       bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ dequeue_entry + 8w
     |>;
     <|bb_label := BL_Address $ Imm64 $ dequeue_entry + 8w;
-      bb_mc_tags := NONE;
       bb_statements := [];
       bb_last_statement :=
         BStmt_CJmp
@@ -126,7 +123,6 @@ Definition dequeue_def:
           (BLE_Label $ BL_Address $ Imm64 $ dequeue_entry + 12w)
     |>;
     <|bb_label := BL_Address $ Imm64 $ dequeue_entry + 12w;
-      bb_mc_tags := NONE;
       bb_statements := [
         BMCStmt_Load (BVar reg $ BType_Imm Bit64)
           (BExp_Den (BVar "R1" (BType_Imm Bit64)))
@@ -136,7 +132,6 @@ Definition dequeue_def:
       bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ dequeue_entry + 16w
     |>;
     <|bb_label := BL_Address $ Imm64 $ dequeue_entry + 16w;
-      bb_mc_tags := NONE;
       bb_statements := [
         BMCStmt_Store
           (BVar "success" $ BType_Imm Bit64)
