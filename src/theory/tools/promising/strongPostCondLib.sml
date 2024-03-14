@@ -9,6 +9,10 @@ open HolKernel Parse boolLib bossLib;
 open bir_programTheory bir_promisingTheory
      bir_programLib bir_promising_wfTheory;
 
+Definition bst_pc_tuple_def:
+  bst_pc_tuple x = (x.bpc_label,x.bpc_index)
+End
+
 (*
 open wordsTheory bitstringTheory llistTheory wordsLib
      finite_mapTheory string_numTheory relationTheory
@@ -81,14 +85,6 @@ Proof
   >> cheat
 QED
 *)
-
-(*
-raise ERR "method" "message"
-*)
-
-Definition bst_pc_tuple_def:
-  bst_pc_tuple x = (x.bpc_label,x.bpc_index)
-End
 
 (*
 
@@ -169,10 +165,12 @@ fun strip_union_insert tm =
     then []
   else raise ERR "strip_union_insert" "not an enumerated union set"
 
+(*
 fun bir_stmts_prog_thm prog =
   EVAL $ mk_icomb(``bir_stmts_of_prog``,prog)
   |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) [listTheory.MAP_APPEND,bir_typing_progTheory.bir_stmts_of_block_def]
   |> strip_union_insert
+*)
 
 fun bir_stmts_progs_thm prog =
   EVAL $ mk_icomb(``bir_stmts_of_progs``,prog)
@@ -226,6 +224,13 @@ end
 fun is_term_true tm = is_eq_tm ``T`` tm
 fun is_term_false tm = is_eq_tm ``F`` tm
 
+(* rewrite term with some simpset equalities and resort/deduplicate conjuncts *)
+fun simplify_term x =
+  REFL x
+  (* ++ boolSimps.DNF_ss *)
+  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss()) [AC CONJ_ASSOC CONJ_COMM,AND_CLAUSES,GSYM lock_addr_def]
+  |> rand o concl
+
 (* returns conjunct of lbl_var equals addr and index_var equals index:num *)
 fun addr_label_cj_index addr index =
 let
@@ -233,7 +238,7 @@ let
   val index_var = mk_var("index", ``:num``)
   val lbl_var = mk_var("lbl", hd $ dest_fun_ty $ type_of ``Imm64`` )
 in
-  mk_conj(mk_eq(``BL_Address $ Imm64 $ ^lbl_var``,addr),mk_eq(index_var,index_term))
+  simplify_term $ mk_conj(mk_eq(``BL_Address $ Imm64 $ ^lbl_var``,addr),mk_eq(index_var,index_term))
 end
 
 (* transform the constraints into a term *)
@@ -242,6 +247,7 @@ let
   val term =
     Redblackmap.foldl (fn (_,v,x) => mk_conj(x, #constraint (v :constr))) ``T`` constr
 in
+  simplify_term $
   mk_imp(addr_label_cj_index addr index,
     if null cjmp_constr then term else mk_conj(term,list_mk_conj $ map #constraint (cjmp_constr :constr list))
   )
@@ -268,6 +274,11 @@ let
 in
   (hd_str,tl args)
 end
+
+(* pretty-printing *)
+
+fun bir_eval_exp_den_imm variable value =
+``bir_eval_exp (BExp_Den ^variable) s.bst_environ = SOME $ BVal_Imm ^value``
 
 (* updates tuple (mem,reg) according to stmt at pc where
  *   stmt is a statement
@@ -296,8 +307,8 @@ case term_to_string_args stmt of
         (Redblackmap.insert(constr, Reg var,
             (* TODO set dependencies to parts of cexp_val for non-constants *)
             { dependents = [],
-            constraint =
-              ``bir_eval_exp (BExp_Den ^var) s.bst_environ = SOME $ BVal_Imm $ ^cexp_val``
+            constraint = bir_eval_exp_den_imm var cexp_val
+              (* ``bir_eval_exp (BExp_Den ^var) s.bst_environ = SOME $ BVal_Imm $ ^cexp_val`` *)
               (* keep path constraints for unchanged locations *)
             }
           ),
@@ -430,24 +441,114 @@ fun get_jmp_target jmp_stmt =
   handle _ =>
     raise ERR "get_jmp_target" "unhandled jump target"
 
+(* linearisation points *)
+
+(* Is stmt a store to the linearisation address?
+   For exclusive stores this returns the success register *)
+fun is_store_to_lin_addr lin_addr stmt =
+case term_to_string_args stmt of
+  ("BMCStmt_Load",   var::exp::opt::acq::rel::_) => (false, NONE)
+| ("BMCStmt_Store",  succ_reg::address::value::xcl::acq::rel::_) =>
+  let val to_lin_addr = is_eq_tm address lin_addr
+  in
+    if is_term_true xcl
+    then (to_lin_addr, SOME succ_reg)
+    else (to_lin_addr, NONE)
+  end
+| _ => (false, NONE)
+
+
+(* linearisation constraints *)
+
+type lc = {current: term list,
+     last_point: (term * int * term) option,
+     lin_addr: term, old: term list list, store_fail: term list}
+
+(* updates the set of linearisation points according to the current statement *)
+fun lin_constr (lc : lc) (addr,index,stmt) =
+let
+  val (store_to_lin,xcl_opt) = is_store_to_lin_addr (#lin_addr lc) stmt
+in
+  if isSome xcl_opt andalso store_to_lin
+  then
+    (* on store failure we assume a jump backwards to earlier covered states *)
+    (* branching happens only on exclusive store *)
+    {old=(#old lc), current=[], lin_addr=(#lin_addr lc),last_point=SOME (addr,index,valOf xcl_opt), store_fail=(#current lc)@[addr_label_cj_index addr index]}
+  else if store_to_lin
+  then
+    (* here an non-exclusive store resets all earlier branching of linearisation points *)
+    {old=(#old lc)@[#store_fail lc]@[#current lc@[addr_label_cj_index addr index]], current=[], lin_addr=(#lin_addr lc),last_point=NONE, store_fail=[]}
+  else if isSome (#last_point lc)
+  then
+    (* the current pc is part of both equivalence classes of linearisation points (as the branching condition has not yet been checked in a cjmp) *)
+    {old=(#old lc),current=(#current lc)@[
+      mk_conj(addr_label_cj_index addr index, bir_eval_exp_den_imm (#3 (valOf (#last_point lc))) ``v_succ``)
+    ],lin_addr=(#lin_addr lc),last_point=(#last_point lc),store_fail=(#store_fail lc)@[
+      mk_conj(addr_label_cj_index addr index, bir_eval_exp_den_imm (#3 (valOf (#last_point lc))) ``v_fail``)
+    ]}
+  else
+    {old=(#old lc),current=(#current lc)@[addr_label_cj_index addr index],lin_addr=(#lin_addr lc),last_point=(#last_point lc),store_fail=(#store_fail lc)}
+end
+
+(* updates lc given a jump stmt *)
+fun update_lc_jmp (addr,index,jmp_stmt) (lc : lc) =
+case fst $ term_to_string_args jmp_stmt of
+  "BStmt_CJmp" =>
+    if isSome (#last_point lc)
+    then
+      (* TODO fix to only override if jump constraint equals #3 (#last_point lc) *)
+      {old=(#old lc)@[
+        (#store_fail lc)@[mk_conj(addr_label_cj_index addr index, bir_eval_exp_den_imm (#3 (valOf (#last_point lc))) ``v_fail``)]
+      ], current=(#current lc)@[
+        mk_conj(addr_label_cj_index addr index, bir_eval_exp_den_imm (#3 (valOf (#last_point lc))) ``v_succ``)
+      ], lin_addr=(#lin_addr lc),last_point=NONE,store_fail=[]}
+    else
+      {old=(#old lc),current=(#current lc)@[addr_label_cj_index addr index],lin_addr=(#lin_addr lc),last_point=(#last_point lc),store_fail=(#store_fail lc)}
+| "BStmt_Jmp" =>
+    if isSome (#last_point lc)
+    then
+      {old=(#old lc),current=(#current lc)@[
+        mk_conj(addr_label_cj_index addr index, bir_eval_exp_den_imm (#3 (valOf (#last_point lc))) ``v_succ``)
+      ],lin_addr=(#lin_addr lc),last_point=(#last_point lc),store_fail=(#store_fail lc)@[
+        mk_conj(addr_label_cj_index addr index, bir_eval_exp_den_imm (#3 (valOf (#last_point lc))) ``v_fail``)
+      ]}
+    else
+      {old=(#old lc),current=(#current lc)@[addr_label_cj_index addr index],lin_addr=(#lin_addr lc),last_point=(#last_point lc),store_fail=(#store_fail lc)}
+| _ => lc (* ignore other final stmts *)
+
 (* calculate block constraint including jump *)
-fun block_constr constr cjmp_constr addr stmts jmp_stmt visited_pcs =
+(*
+val constr = #constr s
+val cjmp_constr = #cjmp_constr s
+val visited_pcs = #visited_pcs s
+ *)
+fun block_constr constr cjmp_constr addr stmts jmp_stmt visited_pcs (lc : lc) =
 let
   (* constr and post condition *)
-  val (constr,cjmp_constr,block_term) =
+  val (constr,cjmp_constr,block_term,lc) =
     List.foldl
-      (fn ((index,stmt), (constr,cjmp_constr,term)) =>
+      (fn ((index,stmt), (constr,cjmp_constr,term,lc)) =>
         let
 (*
 val stmt = hd stmts
+val index = 0
+val cjmp_constr = []
+val term = ``T``
 *)
           val (constr,cjmp_constr) = update_constr stmt constr cjmp_constr
-          val term' = constrs_to_term (addr,index) constr cjmp_constr
+          val term' =
+            constrs_to_term (addr,index) constr cjmp_constr
+          (* linearisation constraint only needs to remember index and label of
+             change of  *)
+          val lc = lin_constr lc (addr,index,stmt)
         in
-          (constr,cjmp_constr,mk_conj(term,term'))
+(*
+          val term = mk_conj(term,term')
+ *)
+          (constr,cjmp_constr,mk_conj(term,term'),lc)
         end
       )
-      (constr,cjmp_constr,``T``)
+      (constr,cjmp_constr,``T``,lc)
       (mapi pair stmts)
   (* case split on the jump kind *)
   (* TODO should branch if neither addr has been visited before *)
@@ -455,12 +556,13 @@ val stmt = hd stmts
     case fst $ term_to_string_args jmp_stmt of
       "BStmt_CJmp" => assemble_cjmp_constr (constr,cjmp_constr,visited_pcs) jmp_stmt
     | "BStmt_Jmp" => (get_jmp_target jmp_stmt,cjmp_constr)
-    | _ => (addr,cjmp_constr)
-  val visited_pcs = addr::visited_pcs
+    | _ => (addr,cjmp_constr) (* ignore other final stmts *)
+  val lc = update_lc_jmp (addr,length stmts,jmp_stmt) lc
+  val visited_pcs = visited_pcs@[addr]
   val jmp_term = constrs_to_term (target,length stmts) constr cjmp_constr
-  val block_post_cond = mk_conj(block_term, jmp_term)
+  val block_post_cond = simplify_term $ mk_conj(block_term, jmp_term)
 in
-  (target, visited_pcs, block_post_cond, constr, cjmp_constr)
+  (target, visited_pcs, block_post_cond, constr, cjmp_constr, lc)
 end
 
 (*
@@ -474,13 +576,16 @@ open example_spinlockTheory
 val prog = ``spinlock_concrete``
 val prog = ``spinlock_concrete2 [] jump_after unlock_entry``
 
-*)
-
 val prog = ``BirProgram $ dequeue hd_addr tl_addr reg dequeue_entry jump_after ``
 val prog = ``BirProgram $ dequeue (BExp_Const $ Imm64 42w) (BExp_Const $ Imm64 43w) reg dequeue_entry jump_after ``
-val label_stmts_thm = bir_stmts_progs_thm prog
-(* (bir_label_t # option) list *)
 
+*)
+
+val prog = ``BirProgram $ unlock lock_addr unlock_entry``
+val prog = ``BirProgram $ lock lock_addr lock_entry jump_after``
+
+(* (bir_label_t # option) list *)
+val label_stmts_thm = bir_stmts_progs_thm prog
 val labels_stmts_list =
   SPEC_ALL label_stmts_thm |> concl |> rand
   |> listSyntax.dest_list |> fst
@@ -510,37 +615,64 @@ val len = length stmts
 
 (* assumption that the control flow is linear for this code *)
 
-(* init *)
-
 (*
 val term = ``T``
 val stmt = hd stmts
 *)
 
 (* init *)
-val constr = Redblackmap.mkDict kind_cmp : (kind, constr) Redblackmap.dict
-val cjmp_constr = [] : constr list
-val visited_pcs = [] : term list
-val post_conds = ``T``
+val init_state = {
+    constr = Redblackmap.mkDict kind_cmp : (kind, constr) Redblackmap.dict,
+    cjmp_constr = [] : constr list,
+    post_conds = ``T``,
+    visited_pcs = [] : term list
+};
+val s = init_state;
+(* matching the type lc *)
+val lc = {
+  old = [] : term list list,
+  current = [] : term list,
+  last_point = NONE : (term * int * term) option, (* SOME (addr,index,success reg) *)
+  lin_addr = Term $ `BExp_Const (Imm64 42w)`, (* address to guess linearisation points *)
+  (* following a store, this keeps the failure pcs until to the conditional jump
+     non-empty means: the jump has not yet occurred *)
+  store_fail = [] : term list
+};
 
-(*
-addresses_stmts
-val (addr,stmts,jmp_stmt) = List.nth (addresses_stmts,4);
+(* guesses of linearisation points for generation of the refinement relation
+   the current equivalence class of linearisation points gets swapped after completing the block that contains a successful store to lin_addr
 *)
 
-val (constr,cjmp_constr,post_conds,visited_pcs) =
-  List.foldl (fn ((addr,stmts,jmp_stmt),(constr,cjmp_constr,post_conds,visited_pcs)) =>
+val ({constr,cjmp_constr,post_conds,visited_pcs},lc) =
+  List.foldl (fn ((addr,stmts,jmp_stmt),(s,lc)) =>
     let
       (* assume that next addr == target *)
-      val (target, visited_pcs, block_post_cond, constr, cjmp_constr) =
-        block_constr constr cjmp_constr addr stmts jmp_stmt visited_pcs
-      val post_conds = mk_conj(post_conds,block_post_cond)
+(*
+      val (addr,stmts,jmp_stmt) = List.nth (addresses_stmts,0);
+      val (target, visited_pcs, block_post_cond, constr, cjmp_constr, lc) =
+        block_constr (#constr s) (#cjmp_constr s) addr stmts jmp_stmt (#visited_pcs s) lc
+      val s =
+      {constr=constr,cjmp_constr=cjmp_constr,post_conds=simplify_term $ mk_conj(#post_conds s,block_post_cond),visited_pcs=visited_pcs}
+*)
+      val (target, visited_pcs, block_post_cond, constr, cjmp_constr, lc) =
+        block_constr (#constr s) (#cjmp_constr s) addr stmts jmp_stmt (#visited_pcs s) lc
     in
-      (constr,cjmp_constr,post_conds,visited_pcs)
+      ({constr=constr,cjmp_constr=cjmp_constr,post_conds=simplify_term $ mk_conj(#post_conds s,block_post_cond),visited_pcs=visited_pcs},lc)
     end
   )
-  (constr,cjmp_constr,post_conds,visited_pcs)
+  (init_state,lc)
   addresses_stmts
+
+(* print linearisation points for the refinement relation *)
+
+val lin_term =
+  list_mk_conj $
+    map (fn (index, addrs) =>
+      mk_imp(list_mk_disj addrs, mk_var("linearisation_point" ^ Int.toString index , bool))
+    )
+    (mapi pair ((#old lc)@[#current lc]))
+
+^lin_term
 
 (*
 $HOLDIR/src/portableML/Redblackmap.sig
