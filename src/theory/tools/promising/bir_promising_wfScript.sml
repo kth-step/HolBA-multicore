@@ -55,6 +55,7 @@ Theorem bir_exec_stmt_jmp_bst_eq:
   /\ (bir_exec_stmt_jmp p lbl s).bst_viewenv    = s.bst_viewenv
   /\ (bir_exec_stmt_jmp p lbl s).bst_prom       = s.bst_prom
   /\ (!l. (bir_exec_stmt_jmp p lbl s).bst_coh l = s.bst_coh l)
+  /\ (bir_exec_stmt_jmp p lbl s).bst_environ = s.bst_environ
 Proof
   rw[bir_exec_stmt_jmp_def]
   >> CASE_TAC
