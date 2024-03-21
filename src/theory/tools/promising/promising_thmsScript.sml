@@ -27,6 +27,14 @@ Proof
   >> fs[bir_immTheory.type_of_bir_imm_def]
 QED
 
+Theorem PERM_MEM:
+  !a b x. PERM a b ==> MEM x a = MEM x b
+Proof
+  rpt strip_tac
+  >> drule sortingTheory.PERM_LIST_TO_SET
+  >> fs[]
+QED
+
 (* clstep theorems *)
 
 Theorem clstep_bgcs_imp:
@@ -775,15 +783,21 @@ Proof
 QED
 
 Theorem fulfil_update_env_BVar_eq:
-  !env new_env name.
-  fulfil_update_env (BVar name (BType_Imm Bit64)) T env = SOME new_env
-  <=> ?f. env = BEnv f /\ f name <> NONE
-    /\ new_env = BEnv f(|name |-> SOME $ BVal_Imm v_succ |)
+  !env new_env name xcl.
+  fulfil_update_env (BVar name (BType_Imm Bit64)) xcl env = SOME new_env
+  <=> ?f. env = BEnv f /\ if xcl then (f name <> NONE
+    /\ new_env = BEnv f(|name |-> SOME $ BVal_Imm v_succ |))
+                          else new_env = BEnv f
 Proof
   Cases >> rpt gen_tac
   >> CONV_TAC $ LAND_CONV EVAL
   >> fs[EQ_IMP_THM,v_succ_def]
+  >> dsimp[COND_RAND,COND_RATOR]
 QED
+
+Theorem fulfil_update_env_BVar_eq' =
+  CONV_RULE (ONCE_DEPTH_CONV $ LAND_CONV $ ONCE_REWRITE_CONV[EQ_SYM_EQ])
+  fulfil_update_env_BVar_eq
 
 Theorem bir_dest_bool_val_false =
   EVAL ``bir_dest_bool_val $ BVal_Imm $ Imm1 0w``
@@ -839,7 +853,7 @@ Proof
 QED
 
 Theorem bir_eval_exp_SOME' =
-  CONV_RULE (ONCE_DEPTH_CONV $ LAND_CONV $ ONCE_REWRITE_CONV[EQ_SYM_EQ]) 
+  CONV_RULE (ONCE_DEPTH_CONV $ LAND_CONV $ ONCE_REWRITE_CONV[EQ_SYM_EQ])
   bir_eval_exp_SOME
 
 Theorem bir_exec_stmt_jmp_eq:
@@ -849,5 +863,16 @@ Theorem bir_exec_stmt_jmp_eq:
 Proof
   fs[bir_exec_stmt_jmp_def,bir_eval_label_exp_def,bir_exec_stmt_jmp_to_label_def]
 QED
+
+Theorem bir_eval_exp_BExp_Const =
+  EVAL ``bir_eval_exp (BExp_Const v) env``
+  |> GEN_ALL
+
+Theorem bir_eval_exp_view_BExp_Const =
+  EVAL ``bir_eval_exp_view (BExp_Const v) env viewenv = (SOME l,v_addr)``
+  |> GEN_ALL
+
+Theorem bir_eval_exp_view_BExp_Const' =
+  CONV_RULE (ONCE_DEPTH_CONV $ LAND_CONV $ ONCE_REWRITE_CONV[EQ_SYM_EQ]) bir_eval_exp_view_BExp_Const
 
 val _ = export_theory ();

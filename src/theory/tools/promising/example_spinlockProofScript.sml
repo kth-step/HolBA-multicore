@@ -25,14 +25,6 @@ Proof
   >> gvs[]
 QED
 
-Theorem PERM_MEM:
-  !a b x. PERM a b ==> MEM x a = MEM x b
-Proof
-  rpt strip_tac
-  >> drule sortingTheory.PERM_LIST_TO_SET
-  >> fs[]
-QED
-
 Theorem LRC_APPEND:
   !ls1 ls2 R x y. ~NULL ls2
   ==>
@@ -622,17 +614,6 @@ Proof
   >> EVAL_TAC
   >> fs[bir_envTheory.bir_var_type_def,bir_envTheory.bir_var_name_def]
 QED
-
-Theorem bir_eval_exp_BExp_Const =
-  EVAL ``bir_eval_exp (BExp_Const v) env``
-  |> GEN_ALL
-
-Theorem bir_eval_exp_view_BExp_Const =
-  EVAL ``bir_eval_exp_view (BExp_Const v) env viewenv = (SOME l,v_addr)``
-  |> GEN_ALL
-
-Theorem bir_eval_exp_view_BExp_Const' =
-  CONV_RULE (ONCE_DEPTH_CONV $ LAND_CONV $ ONCE_REWRITE_CONV[EQ_SYM_EQ]) bir_eval_exp_view_BExp_Const
 
 Theorem bir_exec_stmt_cjmp_second:
   !s.

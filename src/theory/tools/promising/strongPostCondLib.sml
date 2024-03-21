@@ -9,10 +9,64 @@ open HolKernel Parse boolLib bossLib;
 open bir_programTheory bir_promisingTheory
      bir_programLib bir_promising_wfTheory
      promising_thmsTheory ;
+open example_spinlockTheory ;
 
 Definition bst_pc_tuple_def:
   bst_pc_tuple x = (x.bpc_label,x.bpc_index)
 End
+
+(*
+  data structure to hold the constraints
+*)
+datatype kind = Mem of Term.term | Reg of Term.term;
+fun kind_cmp (a,b) =
+  case (a,b) of
+    (Mem a,Mem b) => Term.compare (a,b)
+  | (Reg a,Reg b) => Term.compare (a,b)
+  | (Reg _,Mem _) => LESS
+  | (Mem _,Reg _) => GREATER
+fun unregmem a = case a of Mem a => a | Reg a => a
+
+type constr = { dependents : term list, constraint : term };
+(* check if el is among the dependents of constr *)
+fun dep_lookup (constr : constr) el =
+  List.exists (is_eq_tm el) (#dependents constr)
+
+(* match str against termarg and return list of arguments *)
+(*
+unpack "BMCStmt_Load" stmt
+unpack "BMCStmt_Store" stmt
+ *)
+fun unpack str termarg =
+let
+  val stmt_args = list_dest dest_comb termarg
+  val stmt_term = hd stmt_args
+  val {Name = stmt_str,...} = Term.dest_thy_const stmt_term
+in
+  if str = stmt_str then tl stmt_args else []
+end
+
+fun is_term_true tm = is_eq_tm ``T`` tm
+fun is_term_false tm = is_eq_tm ``F`` tm
+
+(*
+term_to_string_args ``SOME c``
+ *)
+fun term_to_string_args tm =
+let
+  val args = list_dest dest_comb tm
+  val hd_term = hd args
+  val {Name = hd_str,...} = Term.dest_thy_const hd_term
+in
+  (hd_str,tl args)
+end
+
+fun bir_eval_exp_den_imm variable value =
+``bir_eval_exp (BExp_Den ^variable) s.bst_environ = SOME $ BVal_Imm ^value``
+
+fun bir_eval_exp_val tm value =
+``bir_eval_exp (^tm) s.bst_environ = SOME $ BVal_Imm ^value``
+
 
 (*
 open wordsTheory bitstringTheory llistTheory wordsLib
@@ -64,7 +118,7 @@ fun list_dest f tm =
 fun simplify_term x =
   REFL x
   (* ++ boolSimps.DNF_ss *)
-  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss()) [AC CONJ_ASSOC CONJ_COMM,AND_CLAUSES,GSYM lock_addr_def,GSYM lock_addr_val_def]
+  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss()) [AC CONJ_ASSOC CONJ_COMM,AND_CLAUSES,GSYM lock_addr_def,GSYM lock_addr_val_def,GSYM bir_read_reg_def,bir_eval_exp_BExp_Const]
   |> rand o concl
 
 
@@ -283,40 +337,6 @@ arguments: jump_head
  * first step collection of constraints
  *)
 
-(*
-  data structure to hold the constraints
-*)
-datatype kind = Mem of Term.term | Reg of Term.term;
-fun kind_cmp (a,b) =
-  case (a,b) of
-    (Mem a,Mem b) => Term.compare (a,b)
-  | (Reg a,Reg b) => Term.compare (a,b)
-  | (Reg _,Mem _) => LESS
-  | (Mem _,Reg _) => GREATER
-fun unregmem a = case a of Mem a => a | Reg a => a
-
-type constr = { dependents : term list, constraint : term };
-(* check if el is among the dependents of constr *)
-fun dep_lookup (constr : constr) el =
-  List.exists (is_eq_tm el) (#dependents constr)
-
-(* match str against termarg and return list of arguments *)
-(*
-unpack "BMCStmt_Load" stmt
-unpack "BMCStmt_Store" stmt
- *)
-fun unpack str termarg =
-let
-  val stmt_args = list_dest dest_comb termarg
-  val stmt_term = hd stmt_args
-  val {Name = stmt_str,...} = Term.dest_thy_const stmt_term
-in
-  if str = stmt_str then tl stmt_args else []
-end
-
-fun is_term_true tm = is_eq_tm ``T`` tm
-fun is_term_false tm = is_eq_tm ``F`` tm
-
 (* returns conjunct of lbl_var equals addr and index_var equals index:num *)
 fun addr_label_cj_index addr index =
 let
@@ -352,26 +372,6 @@ fun filter_cjmp_constr cjmp_constr addrs =
           not (List.exists (is_eq_tm addr) (#dependents (x : constr ))))
         addrs)
     cjmp_constr
-
-(*
-term_to_string_args ``SOME c``
- *)
-fun term_to_string_args tm =
-let
-  val args = list_dest dest_comb tm
-  val hd_term = hd args
-  val {Name = hd_str,...} = Term.dest_thy_const hd_term
-in
-  (hd_str,tl args)
-end
-
-(* pretty-printing *)
-
-fun bir_eval_exp_den_imm variable value =
-``bir_eval_exp (BExp_Den ^variable) s.bst_environ = SOME $ BVal_Imm ^value``
-
-fun bir_eval_exp_val tm value =
-``bir_eval_exp (^tm) s.bst_environ = SOME $ BVal_Imm ^value``
 
 (* updates tuple (mem,reg) according to stmt at pc where
  *   stmt is a statement
@@ -442,8 +442,7 @@ val ("BExp_Den",var'::_) = term_to_string_args exp
           ``
           else
           ``
-            (?v. bir_eval_exp (BExp_Den ^succ_reg) s.bst_environ = SOME $ BVal_Imm $ Imm64 v)
-            /\ ?val. mem_read M ^address' (s.bst_coh ^address') = SOME $ val
+            ?val. mem_read M ^address' (s.bst_coh ^address') = SOME $ val
             /\ bir_eval_exp ^value s.bst_environ = SOME val
           ``,
         (* check if  *)
@@ -717,7 +716,7 @@ val prog = ``BirProgram $ dequeue (BExp_Const $ Imm64 42w) (BExp_Const $ Imm64 4
 
 *)
 
-val prog = ``BirProgram $ unlock lock_addr unlock_entry``
+val prog = ``BirProgram (unlock lock_addr unlock_entry : (bmc_stmt_basic_t, mem_msg_t list # num list) bir_generic_block_t list)``
 val prog = ``BirProgram (lock lock_addr lock_entry jump_after : (bmc_stmt_basic_t, mem_msg_t list # num list) bir_generic_block_t list)``
 
 (* (bir_label_t # option) list *)
@@ -797,16 +796,15 @@ val ({constr,cjmp_constr,post_conds,visited_pcs,cjmp_path},lc) =
 val lin_term =
   list_mk_conj $
     map (fn (index, addrs) =>
-      mk_imp(list_mk_disj addrs, mk_var("linearisation_point" ^ Int.toString index , bool))
+      mk_imp(list_mk_disj addrs, mk_var("control_point" ^ Int.toString index , bool))
     )
-    (mapi pair ((#old lc)@[#current lc]))
+    (mapi pair (filter (not o List.null) ((#old lc)@[#current lc])))
 
 (*
 
 ^lin_term
 
 post_conds
-lock_def
 
 *)
 
@@ -815,13 +813,10 @@ $HOLDIR/src/portableML/Redblackmap.sig
 wordsSyntax.mk_wordii (255, 8) (* 8w:word4 *)
 *)
 
+
+
 (* constraints particular for this program *)
-(* has to quantify all arguments to lock_def *)
-Definition prog_individual_constraints_def:
-  prog_individual_constraints lock_entry jump_after
-  = ?x. jump_after = BL_Address (Imm64 x)
-  /\ ~(MEM jump_after $ bir_labels_of_program ^prog)
-End
+
 
 (* bir_get_current_statement equalities *)
 val prog_bgcs = save_thm("prog_bgcs", bgcs_bmc_prog_thms prog);
@@ -833,10 +828,6 @@ val prog_wf_ext = store_thm("prog_wf_ext",
 
 val prog_blop = save_thm("prog_blop", blop_prog_labels_thm prog)
 
-Theorem prog_individual_constraints_eq =
-  REWRITE_RULE[prog_blop] prog_individual_constraints_def
-  |> CONV_RULE $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) []
-
 (* for parameterised labels we assume disjointness *)
 val prog_blop_ALL_DISTINCT_tm =
   ``ALL_DISTINCT $ bir_labels_of_program ^prog``
@@ -845,11 +836,36 @@ val prog_blop_ALL_DISTINCT_tm =
 val prog_blop_ALL_DISTINCT = EVAL prog_blop_ALL_DISTINCT_tm
   |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) [AC CONJ_ASSOC CONJ_COMM,wordsTheory.dimword_64]
 
+val fv = Term.free_vars prog
+val fv_tm = pairSyntax.list_mk_pair fv
+
 val post_cond_def = Define `
-  post_cond M s lock_entry =
+  post_cond M s ^fv_tm =
     !lbl index. bst_pc_tuple s.bst_pc = (BL_Address $ Imm64 lbl, index)
       ==> ^post_conds
   `
+
+
+(* dummy definitions for unlock_def *)
+Definition prog_individual_constraints_def:
+  prog_individual_constraints a = T
+End
+
+Theorem prog_individual_constraints_eq = prog_individual_constraints_def
+
+
+(* has to quantify all arguments to lock_def *)
+Definition prog_individual_constraints_def:
+  prog_individual_constraints (^fv_tm)
+  = ?x. jump_after = BL_Address (Imm64 x)
+  /\ ~(MEM jump_after $ bir_labels_of_program ^prog)
+End
+
+Theorem prog_individual_constraints_eq =
+  REWRITE_RULE[prog_blop] prog_individual_constraints_def
+  |> CONV_RULE $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) []
+
+
 
 (* assumption:
 - distinct addresses is necessary due to parametrised addresses:
@@ -881,13 +897,13 @@ val clstep_post_cond_inv_tac =
 
 Theorem clstep_post_cond_inv_BMCStmt_Load:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Load var a_e opt_cast xcl acq rel
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BMCStmt_Load specific *)
@@ -905,14 +921,14 @@ QED
 
 Theorem clstep_post_cond_inv_BMCStmt_Store_fail:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ a_e v_e xcl acq rel
   /\ prom = [] /\ xcl
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BMCStmt_Store *)
@@ -920,21 +936,21 @@ Proof
   >> gvs[prog_bgcs]
   >> fs[AND_IMP_INTRO,IMP_CONJ_THM,FORALL_AND_THM]
   >> qpat_assum `_ = c_bst_pc.bpc_label` $ assume_tac o GSYM
-  >> fs[wordsTheory.dimword_64]
+  >> fs[wordsTheory.dimword_64,bir_read_reg_def]
   >> gs[xclfail_update_env_SOME,bir_eval_exp_BExp_Den_update_eq']
   >> fs[bir_eval_exp_BExp_Den_update_eq,v_fail_def,v_succ_def]
 QED
 
 Theorem clstep_post_cond_inv_BMCStmt_Store:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Store var_succ a_e v_e xcl acq rel
   /\ ~(NULL prom)
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BMCStmt_Store *)
@@ -942,21 +958,21 @@ Proof
   >> gvs[prog_bgcs]
   >> fs[AND_IMP_INTRO,IMP_CONJ_THM,FORALL_AND_THM]
   >> qpat_assum `_ = c_bst_pc.bpc_label` $ assume_tac o GSYM
-  >> fs[wordsTheory.dimword_64,bir_state_fulful_view_updates_def]
-  >> gs[fulfil_update_env_BVar_eq,bir_eval_exp_BExp_Den_update_eq']
+  >> fs[wordsTheory.dimword_64,bir_state_fulful_view_updates_def,bir_read_reg_def]
+  >> gs[fulfil_update_viewenv_def,fulfil_update_env_BVar_eq,fulfil_update_env_BVar_eq',bir_eval_exp_BExp_Den_update_eq']
   >> fs[bir_eval_exp_BExp_Den_update_eq,v_succ_def]
   >> fs[bir_eval_exp_view_def,cj 1 bir_expTheory.bir_eval_exp_def,lock_addr_val_def,combinTheory.APPLY_UPDATE_THM,mem_read_def]
 QED
 
 Theorem clstep_post_cond_inv_BMCStmt_Amo:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Amo var a_e v_e acq rel
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BMCStmt_Amo *)
@@ -966,29 +982,33 @@ QED
 
 Theorem clstep_post_cond_inv_BMCStmt_Fence:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Fence K1 K2
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BMCStmt_Fence *)
   (* TODO implement for program *)
+  >> fs[prog_blop_ALL_DISTINCT]
   >> gvs[prog_bgcs]
+  >> fs[AND_IMP_INTRO,IMP_CONJ_THM,FORALL_AND_THM]
+  >> qpat_assum `_ = c_bst_pc.bpc_label` $ assume_tac o GSYM
+  >> fs[wordsTheory.dimword_64,fence_updates_def,bir_pc_next_def]
 QED
 
 Theorem clstep_post_cond_inv_BMCStmt_CJmp:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtE $ BStmt_CJmp cond_e lbl1 lbl2
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BStmt_CJmp *)
@@ -1015,13 +1035,13 @@ QED
 
 Theorem clstep_post_cond_inv_BMCStmt_Assign:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Assign var e
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BMCStmt_Assign *)
@@ -1035,13 +1055,13 @@ QED
 
 Theorem clstep_post_cond_inv_BMCStmt_Assert:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Assert e
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BMCStmt_Assert *)
@@ -1052,13 +1072,13 @@ QED
 
 Theorem clstep_post_cond_inv_BMCStmt_Assume:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtB $ BMCStmt_Assume e
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BMCStmt_Assume *)
@@ -1069,13 +1089,13 @@ QED
 
 Theorem clstep_post_cond_inv_BStmt_Halt:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtE $ BStmt_Halt e
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BStmt_Halt *)
@@ -1086,13 +1106,13 @@ QED
 
 Theorem clstep_post_cond_inv_BStmt_Jmp:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSGen $ BStmtE $ BStmt_Jmp e
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* BStmt_Jmp *)
@@ -1108,13 +1128,13 @@ QED
 
 Theorem clstep_post_cond_inv_BSExt:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
   /\ bir_get_current_statement ^prog c.bst_pc = SOME $ BSExt R
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   clstep_post_cond_inv_tac
   (* We don't expect BSExt in programs *)
@@ -1124,12 +1144,12 @@ QED
 (* combination of previous theorems *)
 Theorem clstep_post_cond_inv:
   clstep (^prog) cid c M prom c'
-  /\ post_cond M c lock_entry
+  /\ post_cond M c ^fv_tm
   /\ well_formed cid M c
   /\ wf_mem_vals M
-  /\ prog_individual_constraints lock_entry jump_after
+  /\ prog_individual_constraints ^fv_tm
   /\ ^prog_blop_ALL_DISTINCT_tm
-  ==> post_cond M c' lock_entry
+  ==> post_cond M c' ^fv_tm
 Proof
   rpt strip_tac
   >> imp_res_tac clstep_bgcs_imp
