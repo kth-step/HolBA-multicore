@@ -646,7 +646,7 @@ val visited_pcs = #visited_pcs s
 val cjmp_path = #cjmp_path s
 Redblackmap.listItems constr
  *)
-fun block_constr constr cjmp_constr addr stmts jmp_stmt visited_pcs cjmp_path (lc : lc) =
+fun block_constr addresses constr cjmp_constr addr stmts jmp_stmt visited_pcs cjmp_path (lc : lc) =
 let
   val _ = print "extract from block with label:\n"
   val _ = Parse.print_term addr
@@ -689,6 +689,11 @@ val block_term = ``T``
       "BStmt_CJmp" => assemble_cjmp_constr (constr,cjmp_constr,visited_pcs) jmp_stmt
     | "BStmt_Jmp" => (get_jmp_target jmp_stmt,cjmp_constr)
     | _ => (addr,cjmp_constr) (* ignore other final stmts *)
+  (* extend with jump outside constraint *)
+  val block_post_cond =
+    if List.exists (is_eq_tm target) addresses
+    then block_post_cond
+    else mk_conj(block_post_cond, constrs_to_term (target,0) constr cjmp_constr )
   (* TODO extract addresses from cjmp_constr and add to constr *)
   val lc = update_lc_jmp (addr,length stmts,jmp_stmt) lc
 (* TODO choose proper address (branch!) *)
@@ -740,7 +745,7 @@ val addresses_stmts =
 val addresses_exts =
   map fst $ filter (optionSyntax.is_none o snd) labels_stmts_list
 (* assume BL_Address *)
-val addresses = map (rand o #1) addresses_stmts
+val addresses = map #1 addresses_stmts
 (*
 val stmt = List.nth (stmts, 0)
 val len = length stmts
@@ -780,14 +785,15 @@ val ({constr,cjmp_constr,post_conds,visited_pcs,cjmp_path},lc) =
     let
       (* assume that next addr == target *)
 (*
-      val (addr,stmts,jmp_stmt) = List.nth (addresses_stmts,3);
-      val (target, visited_pcs, block_post_cond, constr, cjmp_constr, lc) =
-        block_constr (#constr s) (#cjmp_constr s) addr stmts jmp_stmt (#visited_pcs s) lc
+lock_def
+      val (addr,stmts,jmp_stmt) = List.nth (addresses_stmts,4);
+      val (target, visited_pcs, block_post_cond, constr, cjmp_constr, cjmp_path, lc) =
+        block_constr addresses (#constr s) (#cjmp_constr s) addr stmts jmp_stmt (#visited_pcs s) (#cjmp_path s) lc
       val s =
-      {constr=constr,cjmp_constr=cjmp_constr,post_conds=simplify_term $ mk_conj(#post_conds s,block_post_cond),visited_pcs=visited_pcs}
+        {constr=constr,cjmp_constr=cjmp_constr,post_conds=simplify_term $ mk_conj(#post_conds s,block_post_cond),visited_pcs=visited_pcs,cjmp_path=cjmp_path}
 *)
       val (target, visited_pcs, block_post_cond, constr, cjmp_constr, cjmp_path, lc) =
-        block_constr (#constr s) (#cjmp_constr s) addr stmts jmp_stmt (#visited_pcs s) (#cjmp_path s) lc
+        block_constr addresses (#constr s) (#cjmp_constr s) addr stmts jmp_stmt (#visited_pcs s) (#cjmp_path s) lc
     in
       ({constr=constr,cjmp_constr=cjmp_constr,post_conds=simplify_term $ mk_conj(#post_conds s,block_post_cond),visited_pcs=visited_pcs,cjmp_path=cjmp_path},lc)
     end
@@ -1119,11 +1125,12 @@ Theorem clstep_post_cond_inv_BStmt_Jmp:
 Proof
   clstep_post_cond_inv_tac
   (* BStmt_Jmp *)
-  >> fs[prog_blop_ALL_DISTINCT]
+  >> fs[prog_blop_ALL_DISTINCT,prog_individual_constraints_eq]
   >> gvs[prog_bgcs]
   >> fs[AND_IMP_INTRO,IMP_CONJ_THM,FORALL_AND_THM]
   >> qpat_assum `_ = c_bst_pc.bpc_label` $ assume_tac o GSYM
-  >> fs[bir_envTheory.bir_var_name_def,bir_envTheory.bir_var_type_def,bir_read_reg_def,v_succ_def,v_fail_def]
+  >> fs[bir_envTheory.bir_var_name_def,bir_envTheory.bir_var_type_def,bir_read_reg_def,v_succ_def,v_fail_def,bir_exec_stmt_jmp_eq]
+  >> fs[prog_blop,bir_exec_stmt_jmp_eq,bir_block_pc_def,wordsTheory.dimword_64]
   >> rpt strip_tac
   >> gs[bir_exec_stmt_jmp_eq,prog_blop,bir_block_pc_def,wordsTheory.dimword_64,bir_exec_stmt_jmp_bst_eq]
   >> rpt $ goal_assum drule_all
