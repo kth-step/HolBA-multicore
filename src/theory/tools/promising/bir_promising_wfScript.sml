@@ -47,15 +47,18 @@ QED
 
 Theorem bir_exec_stmt_jmp_bst_eq:
   !s p lbl.
-     (bir_exec_stmt_jmp p lbl s).bst_v_rNew     = s.bst_v_rNew
+     (bir_exec_stmt_jmp p lbl s).bst_environ    = s.bst_environ
+  /\ (bir_exec_stmt_jmp p lbl s).bst_viewenv    = s.bst_viewenv
+  /\ (!l. (bir_exec_stmt_jmp p lbl s).bst_coh l = s.bst_coh l)
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_rNew     = s.bst_v_rNew
   /\ (bir_exec_stmt_jmp p lbl s).bst_v_rOld     = s.bst_v_rOld
   /\ (bir_exec_stmt_jmp p lbl s).bst_v_wNew     = s.bst_v_wNew
   /\ (bir_exec_stmt_jmp p lbl s).bst_v_wOld     = s.bst_v_wOld
+  /\ (bir_exec_stmt_jmp p lbl s).bst_v_CAP      = s.bst_v_CAP
   /\ (bir_exec_stmt_jmp p lbl s).bst_v_Rel      = s.bst_v_Rel
-  /\ (bir_exec_stmt_jmp p lbl s).bst_viewenv    = s.bst_viewenv
   /\ (bir_exec_stmt_jmp p lbl s).bst_prom       = s.bst_prom
-  /\ (!l. (bir_exec_stmt_jmp p lbl s).bst_coh l = s.bst_coh l)
-  /\ (bir_exec_stmt_jmp p lbl s).bst_environ = s.bst_environ
+  /\ (bir_exec_stmt_jmp p lbl s).bst_fwdb       = s.bst_fwdb
+  /\ (bir_exec_stmt_jmp p lbl s).bst_xclb       = s.bst_xclb
 Proof
   rw[bir_exec_stmt_jmp_def]
   >> CASE_TAC
