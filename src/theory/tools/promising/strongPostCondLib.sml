@@ -537,11 +537,11 @@ let
     (case (has_visited target_t, has_visited target_f) of
       (true,false) =>
           (target_f,{ constraint =
-              ``bir_eval_exp ^cond (^s).bst_environ = SOME $ BVal_Imm $ Imm1 0w``
+              ``bir_eval_exp ^cond s.bst_environ = SOME $ BVal_Imm $ Imm1 0w``
           ,  dependents = cond_locs})
     | (false,true) =>
           (target_t,{ constraint =
-            ``bir_eval_exp ^cond (^s).bst_environ = SOME $ BVal_Imm $ Imm1 1w``
+            ``bir_eval_exp ^cond s.bst_environ = SOME $ BVal_Imm $ Imm1 1w``
           ,  dependents = cond_locs})
     )
     handle _ =>
@@ -643,10 +643,13 @@ case fst $ term_to_string_args jmp_stmt of
 val constr = #constr s
 val cjmp_constr = #cjmp_constr s
 val visited_pcs = #visited_pcs s
+val cjmp_path = #cjmp_path s
 Redblackmap.listItems constr
  *)
 fun block_constr constr cjmp_constr addr stmts jmp_stmt visited_pcs cjmp_path (lc : lc) =
 let
+  val _ = print "extract from block with label:\n"
+  val _ = Parse.print_term addr
   (* constr and post condition *)
   val (constr,cjmp_constr,block_term,lc) =
     List.foldl
@@ -656,6 +659,7 @@ let
 val (index,stmt) =  (fn n => (n,List.nth(stmts,n))) 0
 val cjmp_constr = []
 val term = ``T``
+val block_term = ``T``
 *)
           (* constraint at current pc is collection of previous constraints *)
           val term' =
@@ -802,8 +806,8 @@ val lin_term =
 
 (*
 
-^lin_term
-
+lin_term
+cjmp_constr
 post_conds
 
 *)
@@ -992,7 +996,6 @@ Theorem clstep_post_cond_inv_BMCStmt_Fence:
 Proof
   clstep_post_cond_inv_tac
   (* BMCStmt_Fence *)
-  (* TODO implement for program *)
   >> fs[prog_blop_ALL_DISTINCT]
   >> gvs[prog_bgcs]
   >> fs[AND_IMP_INTRO,IMP_CONJ_THM,FORALL_AND_THM]
@@ -1028,7 +1031,7 @@ Proof
   >> fs[bir_exec_stmt_jmp_to_label_def,prog_blop,bir_block_pc_def]
   >> fs[wordsTheory.dimword_64,prog_individual_constraints_eq]
   >> fs[COND_RAND,COND_RATOR]
-  >> drule_then (fs o single) bir_eval_exp_BExp_UnaryExp
+  >> drule_then (gvs o single) bir_eval_exp_BExp_UnaryExp
   >> goal_assum drule_all
   >> fs[]
 QED
