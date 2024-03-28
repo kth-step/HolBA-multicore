@@ -11,6 +11,32 @@ open listTheory rich_listTheory arithmeticTheory
 
 val _ = new_theory "promising_thms";
 
+Definition bst_pc_tuple_def:
+  bst_pc_tuple x = (x.bpc_label,x.bpc_index)
+End
+
+Definition jmp_targets_def:
+  jmp_targets prog =
+    FLAT $ MAP (λx. case x of
+      BLE_Label bla => [bla]
+    | _ => []
+    )
+    $ FLAT $ MAP (λx. case x of
+        BStmt_CJmp _ lbl1 lbl2 => [lbl1;lbl2]
+      | BStmt_Jmp lbl => [lbl]
+    )
+    $ FLAT $ case prog of BirProgram pl =>
+      MAP (λx.
+        case x of BBlock_Stmts bl => [bl.bb_last_statement]
+          | BBlock_Ext R => []
+      ) pl
+End
+
+(* uncurried definition of parstep *)
+Definition parstep_uc_def:
+  parstep_uc P cid = λ(cores,M) (cores',M'). parstep P cid cores M cores' M'
+End
+
 (* TODO move closer to definition *)
 
 Theorem type_of_bir_imm_EQ_ELIMS:
@@ -874,5 +900,16 @@ Theorem bir_eval_exp_view_BExp_Const =
 
 Theorem bir_eval_exp_view_BExp_Const' =
   CONV_RULE (ONCE_DEPTH_CONV $ LAND_CONV $ ONCE_REWRITE_CONV[EQ_SYM_EQ]) bir_eval_exp_view_BExp_Const
+
+Theorem parstep_FLOOKUP:
+  !p' p cid' cid cores M cores' M' s s' P.
+    FLOOKUP cores cid = SOME $ Core cid p s
+    /\ parstep P cid cores M cores' M'
+    /\ FLOOKUP cores' cid = SOME $ Core cid' p' s'
+    ==> cid' = cid /\ p = p'
+Proof
+  rpt gen_tac >> strip_tac
+  >> gvs[FLOOKUP_UPDATE,cstep_cases,parstep_cases]
+QED
 
 val _ = export_theory ();

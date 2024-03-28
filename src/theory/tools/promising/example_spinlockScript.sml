@@ -6,8 +6,9 @@ open HolKernel Parse boolLib bossLib;
 open wordsTheory bitstringTheory llistTheory wordsLib
      finite_mapTheory string_numTheory relationTheory
      bir_programTheory bir_promisingTheory
-     bir_promising_wfTheory bir_programLib;
-open listTheory rich_listTheory arithmeticTheory
+     bir_promising_wfTheory bir_programLib
+     listTheory rich_listTheory arithmeticTheory
+     promising_thmsTheory;
 
 val _ = new_theory "example_spinlock";
 
@@ -43,10 +44,6 @@ End
 Theorem bir_eval_lock_addr_val_unchanged =
   EVAL ``bir_eval_exp (BExp_Const (Imm64 42w)) (BEnv f) = SOME lock_addr_val``
   |> GEN_ALL
-
-Definition bst_pc_tuple_def:
-  bst_pc_tuple x = (x.bpc_label,x.bpc_index)
-End
 
 Definition bir_pc_label_def:
   bir_pc_label lbl s <=>
@@ -238,7 +235,7 @@ Definition lock_def:
 End
 
 Definition unlock_def:
-  unlock lock_addr unlock_entry = MAP BBlock_Stmts [
+  unlock lock_addr unlock_entry jump_after_unlock = MAP BBlock_Stmts [
 (* li	t0,0 *)
     <|bb_label := BL_Address $ Imm64 unlock_entry;
       bb_statements :=
@@ -271,7 +268,7 @@ Definition unlock_def:
             F F F
       ];
       (* jump to next instruction (in sequence) *)
-      bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ unlock_entry + 12w |>
+      bb_last_statement := BStmt_Jmp $ BLE_Label $ jump_after_unlock |>
   ]
 End
 
@@ -283,11 +280,11 @@ Theorem bir_labels_of_program_lock =
   blop_prog_labels_thm ``BirProgram $ lock lock_addr' lock_entry jump_after``
 
 Theorem unlock_NOT_NULL =
-  EVAL o Term $ `NULL $ unlock _ _`
+  EVAL o Term $ `NULL $ unlock _ _ _`
 Theorem unlock_bir_pc_first =
-  EVAL o Term $ `bir_pc_first $ BirProgram (unlock _ _) : progc_t`
+  EVAL o Term $ `bir_pc_first $ BirProgram (unlock _ _ _) : progc_t`
 Theorem bir_labels_of_program_unlock =
-  blop_prog_labels_thm ``BirProgram $ unlock lock_addr' unlock_entry``
+  blop_prog_labels_thm ``BirProgram $ unlock lock_addr' unlock_entry _``
 
 
 (* old definition without additional blocks *)
@@ -306,14 +303,14 @@ Definition spinlock_concrete_def:
   ]
   (* lock lock_addr lock_entry jump_after *)
   ++ lock lock_addr 4w (BL_Address $ Imm64 24w)
-  (* unlock lock_addr unlock_entry *)
-  ++ unlock lock_addr 24w
+  (* unlock lock_addr unlock_entry jump_after_unlock *)
+  ++ unlock lock_addr 24w (BL_Address $ Imm64 $ 24w+12w)
 End
 
 Definition lock_wrap_def:
   lock_wrap lock_addr lock_entry jump_after unlock_entry blocks =
     lock lock_addr lock_entry jump_after ++ blocks
-    ++ unlock lock_addr unlock_entry
+    ++ unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)
 End
 
 Definition spinlock_concrete2_def:
@@ -326,7 +323,7 @@ Theorem bgcs_lock_zoo =
   bgcs_bmc_prog_thms ``BirProgram $ lock lock_addr 0w jump_after``;
 
 Theorem bgcs_unlock_zoo =
-  bgcs_bmc_prog_thms ``BirProgram $ unlock lock_addr' unlock_entry``;
+  bgcs_bmc_prog_thms ``BirProgram $ unlock lock_addr' unlock_entry jump_after_unlock``;
 
 Theorem bir_get_spinlock_cprog_zoo =
   bgcs_bmc_prog_thms ``spinlock_concrete``

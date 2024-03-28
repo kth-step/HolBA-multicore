@@ -738,7 +738,7 @@ Proof
   >> gs[clstep_cases]
   >~ [`BSExt R`]
   >- (
-    fs[wf_ext_def,COND_RAND] 
+    fs[wf_ext_def,COND_RAND]
     >> rw[]
     >> first_x_assum drule >> fs[]
     >> simp[well_formed_def]
@@ -1482,7 +1482,7 @@ Proof
   >> fs[listTheory.EVERY_MEM]
   >> first_x_assum $ drule_then assume_tac
   >> gs[mem_is_loc_append]
-  >> drule_then (rev_drule_then assume_tac) mem_get_mem_is_loc 
+  >> drule_then (rev_drule_then assume_tac) mem_get_mem_is_loc
   >> gvs[]
 QED
 

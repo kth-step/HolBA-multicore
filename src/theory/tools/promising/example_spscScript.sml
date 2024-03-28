@@ -136,7 +136,7 @@ Definition dequeue_def:
             (BExp_Const $ Imm64 1w))
           F F F
       ];
-      bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 $ dequeue_entry + 20w
+      bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 jump_after
     |>
   ]
 End
