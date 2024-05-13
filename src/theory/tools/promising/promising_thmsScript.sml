@@ -481,6 +481,103 @@ Proof
   >> gs[list_disj_spec_ho]
 QED
 
+(* jump within a program *)
+
+Definition is_jump_within_def:
+  is_jump_within p' c <=>
+  (
+    !cond_e lbl1 lbl2 v v'.
+    bir_get_current_statement (BirProgram p') c.bst_pc =
+      SOME $ BSGen $ BStmtE $ BStmt_CJmp cond_e lbl1 lbl2
+    /\ bir_eval_exp cond_e c.bst_environ = SOME v'
+    /\ bir_dest_bool_val v' = SOME v
+    ==> (v ==> !lbl1'. bir_eval_label_exp lbl1 c.bst_environ = SOME lbl1' ==> MEM lbl1' $ bir_labels_of_program $ BirProgram p')
+      /\ (~v ==> !lbl2'. bir_eval_label_exp lbl2 c.bst_environ = SOME lbl2' ==> MEM lbl2' $ bir_labels_of_program $ BirProgram p')
+  )
+  /\ (
+    !e lbl lbl'.
+    bir_get_current_statement (BirProgram p') c.bst_pc =
+      SOME $ BSGen $ BStmtE $ BStmt_Jmp e
+    /\ bir_eval_label_exp lbl c.bst_environ = SOME lbl'
+    ==> MEM lbl' $ bir_labels_of_program $ BirProgram p'
+  )
+  /\ (
+    !R prom c' M.
+    bir_get_current_statement (BirProgram p') c.bst_pc = SOME $ BSExt R
+    /\ R (c,M,prom) c'
+    ==> MEM c'.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p'
+  )
+End
+
+Definition is_jump_to_label_def:
+  is_jump_to_label p' c lbl <=>
+  (
+    !cond_e lbl1 lbl2 v v'.
+    bir_get_current_statement (BirProgram p') c.bst_pc =
+      SOME $ BSGen $ BStmtE $ BStmt_CJmp cond_e lbl1 lbl2
+    /\ bir_eval_exp cond_e c.bst_environ = SOME v'
+    /\ bir_dest_bool_val v' = SOME v
+    ==> (v ==> bir_eval_label_exp lbl1 c.bst_environ = SOME lbl)
+      /\ (~v ==> bir_eval_label_exp lbl2 c.bst_environ = SOME lbl)
+  )
+  /\ (
+    !e lbl lbl'.
+    bir_get_current_statement (BirProgram p') c.bst_pc =
+      SOME $ BSGen $ BStmtE $ BStmt_Jmp e
+    /\ bir_eval_label_exp lbl' c.bst_environ = SOME lbl
+  )
+  /\ (
+    !R prom c' M.
+    bir_get_current_statement (BirProgram p') c.bst_pc = SOME $ BSExt R
+    /\ R (c,M,prom) c' ==> lbl = c'.bst_pc.bpc_label /\ c'.bst_pc.bpc_index = 0
+  )
+End
+
+(* use with clstep_permute_prog *)
+
+Theorem clstep_imp_clstep_APPEND:
+  clstep (BirProgram $ p ++ p') cid c M prom c'
+  /\ MEM c.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p'
+  /\ list_disj (bir_labels_of_program $ BirProgram p)
+           (bir_labels_of_program $ BirProgram p')
+  /\ is_jump_within p' c
+  ==> clstep (BirProgram p') cid c M prom c'
+Proof
+  rpt strip_tac
+  >> imp_res_tac clstep_bgcs_imp
+  >> drule_then assume_tac bir_get_current_statement_MEM2
+  >> gs[clstep_cases,bir_eval_exp_view_def,bmc_exec_general_stmt_exists,is_jump_within_def]
+  >> rpt $ qpat_x_assum `SOME _ = _` $ assume_tac o GSYM
+  >> fs[]
+  >~ [`BSGen $ BStmtB $ BMCStmt_Load var a_e opt_cast xcl acq rel`]
+  >- (
+    qhdtm_x_assum `mem_read` $ irule_at Any
+    >> fs[]
+  )
+  >~ [`BSGen $ BStmtB $ BMCStmt_Amo var a_e v_e acq rel`]
+  >- (
+    qhdtm_x_assum `mem_read` $ irule_at Any
+    >> fs[]
+  )
+  >~ [`bir_exec_stmt_cjmp`]
+  >- (
+    MK_COMB_TAC >> fs[bir_exec_stmt_cjmp_def]
+    >> ntac 2 CASE_TAC >> fs[]
+    >> rw[bir_exec_stmt_jmp_def]
+    >> CASE_TAC
+    >> fs[bir_exec_stmt_jmp_to_label_def,bir_labels_of_program_APPEND]
+  )
+  >~ [`bir_exec_stmt_jmp`]
+  >- (
+    fs[bir_exec_stmt_jmp_def] >> CASE_TAC >> gs[]
+    >> fs[bir_exec_stmt_jmp_to_label_def]
+    >> first_x_assum $ drule_then assume_tac
+    >> fs[bir_labels_of_program_APPEND]
+  )
+  >~ [`BSExt`]
+  >- first_x_assum $ drule_then irule
+QED
+
 Theorem well_formed_mem_read_view_zero:
   !cid M s l.
   well_formed cid M s ==> mem_read_view (s.bst_fwdb l) 0 = 0
@@ -911,6 +1008,109 @@ Theorem parstep_FLOOKUP:
 Proof
   rpt gen_tac >> strip_tac
   >> gvs[FLOOKUP_UPDATE,cstep_cases,parstep_cases]
+QED
+
+Theorem remove_prom_ID:
+  remove_prom [] = I
+  /\ remove_prom p (a ++ b) = remove_prom p a ++ remove_prom p b
+  /\ remove_prom [t] [t] = []
+Proof
+  fs[remove_prom_def,FUN_EQ_THM,FILTER_APPEND]
+QED
+
+Theorem remove_prom_contra:
+  ~(remove_prom [x] a = a ++ [x])
+Proof
+  spose_not_then assume_tac
+  >> fs[remove_prom_def]
+  >> qmatch_asmsub_abbrev_tac `FILTER P a = a ++ [b]`
+  >> `MEM b $ FILTER P a` by fs[]
+  >> qhdtm_x_assum `FILTER` kall_tac
+  >> unabbrev_all_tac
+  >> fs[MEM_FILTER]
+QED
+
+Theorem clstep_imp_bst_prom:
+  clstep p cid s M prom s'
+  ==> s'.bst_prom = remove_prom prom s.bst_prom
+    /\ EVERY (λt. MEM t s.bst_prom) prom
+Proof
+  rw[clstep_cases,bir_state_fulful_view_updates_def,bir_state_read_view_updates_def,fence_updates_def,bmc_exec_general_stmt_exists]
+  >> fs[bir_state_t_fupdfupds,bir_state_t_fupdcanon,remove_prom_ID,bir_exec_stmt_cjmp_mc_invar,bir_exec_stmt_jmp_bst_prom]
+  >> fs[bir_exec_stmt_assert_def,bir_exec_stmt_assume_def,bir_state_set_typeerror_def,bir_exec_stmt_halt_def]
+  >> BasicProvers.every_case_tac
+  >> fs[]
+  >> fs[EVERY_MEM,pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem clstep_imp_cstep:
+  clstep p cid s M prom s' ==> cstep p cid s M prom s' M
+Proof
+  fs[cstep_cases]
+QED
+
+Theorem clstep_imp_cstep_RC:
+  !sM sM'.
+    RC (λ(s,M) (s',M'). ?prom. clstep p cid s M prom s' /\ M = M') sM sM'
+    ==> RC (λ(s,M) (s',M'). ?prom. cstep p cid s M prom s' M /\ M = M') sM sM'
+Proof
+  rw[RC_DEF,ELIM_UNCURRY]
+  >> disj2_tac
+  >> drule clstep_imp_cstep
+  >> disch_then $ irule_at Any
+  >> fs[]
+QED
+
+Theorem clstep_imp_cstep_RTC:
+  !sM sM'.
+    RTC (λ(s,M) (s',M'). ?prom. clstep p cid s M prom s' /\ M = M') sM sM'
+    ==> RTC (λ(s,M) (s',M'). ?prom. cstep p cid s M prom s' M /\ M = M') sM sM'
+Proof
+  ho_match_mp_tac RTC_INDUCT
+  >> rw[RTC_REFL,ELIM_UNCURRY]
+  >> irule $ cj 2 RTC_RULES
+  >> goal_assum $ dxrule_at Any
+  >> fs[ELIM_UNCURRY]
+  >> irule_at Any clstep_imp_cstep
+  >> goal_assum drule
+QED
+
+Theorem clstep_imp_cstep_seq:
+  clstep p cid s M prom s'
+  ==> cstep_seq p cid (s,M) (s',M)
+Proof
+  rw[cstep_seq_cases]
+  >> goal_assum drule
+QED
+
+Theorem clstep_imp_cstep_seq_RC:
+  !sM sM'.
+    RC (λ(s,M) (s',M'). ?prom. clstep p cid s M prom s' /\ M = M') sM sM'
+    ==> RC (cstep_seq p cid) sM sM'
+Proof
+  rw[RC_DEF]
+  >> disj2_tac
+  >> fs[ELIM_UNCURRY,cstep_seq_cases]
+  >> disj1_tac
+  >> irule_at Any $ GSYM PAIR
+  >> qhdtm_x_assum `clstep` $ irule_at Any
+  >> fs[]
+QED
+
+Theorem clstep_imp_cstep_seq_RTC:
+  !sM sM'.
+    RTC (λ(s,M) (s',M'). ?prom. clstep p cid s M prom s' /\ M = M') sM sM'
+    ==> RTC (cstep_seq p cid) sM sM'
+Proof
+  ho_match_mp_tac RTC_INDUCT
+  >> rw[RTC_REFL]
+  >> irule $ cj 2 RTC_RULES
+  >> goal_assum $ dxrule_at Any
+  >> rewrite_tac[cstep_seq_cases]
+  >> disj1_tac
+  >> fs[ELIM_UNCURRY,PULL_EXISTS,FORALL_PROD]
+  >> goal_assum $ dxrule_at Any
+  >> fs[]
 QED
 
 val _ = export_theory ();
