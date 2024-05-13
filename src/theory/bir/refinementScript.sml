@@ -24,6 +24,11 @@ Definition ref_def:
     !as. P s as ==> ?as'. R as as' /\ P s' as'
 End
 
+(* RTC R' refines R under refinement relation P *)
+Definition refinement_RTC_def:
+  refinement_RTC R R' P = !s s'. R s s' ==> ref P (RTC R') s s'
+End
+
 (* RC R' refines R under refinement relation P *)
 Definition refinement_RC_def:
   refinement_RC R R' P = !s s'. R s s' ==> ref P (RC R') s s'
@@ -33,6 +38,42 @@ End
 Definition refinement_def:
   refinement R R' P = !s s'. R s s' ==> ref P R' s s'
 End
+
+Theorem refinement_thm:
+  refinement R R' P =
+    !cs cs' as. R cs cs' /\ P cs as
+      ==> ?as'. R' as as' /\ P cs' as'
+Proof
+  csimp[refinement_def,ref_def,PULL_FORALL]
+  >> fs[EQ_IMP_THM]
+  >> rpt strip_tac
+  >> first_x_assum drule_all
+  >> fs[]
+QED
+
+Theorem refinement_RC_thm:
+  refinement_RC R R' P =
+    !cs cs' as. R cs cs' /\ P cs as
+      ==> ?as'. RC R' as as' /\ P cs' as'
+Proof
+  csimp[refinement_RC_def,ref_def,PULL_FORALL]
+  >> fs[EQ_IMP_THM]
+  >> rpt strip_tac
+  >> first_x_assum drule_all
+  >> fs[]
+QED
+
+Theorem refinement_RTC_thm:
+  refinement_RTC R R' P =
+    !cs cs' as. R cs cs' /\ P cs as
+      ==> ?as'. RTC R' as as' /\ P cs' as'
+Proof
+  csimp[refinement_RTC_def,ref_def,PULL_FORALL]
+  >> fs[EQ_IMP_THM]
+  >> rpt strip_tac
+  >> first_x_assum drule_all
+  >> fs[]
+QED
 
 Theorem refinement_RTC:
   !R R' P. refinement R R' P ==> refinement (RTC R) (RTC R') P
@@ -54,7 +95,7 @@ Proof
   >> fs[relationTheory.RC_RTC]
 QED
 
-Theorem refinement_RC_RTC:
+Theorem refinement_RC_RC_RTC:
   !R R' P. refinement_RC R R' P ==> refinement_RC (RTC R) (RTC R') P
 Proof
   rpt strip_tac
@@ -73,6 +114,14 @@ Proof
   >> simp[Once relationTheory.RTC_CASES_RTC_TWICE,PULL_EXISTS,AC CONJ_ASSOC CONJ_COMM]
   >> rpt $ goal_assum drule
   >> fs[relationTheory.RC_RTC]
+QED
+
+Theorem refinement_RC_RTC:
+  !R R' P. refinement_RC R R' P ==> refinement (RTC R) (RTC R') P
+Proof
+  rpt strip_tac
+  >> dxrule_then strip_assume_tac refinement_RC_RC_RTC
+  >> fs[refinement_RC_def,refinement_def,RC_RTC_EQ]
 QED
 
 Theorem refinement_RC_composition:
