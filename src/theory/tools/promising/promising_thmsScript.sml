@@ -7,7 +7,8 @@ open listTheory rich_listTheory arithmeticTheory
      wordsTheory bitstringTheory llistTheory wordsLib
      finite_mapTheory string_numTheory relationTheory
      bir_programTheory bir_promisingTheory
-     bir_promising_wfTheory bir_programLib;
+     bir_promising_wfTheory bir_programLib
+     pairTheory
 
 val _ = new_theory "promising_thms";
 
@@ -34,7 +35,7 @@ End
 
 (* uncurried definition of parstep *)
 Definition parstep_uc_def:
-  parstep_uc P cid = λ(cores,M) (cores',M'). parstep P cid cores M cores' M'
+  parstep_uc cid = λ(cores,M) (cores',M'). parstep cid cores M cores' M'
 End
 
 (* TODO move closer to definition *)
@@ -94,7 +95,7 @@ QED
 
 Theorem cstep_bgcs_imp:
   !P prog cid s M prom s' M'.
-    cstep P prog cid s M prom s' M'
+    cstep prog cid s M prom s' M'
     /\ M = M'
     ==> ?stmt. bir_get_current_statement prog s.bst_pc = SOME stmt
 Proof
@@ -904,7 +905,7 @@ Theorem bir_eval_exp_view_BExp_Const' =
 Theorem parstep_FLOOKUP:
   !p' p cid' cid cores M cores' M' s s' P.
     FLOOKUP cores cid = SOME $ Core cid p s
-    /\ parstep P cid cores M cores' M'
+    /\ parstep cid cores M cores' M'
     /\ FLOOKUP cores' cid = SOME $ Core cid' p' s'
     ==> cid' = cid /\ p = p'
 Proof

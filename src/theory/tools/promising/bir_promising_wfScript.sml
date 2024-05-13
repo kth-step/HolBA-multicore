@@ -1043,10 +1043,10 @@ Proof
 QED
 
 Theorem cstep_preserves_wf:
-!p cid s M prom s' M' P.
+!p cid s M prom s' M'.
   well_formed cid M s
   /\ wf_ext_p p cid
-  /\ cstep P p cid s M prom s' M'
+  /\ cstep p cid s M prom s' M'
   ==> well_formed cid M' s'
 Proof
   rw[cstep_cases]
@@ -1103,8 +1103,8 @@ Proof
 QED
 
 Theorem parstep_preserves_prog_cid:
-!cid p cid' cores P M cores' M' cid'' s.
-  parstep P cid cores M cores' M'
+!cid p cid' cores M cores' M' cid'' s.
+  parstep cid cores M cores' M'
   /\ FLOOKUP cores cid' = SOME $ Core cid'' p s
   ==> ?s'. FLOOKUP cores cid' = SOME $ Core cid'' p s'
 Proof
@@ -1116,10 +1116,10 @@ Theorem cstep_seq_NRC_wf =
   cstep_seq_rtc_preserves_wf
 
 Theorem parstep_preserves_wf:
-!cid cores M cores' M' P.
+!cid cores M cores' M'.
   well_formed_cores cores M
   /\ well_formed_ext_cores cores
-  /\ parstep P cid cores M cores' M'
+  /\ parstep cid cores M cores' M'
   ==> well_formed_cores cores' M'
 Proof
   rw[parstep_cases]
@@ -1131,9 +1131,9 @@ Proof
 QED
 
 Theorem parstep_preserves_wf_ext_cores:
-!cid cores M cores' M' P.
+!cid cores M cores' M'.
   well_formed_ext_cores cores
-  /\ parstep P cid cores M cores' M'
+  /\ parstep cid cores M cores' M'
   ==> well_formed_ext_cores cores'
 Proof
   rw[parstep_cases,well_formed_ext_cores_def]
@@ -1168,7 +1168,7 @@ QED
 Theorem cstep_transitive_cstep_seq:
   !p cid R.
   reflexive R /\ transitive R
-  /\ (!s M prom s' M'. cstep (λmem msg. T) p cid s M prom s' M' ==> R (s,M) (s',M'))
+  /\ (!s M prom s' M'. cstep p cid s M prom s' M' ==> R (s,M) (s',M'))
   /\ (!s M prom s'. clstep p cid s M prom s' ==> R (s,M) (s',M))
   ==> !sM sM'. cstep_seq p cid sM sM' ==> R sM sM'
 Proof
@@ -1183,7 +1183,7 @@ QED
 Theorem cstep_transitive_cstep_seq_rtc:
   !p cid R.
   reflexive R /\ transitive R
-  /\ (!s M prom s' M'. cstep (λmem msg. T) p cid s M prom s' M' ==> R (s,M) (s',M'))
+  /\ (!s M prom s' M'. cstep p cid s M prom s' M' ==> R (s,M) (s',M'))
   /\ (!s M prom s'. clstep p cid s M prom s' ==> R (s,M) (s',M))
   ==> !sM sM'. cstep_seq_rtc p cid sM sM' ==> R sM sM'
 Proof
@@ -1218,7 +1218,7 @@ QED
 
 Theorem cstep_coh_mono:
   !p cid s M prom s' M' l.
-  cstep P p cid s M prom s' M' ==> s.bst_coh l <= s'.bst_coh l
+  cstep p cid s M prom s' M' ==> s.bst_coh l <= s'.bst_coh l
 Proof
   rw[cstep_cases] >> fs[]
   >> drule clstep_coh_mono >> fs[]
@@ -1251,7 +1251,7 @@ Theorem cstep_seq_NRC_coh_mono =
 
 Theorem cstep_mem_mono:
   !p cid s M prom s' M' P.
-  cstep P p cid s M prom s' M'
+  cstep p cid s M prom s' M'
   ==> LENGTH M <= LENGTH M' /\ IS_PREFIX M' M
 Proof
   rw[rich_listTheory.IS_PREFIX_APPEND,cstep_cases] >> fs[]

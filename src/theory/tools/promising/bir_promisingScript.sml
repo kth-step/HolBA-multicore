@@ -671,19 +671,18 @@ End
 (* core steps *)
 Inductive cstep:
 (* execute *)
-(!p cid s M s' prom P.
+(!p cid s M s' prom.
   clstep p cid s M prom s'
 ==>
-  cstep P p cid s M prom s' M)
+  cstep p cid s M prom s' M)
 
 /\ (* promise *)
-(!p cid s M s' t msg P.
+(!p cid s M s' t msg.
    msg.cid = cid
    /\ t = LENGTH M + 1
    /\ s' = s with bst_prom updated_by (\pr. pr ++ [t])
-   /\ P M msg
 ==>
-  cstep P p cid s M [t] s' (M ++ [msg]))
+  cstep p cid s M [t] s' (M ++ [msg]))
 End
 
 (* core steps seq *)
@@ -696,7 +695,7 @@ Inductive cstep_seq:
 
 /\ (* write *)
 (!p cid s M s' s'' M' t.
-  (cstep (λmem msg. T) p cid s M [t] s' M' /\ ~(M = M')
+  (cstep p cid s M [t] s' M' /\ ~(M = M')
   /\ clstep p cid s' M' [t] s'')
 ==>
   cstep_seq p cid (s, M) (s'', M'))
@@ -755,12 +754,12 @@ val atomicity_ok_def = Define`
 
 (* system step *)
 Inductive parstep:
-(!p cid s s' M M' cores prom P.
+(!p cid s s' M M' cores prom.
    FLOOKUP cores cid = SOME (Core cid p s)
-    /\ cstep P p cid s M prom s' M'
+    /\ cstep p cid s M prom s' M'
     /\ is_certified p cid s' M'
 ==>
-   parstep P cid cores M (FUPDATE cores (cid, Core cid p s')) M')
+   parstep cid cores M (FUPDATE cores (cid, Core cid p s')) M')
 End
 
 val _ = export_theory();

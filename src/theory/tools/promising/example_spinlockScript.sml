@@ -3,12 +3,14 @@
 *)
 
 open HolKernel Parse boolLib bossLib;
+open pairTheory optionTheory;
 open wordsTheory bitstringTheory llistTheory wordsLib
      finite_mapTheory string_numTheory relationTheory
      bir_programTheory bir_promisingTheory
      bir_promising_wfTheory bir_programLib
      listTheory rich_listTheory arithmeticTheory
      promising_thmsTheory;
+open promisingrefinementTheory
 
 val _ = new_theory "example_spinlock";
 

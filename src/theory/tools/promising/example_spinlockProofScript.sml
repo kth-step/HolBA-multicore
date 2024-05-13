@@ -6,9 +6,10 @@ open HolKernel Parse boolLib bossLib;
 open wordsTheory bitstringTheory llistTheory wordsLib
      finite_mapTheory string_numTheory relationTheory
      bir_programTheory bir_promisingTheory
-     bir_promising_wfTheory bir_programLib;
-open listTheory rich_listTheory arithmeticTheory
-open example_spinlockTheory
+     bir_promising_wfTheory bir_programLib
+     listTheory rich_listTheory arithmeticTheory
+     example_spinlockTheory promising_thmsTheory
+open strongPostCondLib
 
 val _ = new_theory "example_spinlockProof";
 
@@ -543,7 +544,7 @@ Definition labels_wf_def:
     /\ list_disj
       (bir_labels_of_program ((BirProgram $ lock lock_addr 0w jump_after) : progc_t))
       $ bir_labels_of_program ((BirProgram $ unlock lock_addr unlock_entry) : progc_t)
-    /\ ALL_DISTINCT $ 
+    /\ ALL_DISTINCT $
         bir_labels_of_program ((BirProgram $ lock lock_addr 0w jump_after ++ unlock lock_addr unlock_entry ++ blocks) : progc_t)
     /\ MEM jump_after $ bir_labels_of_program $ BirProgram blocks
     /\ ~(MEM (BL_Address $ Imm64 $ unlock_entry + 12w) $ bir_labels_of_program $ (BirProgram $ lock lock_addr 0w jump_after ++ blocks ++ unlock lock_addr unlock_entry) : progc_t)
@@ -1091,7 +1092,6 @@ Proof
   >> BasicProvers.every_case_tac
   >> gs[]
 QED
-
 Theorem cstep_in_cs_inv:
   !blocks jump_after unlock_entry cid s M s' M' prom P.
   labels_wf blocks jump_after unlock_entry
@@ -1109,6 +1109,7 @@ Proof
   >> `s.bst_coh lock_addr_val <= LENGTH M` by fs[well_formed_def]
   >> fs[mem_read_append]
 QED
+
 
 (*
 Theorem cstep_seq_in_cs_inv:
@@ -2438,7 +2439,7 @@ End
 
 Theorem lock_v_rOld_eq_coh_inv:
   !blocks jump_after unlock_entry cid s M s' prom jump_after_lock y.
-  clstep (BirProgram $ lock lock_addr 0w $ BL_Address $ Imm64 jump_after_lock) cid s M prom s' 
+  clstep (BirProgram $ lock lock_addr 0w $ BL_Address $ Imm64 jump_after_lock) cid s M prom s'
   /\ labels_wf blocks (BL_Address (Imm64 jump_after_lock)) unlock_entry
   /\ jump_after = BL_Address (Imm64 jump_after_lock)
   /\ s.bst_pc.bpc_label = BL_Address $ Imm64 y
@@ -3451,7 +3452,7 @@ Proof
       >> `PERM (lck ++ blocks ++ unl) $ lck ++ unl ++ blocks` by (
         REWRITE_TAC[GSYM APPEND_ASSOC]
         >> fs[sortingTheory.PERM_APPEND_IFF]
-        >> ONCE_REWRITE_TAC[sortingTheory.PERM_FUN_APPEND] 
+        >> ONCE_REWRITE_TAC[sortingTheory.PERM_FUN_APPEND]
         >> REWRITE_TAC[sortingTheory.PERM_REFL]
       )
       >> drule $ iffLR clstep_permute_prog
