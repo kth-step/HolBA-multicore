@@ -1,5 +1,7 @@
 (*
   Single Producer Single Consumer Queue implementation in multicore BIR syntax
+
+  Requires the semantics to allow memory updates containing generic algebraic datatypes, like below `msg` with Enqueue and Dequeue
 *)
 
 open HolKernel Parse boolLib bossLib;

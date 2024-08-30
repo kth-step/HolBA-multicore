@@ -4,8 +4,11 @@
 *)
 
 open HolKernel boolLib bossLib Parse;
+open relationTheory
 
 val _ = new_theory "refinement";
+
+(* move upstream *)
 
 Theorem RC_RTC_EQ:
   !R. RC (RTC R) = RTC R
@@ -13,6 +16,26 @@ Proof
   rw[relationTheory.RC_DEF,FUN_EQ_THM,EQ_IMP_THM]
   >> fs[relationTheory.RTC_REFL]
 QED
+
+Theorem RSUBSET_RTC:
+  R' RSUBSET R ==> (RTC R') RSUBSET (RTC R)
+Proof
+  rpt strip_tac
+  >> fs[RSUBSET]
+  >> match_mp_tac RTC_INDUCT
+  >> rw[]
+  >> irule $ cj 2 RTC_RULES
+  >> first_x_assum $ dxrule_then $ irule_at Any
+  >> fs[]
+QED
+
+Theorem RSUBSET_RC:
+  R' RSUBSET R ==> (RC R') RSUBSET (RC R)
+Proof
+  rw[RC_DEF,RSUBSET] >> fs[]
+QED
+
+(* end move upstream *)
 
 (*
  * refinement theorem to show:
@@ -72,6 +95,25 @@ Proof
   >> fs[EQ_IMP_THM]
   >> rpt strip_tac
   >> first_x_assum drule_all
+  >> fs[]
+QED
+
+Theorem refinement_RC_RSUBSET:
+  refinement_RC R R' P /\ R'' RSUBSET R ==> refinement_RC R'' R' P
+Proof
+  rw[refinement_RC_thm,RSUBSET]
+  >> first_x_assum $ drule_all_then assume_tac
+  >> first_x_assum $ drule_all_then irule
+QED
+
+Theorem refinement_RC_RSUBSET2:
+  refinement_RC R R' P /\ R' RSUBSET R'' ==> refinement_RC R R'' P
+Proof
+  rw[refinement_RC_thm]
+  >> first_x_assum $ drule_all_then strip_assume_tac
+  >> dxrule RSUBSET_RC
+  >> fs[RSUBSET]
+  >> disch_then $ drule_then $ irule_at Any
   >> fs[]
 QED
 

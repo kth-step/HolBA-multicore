@@ -1,5 +1,5 @@
 (*
-  Promising Semantics for multicore BIR
+  Promising Semantics for multicore BIR with external statements, and simple theorems about the definitions involved
 *)
 
 open HolKernel Parse boolLib bossLib;
@@ -663,6 +663,9 @@ clstep p cid s M [] s')
     /\ EVERY (λt. t <= LENGTH M /\ ?l. mem_is_loc M t l
       /\ s.bst_coh l < t /\ t <= s'.bst_coh l) prom
     /\ MEM s'.bst_pc.bpc_label (bir_labels_of_program p)
+    /\ bir_eval_label_exp le s.bst_environ = SOME lbl
+    /\ s'.bst_status = (bir_exec_stmt_jmp_to_label p lbl s').bst_status
+    /\ s'.bst_pc = (bir_exec_stmt_jmp_to_label p lbl s').bst_pc
 ==>
   clstep p cid s M prom s')
 End

@@ -1,5 +1,5 @@
 (*
-  Spinlock abstract and concrete implementation in multicore BIR syntax
+  Defines spinlock abstract and concrete program implementations in multicore BIR syntax
 *)
 
 open HolKernel Parse boolLib bossLib;
@@ -13,21 +13,6 @@ open wordsTheory bitstringTheory llistTheory wordsLib
 open promisingrefinementTheory
 
 val _ = new_theory "example_spinlock";
-
-(* for strong post condition generation *)
-
-Definition bir_stmts_of_progs_def:
-  bir_stmts_of_progs $ BirProgram p =
-    MAP (λbl.
-      let stmts =
-        case bl of
-        | BBlock_Stmts stmts =>
-          SOME (LENGTH stmts.bb_statements,stmts.bb_statements,stmts.bb_last_statement)
-        | BBlock_Ext R => NONE
-      in
-        (bir_label_of_block bl, stmts)
-    ) p
-End
 
 (* program specific instantiations *)
 

@@ -1,5 +1,11 @@
 (*
- Well-formedness and its preservation for promising multicore semantics
+  Well-formedness invariants (with proof) for promising multicore semantics, in particular of exclusive bank and forward bank and state properties
+
+  Compound well-formedness definition `well_formed_def` with properties `clstep_preserves_wf`, `cstep_preserves_wf`, `cstep_seq_preserves_wf`, `cstep_seq_rtc_preserves_wf`, `parstep_preserves_wf`.
+  Definition of initial state `init_def` and its well-formedness `wf_init_state`, `wf_init`.
+  Lifting transitive reflexive relational supersets of cstep and clstep to cstep_seq `cstep_transitive_cstep_seq` and `cstep_transitive_cstep_seq_rtc`.
+  Monotony of memory and set of promises.
+  There is a transition in the promising trace where every outstanding promise is discharged `is_certified_promise_disch`.
 *)
 
 open HolKernel Parse boolLib bossLib;

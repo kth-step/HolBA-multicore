@@ -242,7 +242,7 @@ val bir_get_current_statement_def = Define `bir_get_current_statement p pc =
         then SOME (BSGen $ BStmtB (EL (pc.bpc_index) stmts_bl.bb_statements))
         else if pc.bpc_index = LENGTH stmts_bl.bb_statements
           then SOME $ BSGen $ BStmtE stmts_bl.bb_last_statement else NONE
-      | BBlock_Ext ext_bl => SOME $ BSExt ext_bl.beb_relation )`;
+      | BBlock_Ext ext_bl => SOME $ BSExt ext_bl.beb_relation)`;
 
 Definition bir_get_current_block_def:
   bir_get_current_block p pc =

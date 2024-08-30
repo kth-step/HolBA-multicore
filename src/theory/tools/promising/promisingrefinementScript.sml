@@ -1,6 +1,11 @@
 (*
-  Refinement theorems for the promising semantics
- *)
+  Refinement theorems for the promising semantics including general requirements of a refinement relation for promising semantics
+
+  Defines and establishes properties about different notions of refinement (with and without reflexive closure)
+  `rel_prop`
+  `refinement_RC_clstep_imp_parstep`
+  `refinement_composition` establishes composition
+*)
 
 open HolKernel Parse boolLib bossLib;
 open rich_listTheory arithmeticTheory listTheory pairTheory optionTheory
@@ -42,6 +47,23 @@ Proof
   >> fs[wf_ext_p_def]
 QED
 
+(* TODO holds with which assumptions? *)
+(*
+idea use with refinement_RC_clstep_imp_parstep
+and more complex invariants
+ *)
+Theorem invariant_refinement_RC:
+  refinement_RC (λs s'. R1 s s' /\ V s) R2' P
+  /\ (refinement_RC R1 R1' P ==> refinement_RC R2 R2' P)
+  /\ invariant V R1
+  /\ invariant V R2
+  ==> refinement_RC (λs s'. R2 s s' /\ V s) R2' P
+Proof
+  cheat
+QED
+
+
+
 (* refinement theorems *)
 
 (* inclusion abstract and concrete *)
@@ -52,19 +74,35 @@ Definition state_prog_def:
             /\ ?s'. FLOOKUP cores' cid = SOME $ Core cid (BirProgram p') s'
 End
 
-(* required properties on the refinement relation *)
+(* required properties on the refinement relation
+ * labels: matched pairs of labels for entry of new routine
+ * p, p': programs
+ *)
 Definition rel_prop_def:
-  rel_prop R =
-  !s M s' M' msg.
+  rel_prop labels p p' R =
+  !s M s' M'.
     R (s,M) (s',M') ==> s.bst_prom = s'.bst_prom
       /\ M = M'
-      /\ R
+      /\ (!msg. R
         (s  with bst_prom updated_by (λx. x ++ [LENGTH M  + 1]), M ++[msg])
-        (s' with bst_prom updated_by (λx. x ++ [LENGTH M' + 1]), M'++[msg])
+        (s' with bst_prom updated_by (λx. x ++ [LENGTH M' + 1]), M'++[msg]))
+      (* transitions outside of current code are synchronised *)
+      /\ transition_within p s = transition_within p' s'
+      (* any jump outside is synchronised via given labels *)
+      /\ (~transition_within p s
+        ==>
+          ?lbl lbl'. MEM (lbl,lbl') labels
+            /\ is_jump_to_label p s lbl
+            /\ is_jump_to_label p' s' lbl')
+      (* TODO lookup correct field names of bst_status *)
+      /\ (!lbl. s.bst_status = BST_JumpOutside lbl
+        ==> ?lbl'. s'.bst_status = BST_JumpOutside lbl' /\ MEM (lbl,lbl') labels)
+      /\ (s.bst_status = BST_Running ==> s'.bst_status = BST_Running)
+    (* TODO add equality except for at the pc *)
 End
 
 Theorem rel_prop_imp:
-  rel_prop R ==>
+  rel_prop labels p p' R ==>
     !s M s' M'.
       R (s,M) (s',M') ==> s.bst_prom = s'.bst_prom /\ M = M'
 Proof
@@ -74,7 +112,7 @@ Proof
 QED
 
 Theorem refinement_RC_clstep_imp_cstep:
-  rel_prop R
+  rel_prop labels p p' R
   /\ refinement_RC
     (λ(s,M) (s',M'). ?prom. clstep (BirProgram p) cid s M prom s' /\ M = M')
     (λ(s,M) (s',M'). ?prom. clstep (BirProgram p') cid s M prom s' /\ M = M')
@@ -112,7 +150,7 @@ Proof
 QED
 
 Theorem refinement_RTC_clstep_imp_cstep:
-  rel_prop R
+  rel_prop labels p p' R
   /\ refinement_RTC
     (λ(s,M) (s',M'). ?prom. clstep (BirProgram p) cid s M prom s' /\ M = M')
     (λ(s,M) (s',M'). ?prom. clstep (BirProgram p') cid s M prom s' /\ M = M')
@@ -150,7 +188,7 @@ Proof
 QED
 
 Theorem refinement_RC_clstep_imp_cstep_seq:
-  rel_prop R
+  rel_prop labels p p' R
   /\ refinement_RC
     (λ(s,M) (s',M'). ?prom. clstep (BirProgram p) cid s M prom s' /\ M = M')
     (λ(s,M) (s',M'). ?prom. clstep (BirProgram p') cid s M prom s' /\ M = M')
@@ -215,7 +253,7 @@ Proof
     >> simp[MEM_FILTER,remove_prom_def,COND_RAND,COND_RATOR]
   )
   >> `nub prom = [LENGTH M + 1]` by (
-    cheat (* MEM_nub all_distinct_nub *)
+    cheat (* thms: MEM_nub all_distinct_nub *)
   )
   >> cheat
   (* need to add nub function to BSExt for the fulfiled promises prom *)
@@ -225,7 +263,7 @@ Proof
 QED
 
 Theorem refinement_RC_is_certified:
-  rel_prop R
+  rel_prop labels p p' R
   /\ refinement_RC
     (λ(s,M) (s',M'). ?prom. clstep (BirProgram p) cid s M prom s' /\ M = M')
     (λ(s,M) (s',M'). ?prom. clstep (BirProgram p') cid s M prom s' /\ M = M')
@@ -246,7 +284,7 @@ Proof
 QED
 
 Theorem refinement_RC_clstep_imp_parstep:
-  rel_prop R
+  rel_prop labels p p' R
   /\ refinement_RC
       (λ(s,M) (s',M'). ?prom. clstep (BirProgram p) cid s M prom s' /\ M = M')
       (λ(s,M) (s',M'). ?prom. clstep (BirProgram p') cid s M prom s' /\ M = M')
@@ -309,5 +347,280 @@ Proof
   )
   >> fs[FLOOKUP_UPDATE]
 QED
+
+Definition jump_from_to_blocks_def:
+  jump_from_to_blocks s p1 p2 =
+  !lbl.
+    MEM s.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p1
+    /\ is_jump_to_label p1 s lbl
+    /\ MEM lbl $ bir_labels_of_program $ BirProgram p2
+    ==> lbl = HD $ bir_labels_of_program $ BirProgram p2
+End
+
+Theorem clstep_APPEND_transition_within:
+  clstep (BirProgram $ p1 ++ p2) cid s M prom s'
+  /\ list_disj (bir_labels_of_program $ BirProgram p1)
+      (bir_labels_of_program $ BirProgram p2)
+  /\ MEM s.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p2
+  /\ ext_loops $ BirProgram p2
+  /\ transition_within p2 s
+  ==> MEM s'.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p2
+Proof
+  rpt strip_tac
+  >> imp_res_tac clstep_bgcs_imp
+  >> drule_then assume_tac bir_get_current_statement_MEM2
+  >> gs[list_disj_sym_imp]
+  >> imp_res_tac clstep_bgcs_cases
+  >> gvs[]
+  >> gvs[clstep_cases,bir_pc_next_def,bir_state_read_view_updates_def,bmc_exec_general_stmt_exists,bir_state_fulful_view_updates_def,fence_updates_def]
+  >~ [`bir_exec_stmt_cjmp`]
+  >- (
+    gs[is_jump_to_label_def,transition_within_def,bir_exec_stmt_cjmp_def,bir_state_set_typeerror_def,option_case_compute,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def]
+    >> BasicProvers.every_case_tac
+    >> gs[option_case_compute,IS_SOME_EXISTS,bir_block_pc_def]
+    >> fs[is_jump_def]
+  )
+  >~ [`bir_exec_stmt_assert`]
+  >- (
+    fs[bir_exec_stmt_assert_def,bir_state_set_typeerror_def]
+    >> rpt CASE_TAC >> fs[]
+  )
+  >~ [`bir_exec_stmt_assume`]
+  >- (
+    fs[bir_exec_stmt_assume_def,bir_state_set_typeerror_def]
+    >> rpt CASE_TAC >> fs[]
+  )
+  >~ [`bir_exec_stmt_halt`]
+  >- (
+    fs[bir_exec_stmt_halt_def,bir_state_set_typeerror_def]
+    >> rpt CASE_TAC >> fs[]
+  )
+  >~ [`bir_exec_stmt_jmp`]
+  >- (
+    fs[bir_exec_stmt_jmp_def,is_jump_to_label_def,transition_within_def,bir_state_set_typeerror_def,bir_exec_stmt_jmp_to_label_def,bir_block_pc_def]
+    >> rpt CASE_TAC
+    >> gs[bir_exec_stmt_jmp_to_label_def,is_jump_def]
+  )
+  >~ [`BSExt R`]
+  >- (
+    gs[transition_within_def,is_jump_to_label_def,bir_exec_stmt_jmp_to_label_APPEND2]
+    >> gs[bir_state_t_component_equality,bir_exec_stmt_jmp_to_label_def,bir_block_pc_def]
+    >> fs[is_jump_def,ext_loops_def]
+    >> cheat
+  )
+QED
+
+(* TODO is_jump within needs to comprise also faulty cases of
+   bir_exec_stmt_cjmp_def
+   bir_exec_stmt_jmp_def
+ *)
+Theorem clstep_APPEND_NOT_transition_within:
+  clstep (BirProgram $ p1 ++ p2) cid s M prom s'
+  /\ list_disj (bir_labels_of_program $ BirProgram p1)
+      (bir_labels_of_program $ BirProgram p2)
+  /\ MEM s.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p2
+  /\ ~transition_within p2 s
+  ==> MEM s'.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p1
+Proof
+  rpt strip_tac
+  >> imp_res_tac clstep_bgcs_imp
+  >> drule_then assume_tac bir_get_current_statement_MEM2
+  >> gs[list_disj_sym_imp]
+  >> imp_res_tac clstep_bgcs_cases
+  >> gvs[]
+  >> gvs[clstep_cases,bir_pc_next_def,bir_state_read_view_updates_def,bmc_exec_general_stmt_exists,bir_state_fulful_view_updates_def,fence_updates_def,transition_within_def]
+  >> cheat
+(*
+  >~ [`bir_exec_stmt_cjmp`]
+  >- (
+    gs[transition_within_def,bir_exec_stmt_cjmp_def,bir_state_set_typeerror_def,option_case_compute,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def]
+    >> BasicProvers.every_case_tac
+    >> gs[option_case_compute,IS_SOME_EXISTS,bir_block_pc_def]
+  )
+  >~ [`bir_exec_stmt_assert`]
+  >- (
+    fs[bir_exec_stmt_assert_def,bir_state_set_typeerror_def]
+    >> rpt CASE_TAC >> fs[]
+  )
+  >~ [`bir_exec_stmt_assume`]
+  >- (
+    fs[bir_exec_stmt_assume_def,bir_state_set_typeerror_def]
+    >> rpt CASE_TAC >> fs[]
+  )
+  >~ [`bir_exec_stmt_halt`]
+  >- (
+    fs[bir_exec_stmt_halt_def,bir_state_set_typeerror_def]
+    >> rpt CASE_TAC >> fs[]
+  )
+  >~ [`bir_exec_stmt_jmp`]
+  >- (
+    fs[bir_exec_stmt_jmp_def,transition_within_def,bir_state_set_typeerror_def,bir_exec_stmt_jmp_to_label_def,bir_block_pc_def]
+    >> rpt CASE_TAC
+    >> gs[bir_exec_stmt_jmp_to_label_def]
+    >> first_x_assum drule
+    >> fs[]
+  )
+  >~ [`BSExt R`]
+  >- (
+    fs[transition_within_def]
+    >> first_x_assum drule
+    >> fs[]
+  )
+*)
+QED
+
+(* when concrete level code does a jump outside, so does the abstract level *)
+
+Theorem claim:
+  clstep (BirProgram p) cid cs M prom cs'
+  /\ ~(transition_within p cs)
+  /\ R (cs,M) (as,aM)
+  ==> clstep (BirProgram p') cid as aM prom as' /\ ~(transition_within p' as')
+Proof
+  cheat (* jump_from_to_blocks_def *)
+QED
+
+Theorem transition_within_eq_bst_status:
+  clstep (BirProgram p) cid s M prom s'
+  /\ MEM s.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p
+  ==> transition_within p s = !x. s'.bst_status <> BST_JumpOutside x
+Proof
+  cheat (* reprove due to changed definition *)
+(*
+  rpt strip_tac
+  >> gvs[clstep_cases,transition_within_def,bir_pc_next_def,bir_state_read_view_updates_def,bmc_exec_general_stmt_exists,bir_state_fulful_view_updates_def,fence_updates_def,bir_eval_exp_view_def]
+  >~ [`bir_exec_stmt_cjmp`]
+  >- (
+    gs[bir_exec_stmt_cjmp_def,bir_state_set_typeerror_def,option_case_compute,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def]
+    >> BasicProvers.every_case_tac
+    >> gvs[option_case_compute,IS_SOME_EXISTS,bir_block_pc_def]
+    >> rpt strip_tac
+    >> gs[is_jump_to_label_def,is_jump_def]
+    >> cheat
+  )
+  >~ [`bir_exec_stmt_assert`]
+  >- (
+    fs[bir_exec_stmt_assert_def,bir_state_set_typeerror_def]
+    >> rpt CASE_TAC >> fs[]
+  )
+  >~ [`bir_exec_stmt_assume`]
+  >- (
+    fs[bir_exec_stmt_assume_def,bir_state_set_typeerror_def]
+    >> rpt CASE_TAC >> fs[]
+  )
+  >~ [`bir_exec_stmt_halt`]
+  >- (
+    fs[bir_exec_stmt_halt_def,bir_state_set_typeerror_def]
+    >> rpt CASE_TAC >> fs[]
+  )
+  >~ [`bir_exec_stmt_jmp`]
+  >- (
+    fs[bir_exec_stmt_jmp_def,bir_state_set_typeerror_def,bir_exec_stmt_jmp_to_label_def,bir_block_pc_def]
+    >> rpt CASE_TAC
+    >> gvs[bir_exec_stmt_jmp_to_label_def]
+    >> cheat
+  )
+  >~ [`BSExt R`]
+  >- (
+    fs[bir_block_pc_def,bir_labels_of_program_def]
+    >> first_x_assum drule
+    >> fs[]
+    >> cheat
+  )
+*)
+QED
+
+Theorem refinement_composition:
+     ALL_DISTINCT $ bir_labels_of_program $ BirProgram $ p1 ++ p2
+  /\ ALL_DISTINCT $ bir_labels_of_program $ BirProgram $ p2' ++ p1'
+  /\ list_disj (bir_labels_of_program $ BirProgram p1)
+           (bir_labels_of_program $ BirProgram p2)
+  /\ list_disj (bir_labels_of_program $ BirProgram p1')
+           (bir_labels_of_program $ BirProgram p2')
+  /\ rel_prop labels p1 p1' R /\ rel_prop labels p2 p2' R'
+  /\ refinement_RC
+    (λ(s,M) (s',M'). ?prom. clstep (BirProgram p1 ) cid s M prom s' /\ M = M')
+    (λ(s,M) (s',M'). ?prom. clstep (BirProgram p1') cid s M prom s' /\ M = M')
+    R
+  /\ ext_loops $ BirProgram $ p1 
+  /\ ext_loops $ BirProgram $ p2
+  /\ refinement_RC
+    (λ(s,M) (s',M'). ?prom. clstep (BirProgram p2 ) cid s M prom s' /\ M = M')
+    (λ(s,M) (s',M'). ?prom. clstep (BirProgram p2') cid s M prom s' /\ M = M')
+    R'
+  ==>
+  refinement_RC
+    (λ(s,M) (s',M'). ?prom. clstep (BirProgram $ p1 ++ p2  ) cid s M prom s' /\ M = M')
+    (λ(s,M) (s',M'). ?prom. clstep (BirProgram $ p1' ++ p2') cid s M prom s' /\ M = M')
+    (λ(s,M) (s',M').
+      if MEM s.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p1
+      then R (s,M) (s',M')
+      else R' (s,M) (s',M'))
+Proof
+  rpt strip_tac
+  >> rw[refinement_RC_thm]
+  >> fs[ELIM_UNCURRY,COND_RAND,COND_RATOR,COND_EXPAND_OR]
+  >> imp_res_tac clstep_bgcs_imp
+  >> imp_res_tac bir_get_current_statement_SOME_MEM
+  >> drule_then assume_tac bir_get_current_statement_MEM2
+  >> drule_then assume_tac bir_get_current_statement_MEM1
+  >> gs[list_disj_sym_imp,iffLR list_disj_spec,bir_labels_of_program_APPEND]
+  >> drule_then assume_tac bir_get_current_statement_SOME_MEM
+  >~ [`clstep (BirProgram $ p1 ++ p2) cid`,`MEM _ $ bir_labels_of_program $ BirProgram p1`]
+  >- (
+    cheat
+  )
+  (* TODO the unification does not happen simultaneously *)
+  >~ [`clstep (BirProgram $ p1 ++ p2) cid (FST cs)`,`MEM _ $ bir_labels_of_program $ BirProgram p2`]
+  >> Cases_on `transition_within p2 $ FST cs`
+  >- (
+    (* TODO reduce to refinement by clstep p1 *)
+    `MEM (FST cs').bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p2` by (
+      drule_all clstep_APPEND_transition_within
+      >> fs[]
+    )
+    >> fs[GSYM bir_labels_of_program_APPEND]
+    >> dxrule_then assume_tac clstep_imp_clstep_APPEND
+    >> gs[list_disj_sym_imp]
+    >> dxrule $ iffLR refinement_RC_thm
+    >> rename1 `R' cs as` >> PairCases_on `cs` >> PairCases_on `as`
+    >> gs[ELIM_UNCURRY,PULL_EXISTS,FORALL_PROD]
+    >> disch_then $ drule_all_then strip_assume_tac
+    (* establish RC clstep *)
+    >> mp_tac $ GEN_ALL clstep_RC_imp_clstep_APPEND2
+    >> fs[ELIM_UNCURRY]
+    >> `transition_within p2' as0` by (
+      (* TODO assert that external jumps are synchronised, thus
+addition to refinement assumptions rel_prop_def:
+        R s s' ==> transition_within p s = transition_within p' s'
+      *)
+      cheat
+    )
+    >> drule_then assume_tac list_disj_sym_imp
+    >> disch_then $ drule_then $ dxrule_then assume_tac
+    >> gs[]
+    >> fs[list_disj_spec]
+    >> cheat (* from assumptions *)
+  )
+  (* interesting case where we cannot reuse the other refinement *)
+  >> `~(MEM (FST cs').bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p2)
+    /\ MEM (FST cs').bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p1` by (
+    drule_all clstep_APPEND_NOT_transition_within
+    >> fs[list_disj_spec]
+  )
+  >> rename1 `R' cs as` >> PairCases_on `cs` >> PairCases_on `as`
+  >> dxrule_then (drule_then strip_assume_tac) $ iffLR rel_prop_def
+  >> gs[]
+  >> irule_at Any RC_SUBSET
+  >> fs[LAMBDA_PROD,EXISTS_PROD,PULL_EXISTS]
+  (* use refinement theorem *)
+  >> `PERM (p1 ++ p2) $ p2 ++ p1` by fs[sortingTheory.PERM_APPEND]
+  >> fs[GSYM bir_labels_of_program_APPEND]
+  >> dxrule_then assume_tac clstep_imp_clstep_APPEND
+  >> gs[list_disj_sym_imp]
+  >> cheat
+QED
+
+(* TODO refinement_composition also for parstep *)
 
 val _ = export_theory ();

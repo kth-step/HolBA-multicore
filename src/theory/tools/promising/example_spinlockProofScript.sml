@@ -1,5 +1,19 @@
 (*
- * Spinlock proofs
+ * Implements some reasoning of the spinlock program, a manual refinement proof
+ * and steps towards automatic proofs using the post condition library.
+ *
+ * The concrete manual proof for the spinlock makes use of the manually defined
+ * invariant slc_inv_def with theorems cstep_slc_inv and
+ * full correctness `parstep_spinlock_concrete_mem_correct`. The refinement
+ * is defined in `spinlock_ref1_core_def` (related to the note) and its proof
+ * outlined in `clstep_preserves_spinlock_ref1_core`,
+ * `cstep_preserves_spinlock_ref1_core`, and `parstep_preserves_spinlock_ref1`.
+ * Ultimately correctness is stated in `parstep_spinlock_concrete_mem_correct`.
+ *
+ * Contains a definition of mutual exclusion mut_ex_def that should be proved
+ * from parstep_spinlock_concrete_mem_correct.
+ *
+ * Some futher experiments on code.
  *)
 
 open HolKernel Parse boolLib bossLib;
@@ -13,18 +27,247 @@ open strongPostCondLib
 
 val _ = new_theory "example_spinlockProof";
 
-Theorem bir_exec_stmt_cjmp_cases:
-  !xx p e a b s. (bir_exec_stmt_cjmp (BirProgram p) e (BLE_Label $ a) (BLE_Label $ b) s).bst_pc.bpc_label = xx
-  /\ MEM a $ bir_labels_of_program $ BirProgram p
-  /\ MEM b $ bir_labels_of_program $ BirProgram p
-  ==> (xx = a \/ xx = b \/ xx = s.bst_pc.bpc_label)
+val lock_prog = ``BirProgram (lock lock_addr lock_entry jump_after : (bmc_stmt_basic_t, mem_msg_t list # num list) bir_generic_block_t list)``
+
+val () = strong_post_define_consts lock_prog
+val () = strong_post_proof lock_prog
+
+val lock_blop = blop_prog_labels_thm lock_prog
+val lock_bgcs = bgcs_bmc_prog_thms lock_prog
+val lock_NOT_NULL = EVAL $ Term `~(NULL $ lock lock_addr lock_entry jump_after)`
+val lock_bir_pc_first = EVAL $ Term `bir_pc_first ^(lock_prog)`
+
+val lock_bgcs_impls =
+  CONJUNCTS lock_bgcs
+  |> map (fn x => try iffLR x handle _ => x)
+
+val lock_clstep_post_cond_inv = fetch (current_theory()) "lock_clstep_post_cond_inv"
+
+
+(*
+  fetch "-" "lock_post_cond_def"
+  val it =
+   ⊢ ∀M s jump_after lock_entry.
+       lock_post_cond M s (jump_after,lock_entry) ⇔
+       ∀lbl index.
+         bst_pc_tuple s.bst_pc = (BL_Address (Imm64 lbl),index) ⇒
+         (index = 0 ∧ lbl = lock_entry + 12w ⇒
+          bir_read_reg "x5" s.bst_environ 1w) ∧ ...
+*)
+
+(*
+  fetch "-" "lock_prog_individual_constraints_def"
+*)
+
+val lock_lin_term = #2 $ calculate_terms lock_prog
+
+(*
+val lock_lin_term =
+   “(lbl = lock_entry ∧ index = 0 ∨ lbl = lock_entry ∧ i
+     index = 0 ∧ lbl = lock_entry + 4w ∨ index = 0 ∧ lbl
+     index = 1 ∧ lbl = lock_entry + 8w ∨ index = 0 ∧ lbl
+     (index = 1 ∧ lbl = lock_entry + 12w) ∧
+     bir_eval_exp (BExp_Den (BVar "success" (BType_Imm B
+     SOME (BVal_Imm v_fail) ∨
+     (index = 0 ∧ lbl = lock_entry + 16w) ∧
+     bir_eval_exp (BExp_Den (BVar "success" (BType_Imm B
+     SOME (BVal_Imm v_fail) ⇒
+     control_point0) ∧
+    ((index = 1 ∧ lbl = lock_entry + 12w) ∧
+     bir_eval_exp (BExp_Den (BVar "success" (BType_Imm B
+     SOME (BVal_Imm v_succ) ∨
+     (index = 0 ∧ lbl = lock_entry + 16w) ∧
+     bir_eval_exp (BExp_Den (BVar "success" (BType_Imm B
+     SOME (BVal_Imm v_succ) ⇒
+     control_point1)”: term
+*)
+
+val unlock_prog = ``BirProgram (unlock lock_addr unlock_entry jump_after_unlock: (bmc_stmt_basic_t, mem_msg_t list # num list) bir_generic_block_t list)``
+val () = strong_post_define_consts unlock_prog
+val () = strong_post_proof unlock_prog
+
+val unlock_lin_term = #2 $ calculate_terms unlock_prog
+
+val unlock_blop = blop_prog_labels_thm unlock_prog
+val unlock_bgcs = bgcs_bmc_prog_thms unlock_prog
+val unlock_NOT_NULL = EVAL $ Term `~(NULL $ unlock lock_addr unlock_entry jump_after_unlock)`
+val unlock_bir_pc_first = EVAL $ Term `bir_pc_first ^(unlock_prog)`
+
+
+(*
+DB.find "unlock_clstep_post_cond_inv"
+find "unlock_prog_individual_constraints_def"
+find "unlock_prog_blop"
+bir_labels_of_program_unlock
+DB.thy $ current_theory()
+*)
+
+(* use of automatically generated functionality *)
+val x = fetch (current_theory()) "lock_clstep_post_cond_inv_BMCStmt_Load"
+
+(* pc is not in critical section - collection of linearisation points *)
+Definition non_crit_def:
+  non_crit s lock_entry unlock_entry <=>
+    !lbl index. bst_pc_tuple s.bst_pc = (BL_Address $ Imm64 lbl, index)
+    ==>
+    (lbl = lock_entry /\ index = 0 \/ lbl = lock_entry /\ index = 1 \/
+      index = 0 /\ lbl = lock_entry + 4w \/
+      index = 0 /\ lbl = lock_entry + 8w \/
+      index = 1 /\ lbl = lock_entry + 8w \/
+      index = 0 /\ lbl = lock_entry + 12w \/
+      (index = 1 /\ lbl = lock_entry + 12w /\ bir_eval_exp (BExp_Den (BVar "success" (BType_Imm Bit64))) s.bst_environ = SOME (BVal_Imm v_fail)) \/
+      (index = 0 /\ lbl = lock_entry + 16w /\ bir_eval_exp (BExp_Den (BVar "success" (BType_Imm Bit64))) s.bst_environ = SOME (BVal_Imm v_fail)))
+    (* after unlock *)
+    \/ (index = 1 /\ lbl = unlock_entry + 8w)
+End
+
+(* index of next_store to address *)
+Definition next_store_def:
+  next_store l M t = t + latest l t (REVERSE $ DROP t M)
+End
+
+Theorem next_store_mono:
+  t <= next_store l M t
 Proof
-  rpt gen_tac
-  >> csimp[bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_state_set_typeerror_def,bir_eval_label_exp_def,bir_exec_stmt_jmp_to_label_def,optionTheory.option_case_compute,bir_block_pc_def]
-  >> fs[COND_RATOR,COND_RAND]
-  >> BasicProvers.every_case_tac
-  >> gvs[]
+  fs[next_store_def]
 QED
+
+Theorem mem_get_DROP:
+  !t' t M l. 0 < t' ==> mem_get (DROP t M) l t' = mem_get M l (t + t')
+Proof
+  Cases >> fs[arithmeticTheory.ADD_CLAUSES,mem_get_def,oEL_DROP]
+QED
+
+Theorem mem_get_DROP':
+  !M l t t'. t < t' ==> mem_get M l t' = mem_get (DROP t M) l (t' - t)
+Proof
+  rpt strip_tac >> fs[mem_get_DROP]
+QED
+
+Theorem oEL_REVERSE:
+  0 < t /\ PRE t < LENGTH M
+  ==> oEL (PRE t) M = oEL (LENGTH M - t) (REVERSE M)
+Proof
+  csimp[oEL_THM,EL_REVERSE,COND_RAND,COND_RATOR,NOT_LESS]
+QED
+
+Theorem oEL_REVERSE':
+  x < LENGTH M /\ 0 < LENGTH M
+  ==> oEL x M = oEL (LENGTH M - SUC x) (REVERSE M)
+Proof
+  Cases_on `x` >> csimp[GSYM SUC_PRE,EL_REVERSE,oEL_THM]
+QED
+
+Theorem mem_get_eq':
+  !t M l. 0 < t ==> mem_get M l t = case oEL (PRE t) M of
+    NONE => NONE | SOME m => if m.loc = l then SOME m else NONE
+Proof
+  Cases >> fs[mem_get_def]
+QED
+
+Theorem mem_get_REVERSE:
+  !t. 0 < t /\ t < LENGTH M ==>
+    mem_get (REVERSE M) l t = mem_get M l $ SUC $ LENGTH M - t
+Proof
+  Cases_on `NULL M`
+  >> rpt strip_tac >> gs[NULL_EQ]
+  >> fs[Once oEL_REVERSE',mem_get_eq',iffLR SUC_PRE]
+QED
+
+Theorem mem_get_REVERSE':
+  !M l t. 0 < t /\ t < LENGTH M ==>
+    mem_get M l t = mem_get (REVERSE M) l $ SUC $ LENGTH M - t
+Proof
+  rpt strip_tac
+  >> qmatch_asmsub_rename_tac `LENGTH M`
+  >> qspec_then `M` mp_tac REVERSE_REVERSE
+  >> disch_then $ ONCE_REWRITE_TAC o single o GSYM
+  >> fs[mem_get_REVERSE]
+QED
+
+Theorem latestP_NULL:
+  !t P. latestP P t [] = 0
+Proof
+  Induct >> fs[bir_promising_wfTheory.latestP_def,oEL_THM]
+QED
+
+Theorem latest_NULL:
+  latest l t [] = 0
+Proof
+  fs[latest_def,latestP_NULL]
+QED
+
+Theorem next_store_NULL:
+  next_store l [] t = t
+Proof
+  fs[next_store_def,latest_NULL]
+QED
+
+(*
+Theorem next_store_spec:
+  !t t' l M. t < t' /\ t' < next_store l M t ==> IS_NONE $ mem_get M l t'
+Proof
+  rw[next_store_def] >> Cases_on `NULL M` >- fs[latest_NULL,NULL_EQ]
+  >> qmatch_asmsub_abbrev_tac `latest l t M'`
+  >> qspecl_then [`l`,`t`,`M'`] assume_tac bir_promising_wfTheory.latest_spec
+  >> Cases_on `t' < LENGTH M`
+  >> unabbrev_all_tac
+  >- (
+    qspecl_then [`M`,`l`,`t`,`t'`] mp_tac mem_get_DROP'
+    >> fs[]
+    >> disch_then kall_tac
+    >> qspecl_then [`DROP t M`,`l`,`t' - t`] mp_tac mem_get_REVERSE'
+    >> fs[GSYM LENGTH_NOT_NULL]
+    >> disch_then kall_tac
+    >> first_x_assum irule
+    >> imp_res_tac mem_get_LENGTH
+    >> gs[SUB_LEFT_LESS_EQ]
+QED
+*)
+
+Definition inv_non_crit_def:
+  inv_non_crit c M (lock_entry,unlock_entry) <=>
+  non_crit c lock_entry unlock_entry
+  ==> mem_read M lock_addr_val $ c.bst_coh lock_addr_val = SOME $ BVal_Imm v_fail
+    \/ mem_read M lock_addr_val $ c.bst_coh lock_addr_val = SOME $ BVal_Imm v_succ
+End
+
+(* Example proof using the automatically generated theorems *)
+
+(* ~non_crit ==> mem_read  (s.bst_coh lock_addr_val) (* taken or free *) *)
+Theorem lock_post_cond_imp:
+  ^(lock_clstep_post_cond_inv |> concl |> lhand)
+  /\ inv_non_crit c M (lock_entry,unlock_entry)
+  ==> inv_non_crit c' M (lock_entry,unlock_entry)
+Proof
+  rpt strip_tac
+  >> drule_all_then assume_tac lock_clstep_post_cond_inv
+  >> dxrule_then strip_assume_tac $ iffLR inv_non_crit_def
+  >> imp_res_tac clstep_bgcs_cases
+  >> fs[lock_bgcs,non_crit_def]
+  >> qhdtm_x_assum `BL_Address` $ assume_tac o GSYM
+  >> gvs[bst_pc_tuple_def,fetch "-" "lock_post_cond_def"]
+  >> gvs[inv_non_crit_def,non_crit_def]
+  >> cheat
+QED
+
+
+(* Proof approach for directly proving an invariant of the concrete program *)
+
+(* if current core reads its own lock then previous lock *)
+(* another core cannot have a timestamp within ~non_crit section that is between lock and unlock of a core *)
+Definition invariant_def:
+  invariant (lock_entry,unlock_entry) cores M <=>
+    !cid p s. FLOOKUP cores cid = SOME $ Core cid p s
+      /\ ~(non_crit s lock_entry unlock_entry)
+      /\ !cid' s'. FLOOKUP cores cid' = SOME $ Core cid' p s' /\ cid <> cid'
+      /\ ~(non_crit s' lock_entry unlock_entry)
+      /\ s.bst_coh lock_addr_val < s'.bst_coh lock_addr_val
+      /\ latest lock_addr_val (s'.bst_coh lock_addr_val)  M = s.bst_coh lock_addr_val (* s' is immediate next store after s {{*)
+      ==>
+        mem_read M lock_addr_val $ s'.bst_coh lock_addr_val = SOME $ BVal_Imm v_fail (* taken *)
+      /\ mem_read M lock_addr_val $ s.bst_coh lock_addr_val = SOME $ BVal_Imm v_succ (* free *)
+End
 
 Theorem LRC_APPEND:
   !ls1 ls2 R x y. ~NULL ls2
@@ -101,6 +344,272 @@ Proof
   >> fs[rich_listTheory.DROP_DROP_T,listTheory.EL_DROP,GSYM arithmeticTheory.ADD1,listTheory.TAKE1_DROP,listTheory.LRC_def]
 QED
 
+(* from $CAKEMLDIR/misc/miscScript.sml *)
+Definition steps_rel_def:
+  steps_rel R x [] = T
+  /\ (steps_rel R x ((j,y)::tr) <=> R x j y /\ steps_rel R y tr)
+End
+
+(* definition of a trace *)
+
+Definition trace_from_l_def:
+  trace_from_l cores_from tr =
+    steps_rel (λ(cores,M) cid (cores',M'). parstep cid cores M cores' M') cores_from tr
+End
+
+Theorem trace_from_wf:
+  !tr cores M.
+  trace_from_l (cores,M) tr /\ well_formed_cores cores M /\ well_formed_ext_cores cores
+  ==> EVERY (λ(lbl,(cores,M)). well_formed_cores cores M /\ well_formed_ext_cores cores) tr
+Proof
+  Induct >> fs[trace_from_l_def,pairTheory.FORALL_PROD]
+  >> rpt gen_tac >> strip_tac
+  >> fs[steps_rel_def]
+  >> drule_all_then assume_tac parstep_preserves_wf
+  >> drule_all_then assume_tac parstep_preserves_wf_ext_cores
+  >> first_x_assum $ drule_then $ irule_at Any
+  >> asm_rewrite_tac[]
+QED
+
+Definition trace_from_def:
+  trace_from x tr <=>
+    ?tr'. trace_from_l x tr' /\ tr = MAP SND tr'
+End
+
+(* spinlock trace *)
+
+Definition spl_trace_def:
+  spl_trace params tr =
+    ?cores blocks jump_after unlock_entry. init cores
+    /\ params = (blocks,jump_after,unlock_entry)
+    /\ (!cid s p. FLOOKUP cores cid = SOME $ Core cid p s ==> p = spinlock_concrete2 blocks jump_after unlock_entry)
+    /\ trace_from_l (cores,[]) tr
+End
+
+(* There is The point in a trace (not certifying), when a promise is made *)
+(* subsumed by more specific version  parstep_promise_step_LRC *)
+Theorem parstep_promise_step_RTC:
+  !t cores M cores' M'.
+  RTC (λ(cores,M) (cores',M'). ?cid. parstep cid cores M cores' M') (cores,M) (cores',M')
+  /\ LENGTH M < t /\ t <= LENGTH M' /\ 0 < t
+  ==> ?cores'' M'' cores''' M''' cid.
+    RTC (λ(cores,M) (cores',M'). ?cid. parstep cid cores M cores' M') (cores,M) (cores'',M'')
+    /\ RTC (λ(cores,M) (cores',M'). ?cid. parstep cid cores M cores' M') (cores''',M''') (cores',M')
+    /\ parstep cid cores'' M'' cores''' M'''
+    /\ (EL (PRE t) M''').cid = cid /\ SUC $ LENGTH M'' = t /\ LENGTH M''' = t
+Proof
+  rpt strip_tac
+  >> dxrule_then strip_assume_tac arithmeticTheory.RTC_NRC
+  >> qmatch_asmsub_rename_tac `NRC _ n (cores,M) (cores',M')`
+  >> qmatch_asmsub_abbrev_tac `NRC R n (cores,M) (cores',M')`
+  >> Cases_on `0 < n` >> gvs[]
+  >> Cases_on `!m. m <= n ==> !cores'' M''.
+    NRC R m (cores,M) (cores'',M'') /\ NRC R (n - m) (cores'',M'') (cores',M')
+    ==> LENGTH M'' < t`
+  >- (first_x_assum $ drule_at Any >> fs[])
+  >> PRED_ASSUM is_neg $ mp_tac o SIMP_RULE std_ss [NOT_FORALL_THM]
+  >> qho_match_abbrev_tac `(?m. P' m) ==> _`
+  >> disch_then assume_tac
+  >> dxrule_then strip_assume_tac arithmeticTheory.WOP
+  >> qmatch_asmsub_rename_tac `P' m`
+  >> `0 < m /\ m <= n` by (
+    unabbrev_all_tac
+    >> fs[] >> Cases_on `m` >> gvs[]
+  )
+  >> `PRE m < m` by decide_tac
+  >> unabbrev_all_tac
+  >> Cases_on `m` >> gs[DISJ_EQ_IMP,arithmeticTheory.NRC_SUC_RECURSE_LEFT,pairTheory.LAMBDA_PROD]
+  >> fs[pairTheory.ELIM_UNCURRY,arithmeticTheory.NOT_LESS]
+  >> qmatch_asmsub_rename_tac `parstep cid (FST x)`
+  >> PairCases_on `x` >> fs[]
+  >> `LENGTH x1 < t` by (
+    first_x_assum irule
+    >> goal_assum $ drule_at Any
+    >> `n - n' = SUC $ n - SUC n'` by decide_tac
+    >> pop_assum $ ONCE_REWRITE_TAC o single
+    >> once_rewrite_tac[arithmeticTheory.NRC]
+    >> fs[PULL_EXISTS]
+    >> goal_assum $ drule_at Any
+    >> fs[]
+    >> goal_assum drule
+  )
+  >> drule_then strip_assume_tac $ iffLR parstep_cases
+  >> imp_res_tac cstep_mem_mono
+  >> gvs[cstep_cases,GSYM arithmeticTheory.ADD1]
+  >> qmatch_asmsub_rename_tac `t <= SUC $ LENGTH x1`
+  >> `t = SUC $ LENGTH x1` by fs[arithmeticTheory.LESS_OR_EQ]
+  >> drule_then (irule_at Any) arithmeticTheory.NRC_RTC
+  >> drule_then (irule_at Any) arithmeticTheory.NRC_RTC
+  >> fs[rich_listTheory.EL_APPEND2]
+QED
+
+
+Definition parstep_tr_def:
+  parstep_tr cid tpM tpM' = parstep cid (FST tpM) (SND tpM) (FST tpM') (SND tpM')
+End
+
+(* existence of index in trace where a promise is discharged finally proving
+ * uniqueness in prom_disch_index_distinct_time *)
+
+(* TODO move next to is_certified_promise_disch *)
+(* parstep_promise_step_RTC *)
+(* There is The point in a trace (not certifying), when a promise is made *)
+Theorem parstep_promise_step_LRC:
+  !cores M t R ls cores' M'.
+  Abbrev (R = (λcM cM'. ?cid. parstep_tr cid cM cM'))
+  /\ LRC R ls (cores,M) (cores',M')
+  /\ LENGTH M < t /\ t <= LENGTH M'
+  ==> ?k last. (* t <= k : consequence of #memory updates <= #transitions  *)
+    SUC k <= LENGTH ls
+    /\ last = (if SUC k = LENGTH ls then (cores',M') else EL (SUC k) ls)
+    /\ LRC R (TAKE k ls) (cores,M) (EL k ls)
+    /\ LRC R (DROP (SUC k) ls) last (cores',M')
+    /\ SUC $ LENGTH $ SND $ EL k ls = t
+    /\ LENGTH $ SND $ last = t
+    /\ ?cid. parstep_tr cid (EL k ls) last
+    /\ (EL (PRE t) $ SND $ last).cid = cid
+Proof
+  rpt strip_tac
+  >> qmatch_asmsub_rename_tac `LRC _ ls (cores,M) (cores',M')`
+  >> qabbrev_tac `n = LENGTH ls`
+  >> qmatch_asmsub_abbrev_tac `LRC R ls (cores,M) (cores',M')`
+  >> Cases_on `0 < n` >> gvs[listTheory.LRC_def]
+  >> Cases_on `!m. m <= n ==> !cM''. (cM'' = if m = n then (cores',M') else EL m ls)
+    /\ LRC R (TAKE m ls) (cores,M) cM'' /\ LRC R (DROP m ls) cM'' (cores',M')
+    ==> LENGTH $ SND cM'' < t`
+  >- (
+    `n <= n` by fs[]
+    >> first_x_assum drule
+    >> unabbrev_all_tac
+    >> fs[TAKE_LENGTH_ID,DROP_LENGTH_NIL,LRC_def]
+  )
+  >> PRED_ASSUM is_neg $ mp_tac o SIMP_RULE std_ss [NOT_FORALL_THM]
+  >> qho_match_abbrev_tac `(?m. P' m) ==> _`
+  >> disch_then assume_tac
+  >> dxrule_then strip_assume_tac arithmeticTheory.WOP
+  >> qmatch_asmsub_rename_tac `P' m`
+  >> `0 < m /\ m <= n` by (
+    unabbrev_all_tac
+    >> gvs[GSYM NULL_EQ,LENGTH_NOT_NULL]
+    >> imp_res_tac LRC_HD
+    >> fs[] >> Cases_on `m`
+    >> gs[pairTheory.ELIM_UNCURRY,GSYM NULL_EQ]
+    >> pop_assum $ fs o single o GSYM
+  )
+  >> `PRE m < m` by decide_tac
+  >> unabbrev_all_tac
+  >> Cases_on `m` >> gs[DISJ_EQ_IMP,arithmeticTheory.NRC_SUC_RECURSE_LEFT,pairTheory.LAMBDA_PROD]
+  >> fs[pairTheory.ELIM_UNCURRY,arithmeticTheory.NOT_LESS]
+  >> qmatch_asmsub_rename_tac `SUC n <= LENGTH ls`
+  >> `LENGTH $ SND $ EL n ls < t` by (
+    first_x_assum irule
+    >> rev_drule_at (Pat `LRC`) $ iffLR LRC_TAKE_DROP
+    >> fs[]
+  )
+  >> PRED_ASSUM is_forall kall_tac
+  >> gs[LRC_TAKE_SUC]
+  >> rpt $ goal_assum $ drule_at $ Pat `LRC`
+  >> unabbrev_all_tac
+  >> fs[parstep_tr_def]
+  >> REWRITE_TAC[CONJ_ASSOC]
+  >> qmatch_goalsub_abbrev_tac `A /\ parstep cid' _ _ _ _`
+  >> qsuff_tac `cid' = cid /\ A` >- fs[]
+  >> unabbrev_all_tac
+  >> qmatch_asmsub_abbrev_tac `parstep _ _ _ _ $ SND last`
+  >> drule_then strip_assume_tac $ iffLR parstep_cases
+  >> imp_res_tac cstep_mem_mono
+  >> gvs[cstep_cases,GSYM ADD1]
+  >> qmatch_asmsub_rename_tac `t <= SUC $ LENGTH $ SND $ EL n ls`
+  >> `t = SUC $ LENGTH $ SND $ EL n ls` by fs[arithmeticTheory.LESS_OR_EQ]
+  >> fs[rich_listTheory.EL_APPEND2]
+QED
+
+Definition trace_prom_index_def:
+  trace_prom_index cores M t ls cores' M' k =
+  ?R last. (R = (λcM cM'. ?cid. parstep_tr cid cM cM'))
+    /\ SUC k <= LENGTH ls
+    /\ last = (if SUC k = LENGTH ls then (cores',M') else EL (SUC k) ls)
+    /\ LRC R (TAKE k ls) (cores,M) (EL k ls)
+    /\ LRC R (DROP (SUC k) ls) last (cores',M')
+    /\ SUC $ LENGTH $ SND $ EL k ls = t
+    /\ LENGTH $ SND $ last = t
+    /\ ?cid. parstep_tr cid (EL k ls) last
+    /\ (EL (PRE t) $ SND $ last).cid = cid
+End
+
+Theorem trace_prom_index_exists:
+  !cores M t R ls cores' M'.
+  Abbrev (R = (λcM cM'. ?cid. parstep_tr cid cM cM'))
+  /\ LRC R ls (cores,M) (cores',M')
+  /\ LENGTH M < t /\ t <= LENGTH M'
+  ==> ?k. trace_prom_index cores M t ls cores' M' k
+Proof
+  rw[trace_prom_index_def]
+  >> drule_all_then strip_assume_tac parstep_promise_step_LRC
+  >> rpt $ goal_assum $ drule_at Any
+  >> gs[]
+QED
+
+Theorem trace_prom_index_unique:
+  !k k' cores M t R ls cores' M'.
+  Abbrev (R = (λcM cM'. ?cid. parstep_tr cid cM cM'))
+  /\ LRC R ls (cores,M) (cores',M')
+  /\ LENGTH M < t /\ t <= LENGTH M'
+  /\ trace_prom_index cores M t ls cores' M' k
+  /\ trace_prom_index cores M t ls cores' M' k'
+  ==> k = k'
+Proof
+  ntac 2 gen_tac
+  >> spose_not_then mp_tac
+  >> wlog_tac `k < k'` []
+  >- (
+    strip_tac
+    >> dxrule_then assume_tac LESS_CASES_IMP
+    >> gs[AND_IMP_INTRO,PULL_FORALL,DISJ_EQ_IMP]
+    >> first_x_assum drule
+    >> ntac 2 $ disch_then $ drule_at Any
+    >> strip_tac
+    >> gs[]
+  )
+  >> strip_tac
+  >> fs[trace_prom_index_def]
+  >> cheat (* the promise t can only be fulfiled once *)
+QED
+
+(* uniqueness of index in trace where a promise is discharged *)
+
+(* for a promise in a trace  trace_from cores_from tr
+ * returns the index at which the promise is discharged
+ *)
+Definition prom_disch_index_def:
+  prom_disch_index t (cores,M) tr =
+    if ~NULL tr /\ 0 < t /\ t <= LENGTH $ SND $ LAST tr
+    then SOME @k. trace_prom_index cores M t tr (FST $ LAST tr) (SND $ LAST tr) k
+    else NONE
+End
+
+Theorem prom_disch_index_distinct_time:
+  Abbrev (R = (λcM cM'. ?cid. parstep_tr cid cM cM'))
+  /\ LRC R tr (cores,M) (cores',M')
+  /\ prom_disch_index t (cores,M) tr = SOME k
+  /\ prom_disch_index t' (cores,M) tr = SOME k'
+  ==> (t <> t' <=> k <> k')
+Proof
+  cheat (* trace_prom_index_unique *)
+QED
+
+Theorem bir_exec_stmt_cjmp_cases:
+  !xx p e a b s. (bir_exec_stmt_cjmp (BirProgram p) e (BLE_Label $ a) (BLE_Label $ b) s).bst_pc.bpc_label = xx
+  /\ MEM a $ bir_labels_of_program $ BirProgram p
+  /\ MEM b $ bir_labels_of_program $ BirProgram p
+  ==> (xx = a \/ xx = b \/ xx = s.bst_pc.bpc_label)
+Proof
+  rpt gen_tac
+  >> csimp[bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_state_set_typeerror_def,bir_eval_label_exp_def,bir_exec_stmt_jmp_to_label_def,optionTheory.option_case_compute,bir_block_pc_def]
+  >> fs[COND_RATOR,COND_RAND]
+  >> BasicProvers.every_case_tac
+  >> gvs[]
+QED
 
 (* relation that states equality of an fmap and a map 'a -> ('b option) *)
 Definition env_to_fmap_def:
@@ -221,8 +730,8 @@ Proof
 QED
 
 Theorem cstep_same_label:
-  !P p cid s M prom s' M' stmt.
-  cstep P p cid s M prom s' M'
+  !p cid s M prom s' M' stmt.
+  cstep p cid s M prom s' M'
   /\ bir_get_current_statement p s.bst_pc = SOME stmt
   /\ ((!cond_e lbl1 lbl2. stmt <> BSGen $ BStmtE $ BStmt_CJmp cond_e lbl1 lbl2)
     /\ (!lbl. stmt <> BSGen $ BStmtE $ BStmt_Jmp lbl)
@@ -233,10 +742,6 @@ Proof
   >> fs[cstep_cases,clstep_cases,bir_pc_next_def,bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,fence_updates_def]
   >> gvs[bmc_exec_general_stmt_exists,AllCaseEqs(),bir_exec_stmt_halt_def,bir_exec_stmt_assume_def,bir_exec_stmt_assert_def,bir_state_set_typeerror_def]
 QED
-
-Definition parstep_tr_def:
-  parstep_tr P cid tpM tpM' = parstep P cid (FST tpM) (SND tpM) (FST tpM') (SND tpM')
-End
 
 Theorem FEVERY_FLOOKUP_eq:
   !P fmap. FEVERY P fmap = !id v. FLOOKUP fmap id = SOME v ==> P (id,v)
@@ -360,20 +865,9 @@ Definition run_progc_def:
   run_progc cores p = run_prog cores (λx:num. p)
 End
 
-Theorem parstep_FLOOKUP:
-  !p' p cid' cid cores M cores' M' s s' P.
-    FLOOKUP cores cid = SOME $ Core cid p s
-    /\ parstep P cid cores M cores' M'
-    /\ FLOOKUP cores' cid = SOME $ Core cid' p' s'
-    ==> cid' = cid /\ p = p'
-Proof
-  rpt gen_tac >> strip_tac
-  >> gvs[FLOOKUP_UPDATE,cstep_cases,parstep_cases]
-QED
-
 Theorem run_prog_parstep_preserves:
-  !cid cores M cores' M' prog P.
-  parstep P cid cores M cores' M'
+  !cid cores M cores' M' prog.
+  parstep cid cores M cores' M'
   /\ run_prog cores prog
   ==> run_prog cores' prog
 Proof
@@ -500,12 +994,12 @@ Theorem registers_of_prog_lock =
   EVAL ``nub $ registers_of_prog (BirProgram $ lock lock_addr 0w jump_after)``
 
 Theorem registers_of_prog_unlock =
-  EVAL ``nub $ registers_of_prog (BirProgram $ unlock lock_addr unlock_entry)``
+  EVAL ``nub $ registers_of_prog (BirProgram $ unlock lock_addr unlock_entry jump_after_unlock: (bmc_stmt_basic_t, mem_msg_t list # num list) bir_generic_block_t list)``
 
 (* separation of registers *)
 Definition registers_wf_def:
-  registers_wf blocks jump_after unlock_entry <=>
-    list_disj (registers_of_prog $ BirProgram blocks) $ registers_of_prog ((BirProgram $ unlock lock_addr unlock_entry) : progc_t)
+  registers_wf blocks jump_after unlock_entry jump_after_unlock <=>
+    list_disj (registers_of_prog $ BirProgram blocks) $ registers_of_prog ((BirProgram $ unlock lock_addr unlock_entry jump_after_unlock) : progc_t)
     /\ list_disj (registers_of_prog $ BirProgram blocks) $ registers_of_prog ((BirProgram $ lock lock_addr 0w jump_after) : progc_t)
 End
 
@@ -522,36 +1016,22 @@ Definition state_mod_subset_def:
     /\ !x y. s with <| bst_environ := x; bst_viewenv := y |> = s' with <| bst_environ := x; bst_viewenv := y |>
 End
 
-
-
-(* TODO define the state separation property depending on
-
-registers_of_prog (BirProgram $ lock lock_addr 0w jump_after)
-/\ registers_of_prog (BirProgram $ unlock lock_addr unlock_entry)
-
-for the refinement property and add it to the refinement relation
-
-fmap restricted inclusion
-
-*)
-
-
-(* well-formed labels *)
+(* well-formed labels for the spinlock example *)
 Definition labels_wf_def:
-  labels_wf blocks jump_after unlock_entry <=>
-    list_disj (bir_labels_of_program $ BirProgram blocks) $ bir_labels_of_program ((BirProgram $ unlock lock_addr unlock_entry) : progc_t)
+  labels_wf blocks jump_after unlock_entry jump_after_unlock <=>
+    list_disj (bir_labels_of_program $ BirProgram blocks) $ bir_labels_of_program ((BirProgram $ unlock lock_addr unlock_entry jump_after_unlock) : progc_t)
     /\ list_disj (bir_labels_of_program $ BirProgram blocks) $ bir_labels_of_program ((BirProgram $ lock lock_addr 0w jump_after) :  progc_t)
     /\ list_disj
       (bir_labels_of_program ((BirProgram $ lock lock_addr 0w jump_after) : progc_t))
-      $ bir_labels_of_program ((BirProgram $ unlock lock_addr unlock_entry) : progc_t)
+      $ bir_labels_of_program ((BirProgram $ unlock lock_addr unlock_entry jump_after_unlock) : progc_t)
     /\ ALL_DISTINCT $
-        bir_labels_of_program ((BirProgram $ lock lock_addr 0w jump_after ++ unlock lock_addr unlock_entry ++ blocks) : progc_t)
+        bir_labels_of_program ((BirProgram $ lock lock_addr 0w jump_after ++ unlock lock_addr unlock_entry jump_after_unlock ++ blocks) : progc_t)
     /\ MEM jump_after $ bir_labels_of_program $ BirProgram blocks
-    /\ ~(MEM (BL_Address $ Imm64 $ unlock_entry + 12w) $ bir_labels_of_program $ (BirProgram $ lock lock_addr 0w jump_after ++ blocks ++ unlock lock_addr unlock_entry) : progc_t)
+    /\ ~(MEM (BL_Address $ Imm64 $ unlock_entry + 12w) $ bir_labels_of_program $ (BirProgram $ lock lock_addr 0w jump_after ++ blocks ++ unlock lock_addr unlock_entry jump_after_unlock) : progc_t)
 End
 
 Theorem labels_wf_eq =
-  REFL ``labels_wf blocks jump_after unlock_entry``
+  REFL ``labels_wf blocks jump_after unlock_entry jump_after_unlock``
   |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss)
     [labels_wf_def,bir_labels_of_program_unlock,bir_labels_of_program_lock,list_disj_def,bir_labels_of_program_APPEND]
   |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.CONJ_ss) []
@@ -562,41 +1042,85 @@ Theorem labels_wf_imp =
 
 Theorem labels_wf_jump_after_lock_unlock:
   !blocks jump_after unlock_entry.
-  labels_wf blocks jump_after unlock_entry
-  ==> ~(MEM jump_after $ bir_labels_of_program ((BirProgram $ unlock lock_addr unlock_entry) : progc_t))
+  labels_wf blocks jump_after unlock_entry jump_after_unlock
+  ==> ~(MEM jump_after $ bir_labels_of_program ((BirProgram $ unlock lock_addr unlock_entry jump_after_unlock) : progc_t))
     /\ ~(MEM jump_after $ bir_labels_of_program ((BirProgram $ lock lock_addr 0w jump_after) :  progc_t))
 Proof
-  fs[labels_wf_def,list_disj_def]
+  rw[labels_wf_def,list_disj_spec_ho]
 QED
 
 Theorem labels_wf_jump_after =
   labels_wf_jump_after_lock_unlock
   |> SIMP_RULE (srw_ss()) [bir_labels_of_program_lock,bir_labels_of_program_unlock,AC CONJ_ASSOC CONJ_COMM]
 
-(*
-Theorem is_load_spinlock_concrete2 =
-  REFL ``is_load (spinlock_concrete2 blocks unlock_entry) pc a_e``
-  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) [is_load_def,is_store_def,bir_get_spinlock_cprog_zoo]
-  |> GEN_ALL
-
-Theorem is_store_spinlock_concrete2 =
-  REFL ``is_store (spinlock_concrete2 blocks unlock_entry) pc a_e``
-  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) [is_load_def,is_store_def,bir_get_spinlock_cprog_zoo]
-  |> GEN_ALL
-*)
-
 Theorem spinlock_concrete_wf_ext:
   !cid s M blocks jump_after unlock_entry.
-    labels_wf blocks jump_after unlock_entry
+    labels_wf blocks jump_after unlock_entry (BL_Address (Imm64 (unlock_entry + 12w)))
     /\ wf_ext (BirProgram blocks) cid s M
     ==> wf_ext (spinlock_concrete2 blocks jump_after unlock_entry) cid s M
 Proof
   rw[wf_ext_def,spinlock_concrete2_def,lock_wrap_def,labels_wf_def]
   >> gs[list_disj_sym_imp,list_disj_append1,list_disj_append2,bir_labels_of_program_APPEND,bir_get_current_statement_BirProgram_APPEND]
-  >> BasicProvers.every_case_tac
-  >> fs[bgcs_lock_zoo,bgcs_unlock_zoo]
-  >> first_x_assum $ drule_then irule
+  >> gvs[COND_RAND,COND_RATOR,COND_EXPAND_OR]
+  >> gs[bgcs_lock_zoo,bgcs_unlock_zoo]
+  >> first_x_assum drule_all
+  >> fs[]
 QED
+
+(* formulation of mutual exclusion for the promising semantics *)
+
+(* mutual exclusion
+ * for a trace with two stores t and t' to protected locations by different
+ * cores with t < t' it holds that at state of the promise of t it is impossible
+ * for a store to M(t').loc of any value to be (promised and) certified.
+ *)
+
+Definition mut_ex_def:
+  mut_ex x procloc <=>
+    !tr t t' k k' loc loc' cid cid'.
+    trace_from x tr /\ 0 < t /\ t < t' /\ t' < LENGTH tr
+    /\ prom_disch_index t x tr = SOME k
+    /\ prom_disch_index t' x tr = SOME k'
+    /\ loc = (EL t $ SND $ LAST tr).loc /\ loc' = (EL t' $ SND $ LAST tr).loc
+    /\ cid = (EL t $ SND $ LAST tr).cid /\ cid' = (EL t' $ SND $ LAST tr).cid
+    /\ MEM loc procloc /\ MEM loc' procloc
+    /\ cid <> cid'
+    ==> k < k'
+End
+
+(* theorem statement *)
+Theorem mut_ex_spinlock_concrete2:
+  init cores
+  /\ labels_wf blocks jump_after unlock_entry (BL_Address (Imm64 (unlock_entry + 12w)))
+  /\ prog_addr64 blocks
+  /\ jump_constraints c.bst_pc c'.bst_pc
+    [unlock lock_addr unlock_entry jump_after_unlock: (bmc_stmt_basic_t, mem_msg_t list # num list) bir_generic_block_t list; lock lock_addr lock_entry jump_after : (bmc_stmt_basic_t, mem_msg_t list # num list) bir_generic_block_t list]
+  /\ (!cid p s. FLOOKUP cores cid = SOME $ Core cid p s
+    ==> p = spinlock_concrete2 blocks jump_after unlock_entry)
+  ==> mut_ex (cores,[]) procloc
+Proof
+  rw[mut_ex_def]
+  >> cheat
+(*
+trace_from_def
+trace_from_l_def
+steps_rel_def
+1)
+  1.1 unlock_i < lock_j are strictly ordered (lock-method correctness)
+  1.2 lock_i < unlock_i are strictly ordered (core control flow restrictions)
+2) Any of the stores to protected location is preceeded by a "lock" message (and potentially proceeded by a "unlock" message)
+    trace x tr
+    /\ prom_disch_index t x tr = SOME k /\  t stores to protected location
+    ==> ?t_lock t_unlock. t_lock <  t /\ t < t_unlock /\ .. lock/unlock timestamps of this core
+3) by 2) we get t
+  ?t'_lock t'_unlock. t'_lock <  t' /\ t' < t'_unlock
+  ?t_lock t_unlock. t_lock <  t /\ t < t_unlock
+  and by 1.1 either
+    t'_lock <  t' < t'_unlock < t_lock <  t < t_unlock , or
+    t_lock <  t < t_unlock < t'_lock <  t' < t'_unlock
+*)
+QED
+
 
 (* bir_eval_exp equalities *)
 
@@ -664,6 +1188,7 @@ End
 
 
 (* spinlock: concrete invariant, parameterised *)
+(* manually formulated invariant *)
 
 Definition slc_inv_def:
   slc_inv lock_entry jump_after unlock_entry cid s M <=>
@@ -804,7 +1329,7 @@ QED
 
 Theorem slc_inv_init:
   !cid jump_after blocks unlock_entry.
-    labels_wf blocks jump_after unlock_entry
+    labels_wf blocks jump_after unlock_entry (BL_Address (Imm64 (unlock_entry + 12w)))
     ==> slc_inv 0w jump_after unlock_entry cid (bmc_state_init $ spinlock_concrete2 blocks jump_after unlock_entry) []
 Proof
   rw[bir_init_progTheory.bmc_state_init_def,bir_pc_first_def,lock_wrap_def,lock_def,spinlock_concrete2_def,bir_programTheory.bir_label_of_block_def,bir_programTheory.bir_block_pc_def,bst_pc_tuple_def]
@@ -860,20 +1385,12 @@ Definition jump_constraints_def:
   ) sections
 End
 
-Theorem jump_constraints_eq:
-  !pc pc' lock_entry jump_after unlock_entry.
-  jump_constraints pc pc' [unlock lock_addr unlock_entry; lock lock_addr 0w jump_after]
-  <=>
-  (MEM pc'.bpc_label $ bir_labels_of_program $ BirProgram (unlock lock_addr unlock_entry) : progc_t
-    /\ pc' <> bir_block_pc (BL_Address $ Imm64 unlock_entry)
-    ==> MEM pc.bpc_label $ bir_labels_of_program $ BirProgram (unlock lock_addr unlock_entry) : progc_t)
-  /\ (MEM pc'.bpc_label $ bir_labels_of_program $ BirProgram (lock lock_addr 0w jump_after) : progc_t
-    /\ pc' <> bir_block_pc (BL_Address $ Imm64 0w)
-    ==> MEM pc.bpc_label $ bir_labels_of_program $ BirProgram (lock lock_addr 0w jump_after) : progc_t )
-Proof
-  dsimp[listTheory.EVERY_MEM,jump_constraints_def,bir_block_pc_def]
-  >> fs[lock_NOT_NULL,unlock_NOT_NULL,lock_bir_pc_first,unlock_bir_pc_first]
-QED
+(* automatically simplifying some jump constraints *)
+Theorem jump_constraints_eq =
+  REFL $ Term `jump_constraints pc pc' [unlock lock_addr unlock_entry jump_after_unlock; lock lock_addr 0w jump_after]`
+  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss)
+    [listTheory.EVERY_MEM,jump_constraints_def,bir_label_of_block_def,unlock_NOT_NULL,unlock_bir_pc_first,lock_NOT_NULL,lock_bir_pc_first]
+  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.CONJ_ss) []
 
 Theorem jump_constraints_thm:
   !pc pc' sections.
@@ -898,17 +1415,11 @@ Definition addr_unchanged_def:
   addr_unchanged addr pc coh coh' prom prom' M regions <=>
   EVERY (λprogl. ~(MEM pc.bpc_label $ bir_labels_of_program (BirProgram progl : progc_t))) regions
       ==> coh addr = coh' addr
-(* promset unchanged is a consequence of the above *)
-(*
-        /\ EVERY (λt. IS_SOME $ mem_read M addr t ==> MEM t prom') prom
-*)
 End
 
 Theorem addr_unchanged_imp_promises_unchanged_clstep:
   !addr s s' M regions prom progl cid.
   addr_unchanged addr s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M regions
-  (* No relation between regions and program required *)
-  (* /\ EVERY (λregion. ?ls ls'. progl = ls ++ region ++ ls') regions (* subset *) *)
   /\ clstep progl cid s M prom s'
   /\ EVERY (λprogl. ~(MEM s.bst_pc.bpc_label $ bir_labels_of_program (BirProgram progl : progc_t))) regions
   ==> EVERY (λt. IS_SOME $ mem_read M addr t ==> MEM t s'.bst_prom) s.bst_prom
@@ -959,9 +1470,9 @@ Proof
 QED
 
 Theorem addr_unchanged_imp_promises_unchanged_cstep:
-  !addr s s' M regions prom M' progl cid P.
+  !addr s s' M regions prom M' progl cid.
   addr_unchanged addr s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M regions
-  /\ cstep P progl cid s M prom s' M'
+  /\ cstep progl cid s M prom s' M'
   /\ EVERY (λprogl. ~(MEM s.bst_pc.bpc_label $ bir_labels_of_program (BirProgram progl : progc_t))) regions
   ==> EVERY (λt. IS_SOME $ mem_read M addr t ==> MEM t s'.bst_prom) s.bst_prom
 Proof
@@ -1026,10 +1537,10 @@ QED
 (* clstep preserves in_cs_inv as memory is unchanged *)
 Theorem clstep_in_cs_inv:
   !blocks jump_after unlock_entry cid s M s' prom.
-  labels_wf blocks jump_after unlock_entry
+  labels_wf blocks jump_after unlock_entry (BL_Address (Imm64 (unlock_entry + 12w)))
   /\ slc_inv 0w jump_after unlock_entry cid s M
   /\ addr_unchanged lock_addr_val s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M
-    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry]
+    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry $ BL_Address $ Imm64 $ unlock_entry + 12w]
   /\ in_cs_inv (BirProgram blocks) s.bst_pc.bpc_label M s.bst_coh lock_addr_val (Imm64 1w)
   /\ clstep (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s'
   ==> in_cs_inv (BirProgram blocks) s'.bst_pc.bpc_label M s'.bst_coh lock_addr_val (Imm64 1w)
@@ -1067,7 +1578,7 @@ Proof
     >> simp[list_disj_append2,bir_labels_of_program_APPEND]
     >> fs[labels_wf_def]
   )
-  >~ [`bir_labels_of_program $ BirProgram $ unlock lock_addr unlock_entry`]
+  >~ [`bir_labels_of_program $ BirProgram $ unlock lock_addr unlock_entry _`]
   >> rw[in_cs_inv_def]
   >> fs[optionTheory.IS_SOME_EXISTS]
   >> drule bir_get_current_statement_MEM2
@@ -1079,28 +1590,20 @@ Proof
   >> fs[AND_IMP_INTRO,FORALL_AND_THM,IMP_CONJ_THM]
   >> gvs[bir_labels_of_program_APPEND,bmc_exec_general_stmt_exists,bgcs_unlock_zoo]
   >> fs[bir_exec_stmt_jmp_def,bir_eval_label_exp_def,bir_programTheory.bir_exec_stmt_jmp_to_label_def,fence_updates_def,bir_pc_next_def]
-  >~ [`BSGen $ BStmtE $ BStmt_Jmp _`]
-  >- (
-    BasicProvers.every_case_tac
-    >> gs[bir_block_pc_def,bir_state_set_typeerror_def,bir_eval_label_exp_def]
-  )
-  >~ [`BSGen $ BStmtB $ BMCStmt_Fence _ _`]
-  >- gs[]
-  (* all remaining *)
-  >~ [`BSGen $ BStmtE $ BStmt_Jmp _`]
   >> fs[COND_RATOR,COND_RAND,bir_block_pc_def]
   >> BasicProvers.every_case_tac
   >> gs[]
 QED
+
 Theorem cstep_in_cs_inv:
-  !blocks jump_after unlock_entry cid s M s' M' prom P.
-  labels_wf blocks jump_after unlock_entry
+  !blocks jump_after unlock_entry cid s M s' M' prom.
+  labels_wf blocks jump_after unlock_entry (BL_Address (Imm64 (unlock_entry + 12w)))
   /\ slc_inv 0w jump_after unlock_entry cid s M
   /\ addr_unchanged lock_addr_val s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M
-    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry]
+    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry $ BL_Address $ Imm64 $ unlock_entry + 12w]
   /\ in_cs_inv (BirProgram blocks) s.bst_pc.bpc_label M s.bst_coh lock_addr_val (Imm64 1w)
   /\ well_formed cid M s
-  /\ cstep P (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s' M'
+  /\ cstep (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s' M'
   ==> in_cs_inv (BirProgram blocks) s'.bst_pc.bpc_label M' s'.bst_coh lock_addr_val (Imm64 1w)
 Proof
   rpt strip_tac >> gvs[cstep_cases]
@@ -1113,7 +1616,7 @@ QED
 
 (*
 Theorem cstep_seq_in_cs_inv:
-  !blocks jump_after unlock_entry cid s M s' M' P.
+  !blocks jump_after unlock_entry cid s M s' M'.
   labels_wf blocks jump_after unlock_entry
   /\ slc_inv 0w jump_after unlock_entry cid s M
   /\ addr_unchanged lock_addr_val s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M
@@ -1150,17 +1653,17 @@ QED
 *)
 
 Theorem clstep_slc_inv:
-  !cid s M prom s' blocks jump_after unlock_entry.
-  labels_wf blocks jump_after unlock_entry
+ !cid s M prom s' blocks jump_after unlock_entry.
+  labels_wf blocks jump_after unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)
   /\ wf_ext (BirProgram blocks : progc_t) cid s M
   /\ slc_inv 0w jump_after unlock_entry cid s M
   /\ well_formed cid M s
   /\ clstep (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s'
   /\ addr_unchanged lock_addr_val s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M
-    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry]
+    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry $ BL_Address $ Imm64 $ unlock_entry + 12w]
   /\ in_cs_inv (BirProgram blocks) s.bst_pc.bpc_label M s.bst_coh lock_addr_val (Imm64 1w)
   /\ jump_constraints s.bst_pc s'.bst_pc
-    [unlock lock_addr unlock_entry; lock lock_addr 0w jump_after]
+    [unlock lock_addr unlock_entry $ BL_Address $ Imm64 $ unlock_entry + 12w; lock lock_addr 0w jump_after]
   ==> slc_inv 0w jump_after unlock_entry cid s' M
 Proof
   rpt strip_tac
@@ -1188,7 +1691,7 @@ Proof
       >> cheat (* TODO add another constraint that prevents jump from blocks to the start of the lock *)
           (* clstep s M s' /\ jump_constraints ... => s'.bst_pc <> (0,0) *)
     )
-    >> Cases_on `MEM s'.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram (unlock lock_addr unlock_entry) : progc_t`
+    >> Cases_on `MEM s'.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram (unlock lock_addr unlock_entry $ BL_Address $ Imm64 $ unlock_entry + 12w) : progc_t`
     >- (
       last_x_assum $ drule_at_then Concl assume_tac
       >> gs[bir_block_pc_def]
@@ -1208,271 +1711,27 @@ Proof
     >> fs[bir_labels_of_program_lock,bir_labels_of_program_unlock]
     >> simp[slc_inv_def,bst_pc_tuple_def]
     >> imp_res_tac slc_inv_slc_mem_inv_imp
-    >> drule_all_then (irule_at Any) slc_mem_inv_subset
-    >> gen_tac >> strip_tac
-    >> fs[]
     >> fs[in_cs_inv_def] (* TODO can in_cs_inv be omitted *)
+    >> cheat (* using slc_mem_inv_subset *)
   )
   >> imp_res_tac clstep_MEM_bir_labels_of_program
+  >> qmatch_asmsub_abbrev_tac `addr_unchanged _ _ _ _ _ _ _ [A; C]`
   >> Cases_on `MEM s'.bst_pc.bpc_label (bir_labels_of_program (BirProgram blocks : progc_t))`
   >- (
-    
+    cheat
   )
   >> Cases_on `MEM s'.bst_pc.bpc_label (bir_labels_of_program (BirProgram A : progc_t))`
   >- (
-    
+    cheat
   )
   >> Cases_on `MEM s'.bst_pc.bpc_label (bir_labels_of_program (BirProgram C : progc_t))`
   >- (
-    
+    cheat
   )
-
-  >> fs[spinlock_concrete2_def,lock_wrap_def]
-  >> qmatch_asmsub_abbrev_tac `clstep (BirProgram $ A ++ blocks ++ C)`
-  >> qspecl_then [`A`,`blocks ++ C`,`s.bst_pc`] mp_tac bir_get_current_statement_BirProgram_APPEND
-  >> impl_tac >- fs[bir_labels_of_program_APPEND,list_disj_append2,list_disj_sym_imp,labels_wf_def]
-  >> qspecl_then [`blocks`,`C`,`s.bst_pc`] mp_tac bir_get_current_statement_BirProgram_APPEND
-  >> impl_tac >- fs[labels_wf_def]
-  >> qmatch_asmsub_rename_tac `lock lock_addr 0w jump_after`
-  >> qmatch_asmsub_rename_tac `unlock lock_addr unlock_entry`
-  >> rw[]
-  >> fs[bir_get_program_block_info_by_label_IS_SOME_MEM,labels_wf_imp]
-
-(*
-  >~ [`IS_SOME $ bir_get_program_block_info_by_label (BirProgram A) s.bst_pc.bpc_label`]
-  >- (
-  )
-  >~ [`bir_get_program_block_info_by_label (BirProgram blocks) s.bst_pc.bpc_label = NONE`,
-      `bir_get_program_block_info_by_label (BirProgram A) s.bst_pc.bpc_label = NONE`]
-  >- (
-    `IS_SOME $ bir_get_program_block_info_by_label (BirProgram C) s.bst_pc.bpc_label` by (
-      imp_res_tac clstep_MEM_bir_labels_of_program
-      >> imp_res_tac $ REWRITE_RULE[optionTheory.option_CLAUSES] bir_get_program_block_info_by_label_IS_NONE_NOT_MEM
-      >> cheat (* *)
-      clstep_bgcs_imp
-      >> gvs[]
-    )
-  )
-*)
-
-  >> qpat_x_assum `bir_get_current_statement (BirProgram (blocks ++ C)) _ = _` kall_tac
-  >> unabbrev_all_tac
-  >> gvs[clstep_cases,bgcs_lock_zoo,bgcs_unlock_zoo,bir_state_read_view_updates_def,bir_state_fulful_view_updates_def,bir_eval_exp_view_BExp_Const,GSYM lock_addr_val_def,combinTheory.APPLY_UPDATE_THM,fence_updates_def]
-
-  >~ [`s.bst_pc.bpc_label = BL_Address (Imm64 0w)`,`s.bst_pc.bpc_index = 0`]
-  >- (
-    gs[slc_inv_def,bst_pc_tuple_def,bir_pc_next_def,combinTheory.APPLY_UPDATE_THM]
-    >> drule_then (fs o single) labels_wf_imp
-    >> conj_tac
-    >- (
-      drule_then (irule_at Any) latest_t_dec
-      >> qmatch_asmsub_abbrev_tac `well_formed cid M s'`
-      >> `well_formed_fwdb lock_addr_val M (s.bst_coh lock_addr_val) $ s.bst_fwdb lock_addr_val` by fs[well_formed_def]
-      >> imp_res_tac well_formed_fwdb_coh
-      >> simp[mem_read_view_def,Once COND_RATOR,COND_RAND]
-      >> fs[well_formed_fwdb_def]
-    )
-    >> fs[bir_envTheory.bir_var_type_def,bir_envTheory.bir_var_name_def,slc_mem_inv_def]
-    >> strip_tac
-    >> first_x_assum $ drule_all_then strip_assume_tac
-    >> gvs[]
-    >> drule_then irule $ GSYM bir_read_reg_env_update_cast64
-  )
-  >~ [`s.bst_pc.bpc_label = BL_Address (Imm64 12w)`,`s.bst_pc.bpc_index = 0`,`xclfail_update_viewenv`]
-  >- (
-    gvs[AllCaseEqs(),PULL_EXISTS,slc_inv_def,bst_pc_tuple_def,bir_pc_next_def,bir_read_reg_zero_def,bir_read_reg_def,CONV_RULE (ONCE_DEPTH_CONV $ LAND_CONV SYM_CONV) xclfail_update_env_SOME,bir_eval_exp_BExp_Den_update_eq,v_fail_def]
-    >> drule_then (fs o single) labels_wf_imp
-  )
-  >~ [`s.bst_pc.bpc_label = BL_Address (Imm64 12w)`,`s.bst_pc.bpc_index = 0`,`fulfil_update_env`]
-  >- (
-    gvs[CONV_RULE (ONCE_DEPTH_CONV $ LAND_CONV SYM_CONV) fulfil_update_env_BVar_eq,bir_eval_exp_view_def,bir_eval_exp_BExp_Den_update_eq]
-    >> gvs[slc_inv_def,bst_pc_tuple_def,bir_pc_next_def,bir_read_reg_zero_def,v_succ_def,bir_read_reg_def,bir_eval_exp_BExp_Den_update_eq,combinTheory.APPLY_UPDATE_THM,remove_prom_def]
-    >> drule_then (fs o single) labels_wf_imp
-    >> qhdtm_assum `fulfil_atomic_ok` $ irule_at Any
-    >> imp_res_tac mem_get_mem_read_imp
-    >> fs[listTheory.MEM_FILTER,slc_mem_inv_def]
-    >> dsimp[listTheory.MEM_FILTER]
-    >> fs[well_formed_def,well_formed_xclb_def]
-    >> asm_rewrite_tac[]
-  )
-  >~ [`s.bst_pc.bpc_label = BL_Address $ Imm64 4w`,`s.bst_pc.bpc_index = 0`]
-  >- (
-    fs[bir_eval_exp_view_def,bir_exec_stmt_cjmp_def,bir_eval_exp_view_def]
-    >> qmatch_goalsub_abbrev_tac `bir_eval_exp exp`
-    >> Cases_on `bir_eval_exp exp s.bst_environ`
-    >- gvs[slc_inv_def,bst_pc_tuple_def,bir_pc_next_def]
-    >> unabbrev_all_tac
-    >> Cases_on `s.bst_environ` >> fs[sl_bir_eval_exp_Unary]
-    >> qmatch_assum_abbrev_tac `COND c _ _` >> Cases_on `c`
-    >> fs[bir_dest_bool_val_true,bir_dest_bool_val_false]
-    >> imp_res_tac bir_read_reg_imp
-    >> fs[bir_exec_stmt_jmp_def,bir_eval_label_exp_def,bir_programTheory.bir_exec_stmt_jmp_to_label_def,COND_RAND]
-    >> qmatch_goalsub_abbrev_tac `COND c _ _`
-    >> `c` by (
-      unabbrev_all_tac
-      >> fs[bir_labels_of_program_APPEND,bir_labels_of_program_lock]
-    )
-    >> fs[bst_pc_tuple_def,bir_pc_next_def,slc_inv_def,bir_block_pc_def,bir_read_reg_def]
-    >> drule_then (fs o single) labels_wf_imp
-    >> drule_then (fs o single) labels_wf_jump_after
-  )
-  >~ [`s.bst_pc.bpc_label = BL_Address $ Imm64 16w`,`s.bst_pc.bpc_index = 0`]
-  >- (
-    (* TODO generalise - similar to previous case *)
-    fs[bir_eval_exp_view_def,bir_exec_stmt_cjmp_def,bir_eval_exp_view_def]
-    >> qmatch_goalsub_abbrev_tac `bir_eval_exp exp`
-    >> Cases_on `bir_eval_exp exp s.bst_environ`
-    >- gvs[slc_inv_def,bst_pc_tuple_def,bir_pc_next_def]
-    >> unabbrev_all_tac
-    >> Cases_on `s.bst_environ` >> fs[sl_bir_eval_exp_Unary]
-    >> qmatch_assum_abbrev_tac `COND c _ _` >> Cases_on `c`
-    >> fs[bir_dest_bool_val_true,bir_dest_bool_val_false]
-    >> imp_res_tac bir_read_reg_imp
-    >> fs[bir_exec_stmt_jmp_def,bir_eval_label_exp_def,bir_programTheory.bir_exec_stmt_jmp_to_label_def,COND_RAND]
-    >> qmatch_goalsub_abbrev_tac `COND c _ _`
-    >- (
-      `c` by (
-        unabbrev_all_tac
-        >> fs[bir_labels_of_program_APPEND,labels_wf_def]
-      )
-      >> imp_res_tac labels_wf_jump_after
-      >> fs[bst_pc_tuple_def,bir_pc_next_def,slc_inv_def,bir_block_pc_def,bir_read_reg_def]
-      >> strip_tac
-      >> gs[bir_read_reg_zero_def,bir_read_reg_def]
-      >> strip_tac
-      >> gs[bir_read_reg_zero_def,bir_read_reg_def]
-    )
-    >> `c` by (
-      unabbrev_all_tac
-      >> fs[bir_labels_of_program_APPEND,labels_wf_def,bir_labels_of_program_lock]
-    )
-    >> imp_res_tac labels_wf_jump_after
-    >> fs[bst_pc_tuple_def,bir_pc_next_def,slc_inv_def,bir_block_pc_def,bir_read_reg_def]
-    >> drule_then (fs o single) labels_wf_imp
-  )
-  >~ [`s.bst_pc.bpc_label = BL_Address $ Imm64 8w`,`s.bst_pc.bpc_index = 0`]
-  >- (
-    Cases_on `s.bst_environ`
-    >> fs[bir_envTheory.bir_var_type_def,bir_envTheory.bir_var_name_def]
-    >> drule $ GSYM bir_read_reg_env_update_cast64
-    >> gvs[slc_inv_def,bst_pc_tuple_def,bir_pc_next_def]
-    >> drule_then (fs o single) labels_wf_imp
-  )
-  >~ [`BL_Address $ Imm64 $ unlock_entry + 8w = s.bst_pc.bpc_label`,`s.bst_pc.bpc_index = 0`]
-  >- (
-    qpat_x_assum `BL_Address _ = s.bst_pc.bpc_label` $ assume_tac o GSYM
-    >> gvs[slc_inv_def,bst_pc_tuple_def,bir_pc_next_def,fulfil_update_env_def,slc_mem_inv_def,bir_eval_exp_view_def,bir_eval_exp_BExp_Const,lock_addr_def,GSYM lock_addr_val_def]
-    >> drule_then (fs o single) labels_wf_imp
-    >> dsimp[listTheory.MEM_FILTER,remove_prom_def]
-    >> imp_res_tac mem_get_mem_read_imp
-    >> asm_rewrite_tac[]
-    >> rw[] >> fs[]
-  )
-  >~ [`BL_Address (Imm64 (unlock_entry + 4w)) = s.bst_pc.bpc_label`,`s.bst_pc.bpc_index = 0`]
-  >- (
-    gvs[slc_inv_def,bst_pc_tuple_def,bir_pc_next_def]
-    >> gen_tac >> strip_tac
-    >> gvs[]
-    >> drule_then (fs o single) labels_wf_imp
-  )
-  >~ [`BL_Address (Imm64 unlock_entry) = s.bst_pc.bpc_label`,`s.bst_pc.bpc_index = 0`]
-  >- (
-    fs[bir_envTheory.bir_var_type_def,bir_envTheory.bir_var_name_def,slc_mem_inv_def,bir_eval_exp_view_BExp_Const]
-    >> drule_then assume_tac $ GSYM bir_read_reg_env_update_cast64
-    >> gvs[slc_inv_def,bst_pc_tuple_def,bir_pc_next_def,bir_eval_exp_view_BExp_Const]
-    >> gen_tac >> strip_tac
-    >> gvs[]
-    >> drule_then (fs o single) labels_wf_imp
-  )
-  >~ [`bir_get_current_statement (BirProgram $ lock _ _ _) s.bst_pc = SOME $ BSGen stm`]
-  >- (
-    gvs[bmc_exec_general_stmt_exists,bgcs_lock_zoo,bir_exec_stmt_assert_def,bir_state_set_typeerror_def,bir_exec_stmt_assume_def,bir_programTheory.bir_exec_stmt_jmp_def,bir_programTheory.bir_exec_stmt_jmp_to_label_def,bir_eval_label_exp_def,bir_block_pc_def,bir_labels_of_program_lock,bir_eval_exp_BExp_Const,bir_dest_bool_val_true',bst_pc_tuple_def,bir_pc_next_def,bir_labels_of_program_APPEND,bir_labels_of_program_lock]
-    >> fs[slc_inv_def,bst_pc_tuple_def]
-    >> drule_then (fs o single) labels_wf_imp
-    >> drule_then (fs o single) labels_wf_jump_after
-    >> goal_assum drule
-  )
-  >~ [`bir_get_current_statement (BirProgram $ unlock _ _) s.bst_pc = SOME $ BSGen stm`]
-  >- (
-    gvs[bmc_exec_general_stmt_exists,bgcs_unlock_zoo,bir_exec_stmt_assert_def,bir_state_set_typeerror_def,bir_exec_stmt_assume_def,bir_programTheory.bir_exec_stmt_jmp_def,bir_programTheory.bir_exec_stmt_jmp_to_label_def,bir_eval_label_exp_def,bir_block_pc_def,bir_labels_of_program_lock,bir_eval_exp_BExp_Const,bir_dest_bool_val_true',bst_pc_tuple_def,bir_pc_next_def,bir_labels_of_program_APPEND,bir_labels_of_program_lock,bir_labels_of_program_unlock]
-    >> qpat_x_assum `BL_Address _ = s.bst_pc.bpc_label` $ assume_tac o GSYM
-    >> fs[slc_inv_def,bst_pc_tuple_def]
-    >> drule_then (fs o single) labels_wf_imp
-  )
-QED
-
-(* show assumptions for a trivial blocks *)
-Theorem clstep_slc_inv_assumptions_for_trivial_block:
-  !jump_after blocks unlock_entry cid M prom.
-  jump_after = BL_Address $ Imm64 20w (* width of lock + 4w *)
-  /\ unlock_entry = 24w (* jump_after + 4w *)
-  /\ blocks = [BBlock_Stmts <|bb_label := jump_after;
-        bb_statements := [
-          BMCStmt_Assert (BExp_Const $ Imm1 1w) (* no-op *)
-        ];
-        bb_last_statement := BStmt_Jmp $ BLE_Label $ BL_Address $ Imm64 unlock_entry |>]
-  ==> !s s'. labels_wf blocks jump_after unlock_entry
-  /\ wf_ext (BirProgram blocks : progc_t) cid s M
-  /\ (clstep (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s'
-  /\ slc_inv 0w jump_after unlock_entry cid s M
-  ==>
-  addr_unchanged lock_addr_val s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M
-    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry]
-  /\ in_cs_inv (BirProgram blocks) s.bst_pc.bpc_label M s.bst_coh lock_addr_val (Imm64 1w)
-  /\ jump_constraints s.bst_pc s'.bst_pc
-    [unlock lock_addr unlock_entry; lock lock_addr 0w jump_after]
-  )
-Proof
-  rpt gen_tac >> strip_tac
-  >> fs[labels_wf_def,bir_labels_of_program_lock,bir_labels_of_program_unlock,bir_labels_of_program_APPEND]
-  >> fs[bir_labels_of_program_def,bir_label_of_block_def]
-  >> dsimp[list_disj_def]
-  >> fs[wf_ext_def,bir_get_current_statement_def,bir_get_program_block_info_by_label_def]
-  >> dsimp[AllCaseEqs(),listTheory.INDEX_FIND_def]
-  >> rpt conj_tac
-  >~ [`addr_unchanged`]
-  >- (
-    rpt gen_tac >> strip_tac
-    >> qmatch_asmsub_abbrev_tac `clstep p`
-    >> reverse $ Cases_on `IS_SOME $ bir_get_current_statement p s.bst_pc`
-    >- gs[clstep_cases]
-    >> unabbrev_all_tac
-    >> fs[bir_labels_of_program_lock,bir_labels_of_program_unlock,optionTheory.IS_SOME_EXISTS,spinlock_concrete2_def,lock_wrap_def,addr_unchanged_def]
-    >> reverse $ Cases_on `MEM s.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram blocks`
-    >- (
-      gs[bir_labels_of_program_def,bir_label_of_block_def]
-      >> fs[bir_get_current_statement_def,bir_get_program_block_info_by_label_def,INDEX_FIND_append,lock_def,unlock_def]
-      >> gs[AllCaseEqs(),listTheory.INDEX_FIND_def,bir_label_of_block_def]
-    )
-    >> FULL_SIMP_TAC std_ss [GSYM listTheory.APPEND_ASSOC]
-    >> drule bir_get_current_statement_MEM2
-    >> impl_tac
-    >- (
-      REWRITE_TAC[bir_labels_of_program_APPEND,list_disj_append2]
-      >> fs[list_disj_def,bir_labels_of_program_lock,bir_labels_of_program_unlock]
-      >> gs[bir_labels_of_program_def,bir_label_of_block_def]
-      >> dsimp[]
-    )
-    >> strip_tac
-    >> dxrule bir_get_current_statement_MEM1
-    >> impl_tac
-    >- gs[bir_labels_of_program_def,bir_label_of_block_def]
-    >> disch_then $ assume_tac o CONV_RULE EVAL
-    >> simp[listTheory.EVERY_MEM,PULL_EXISTS]
-    >> gvs[bir_labels_of_program_def,bir_label_of_block_def,AllCaseEqs()]
-    >> gs[clstep_cases,bir_auxiliaryTheory.NUM_LSONE_EQZ,bmc_exec_general_stmt_exists]
-    >> gvs[bir_exec_stmt_assert_def,AllCaseEqs(),bir_eval_exp_BExp_Const,bir_state_set_typeerror_def,bir_programTheory.bir_exec_stmt_jmp_def,bir_programTheory.bir_exec_stmt_jmp_to_label_def,bir_eval_label_exp_def,bir_labels_of_program_APPEND,bir_labels_of_program_lock,bir_labels_of_program_unlock]
-  )
-  >~ [`in_cs_inv`]
-  >- (
-    fs[in_cs_inv_def,bir_labels_of_program_def,bir_label_of_block_def]
-    >> rpt gen_tac >> ntac 2 strip_tac
-    >> gs[slc_inv_def,bst_pc_tuple_def]
-    >> cheat (* needs slc_inv invariant to discharge state after jump from lock *)
-  )
-  >~ [`jump_constraints`]
-  >> dsimp[jump_constraints_def,bir_labels_of_program_lock,bir_labels_of_program_unlock,bir_pc_first_def,bir_block_pc_def,bir_label_of_block_def,lock_def,unlock_def,bir_programcounter_t_component_equality]
-  >> cheat (* invariant that some addresses are only jumped to from within the un/lock *)
+  >> gs[]
+  >> imp_res_tac clstep_bgcs_imp
+  >> imp_res_tac bir_get_current_statement_SOME_MEM
+  >> cheat
 QED
 
 Theorem slc_inv_prom:
@@ -1492,6 +1751,7 @@ Proof
     >> `t <= LENGTH M` by (
       imp_res_tac mem_read_LENGTH
       >> gs[arithmeticTheory.LESS_OR_EQ]
+      >> fs[]
     )
     >> gs[mem_read_append]
     >> first_x_assum $ drule_all_then irule
@@ -1510,17 +1770,17 @@ Proof
 QED
 
 Theorem cstep_slc_inv:
-  !cid s M s' M' P prom jump_after unlock_entry blocks.
-  labels_wf blocks jump_after unlock_entry
+  !cid s M s' M' prom jump_after unlock_entry blocks.
+  labels_wf blocks jump_after unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)
   /\ wf_ext (BirProgram blocks : progc_t) cid s M
   /\ slc_inv 0w jump_after unlock_entry cid s M
   /\ addr_unchanged lock_addr_val s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M
-    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry]
+    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)]
   /\ in_cs_inv (BirProgram blocks) s.bst_pc.bpc_label M s.bst_coh lock_addr_val (Imm64 1w)
   /\ jump_constraints s.bst_pc s'.bst_pc
-    [unlock lock_addr unlock_entry; lock lock_addr 0w jump_after]
+    [unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w); lock lock_addr 0w jump_after]
   /\ well_formed cid M s
-  /\ cstep P (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s' M'
+  /\ cstep (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s' M'
   ==> slc_inv 0w jump_after unlock_entry cid s' M'
 Proof
   rpt strip_tac
@@ -1531,14 +1791,14 @@ QED
 
 Theorem cstep_seq_slc_inv:
   !cid s M s' M' jump_after unlock_entry blocks.
-  labels_wf blocks jump_after unlock_entry
+  labels_wf blocks jump_after unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)
   /\ wf_ext_p (BirProgram blocks : progc_t) cid
   /\ slc_inv 0w jump_after unlock_entry cid s M
   /\ addr_unchanged lock_addr_val s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M
-    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry]
+    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)]
   /\ in_cs_inv (BirProgram blocks) s.bst_pc.bpc_label M s.bst_coh lock_addr_val (Imm64 1w)
   /\ jump_constraints s.bst_pc s'.bst_pc
-    [unlock lock_addr unlock_entry; lock lock_addr 0w jump_after]
+    [unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w); lock lock_addr 0w jump_after]
   /\ well_formed cid M s
   /\ cstep_seq (spinlock_concrete2 blocks jump_after unlock_entry) cid (s, M) (s', M')
   ==> slc_inv 0w jump_after unlock_entry cid s' M'
@@ -1565,8 +1825,8 @@ QED
 
 (* dynamically determined property *)
 Definition cstepR_def:
-  cstepR R P p cid s M prom s' M' <=>
-    R (s,M) (s',M') /\ cstep P p cid s M prom s' M'
+  cstepR R p cid s M prom s' M' <=>
+    R (s,M) (s',M') /\ cstep p cid s M prom s' M'
 End
 
 Definition cstep_seqR_def:
@@ -1665,18 +1925,18 @@ Proof
 QED
 
 Inductive parstepR:
-  !p cid s s' M M' cores prom P R.
+  !p cid s s' M M' cores prom R.
     FLOOKUP cores cid = SOME (Core cid p s)
-    /\ cstepR R P p cid s M prom s' M'
+    /\ cstepR R p cid s M prom s' M'
     /\ is_certifiedR (cstep_seqR R p cid) (s',M')
     ==>
-      parstepR R P cid cores M (FUPDATE cores (cid, Core cid p s')) M'
+      parstepR R cid cores M (FUPDATE cores (cid, Core cid p s')) M'
 End
 
 Theorem parstepR_parstep:
-  !p cid s s' M M' cores prom P R cores'.
-    parstepR R P cid cores M cores' M'
-    ==> parstep P cid cores M cores' M'
+  !p cid s s' M M' cores prom R cores'.
+    parstepR R cid cores M cores' M'
+    ==> parstep cid cores M cores' M'
 Proof
   rw[parstep_cases,parstepR_cases]
   >> drule_then (irule_at Any) cstepR_cstep
@@ -1685,8 +1945,8 @@ Proof
 QED
 
 Definition parstepR_tr_def:
-  parstepR_tr R P cid cM cM' =
-    parstepR R P cid (FST cM) (SND cM) (FST cM') (SND cM')
+  parstepR_tr R cid cM cM' =
+    parstepR R cid (FST cM) (SND cM) (FST cM') (SND cM')
 End
 
 (*
@@ -1738,10 +1998,9 @@ Definition step_restr_def:
   (λsM sM'.
     !M M' s s'. s = FST sM /\ M = SND sM /\ M' = SND sM' /\ s' = FST sM' ==>
     addr_unchanged lock_addr_val s.bst_pc s.bst_coh s'.bst_coh s.bst_prom s'.bst_prom M
-      [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry]
+      [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)]
     /\ jump_constraints s.bst_pc s'.bst_pc
-      [unlock lock_addr unlock_entry; lock lock_addr 0w jump_after]
-    (* TODO: assert on s or s'? *)
+      [unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w); lock lock_addr 0w jump_after]
     /\ in_cs_inv (BirProgram blocks) s'.bst_pc.bpc_label M' s'.bst_coh
       lock_addr_val (Imm64 1w)
     /\ in_cs_inv (BirProgram blocks) s.bst_pc.bpc_label M s.bst_coh
@@ -1751,7 +2010,7 @@ End
 
 Theorem cstep_seqR_NRC_slc_inv:
   !cid jump_after unlock_entry blocks n seM seM'.
-  labels_wf blocks jump_after unlock_entry
+  labels_wf blocks jump_after unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)
   /\ wf_ext_p (BirProgram blocks : progc_t) cid
   /\ NRC (cstep_seqR (step_restr jump_after blocks unlock_entry)
     (spinlock_concrete2 blocks jump_after unlock_entry) cid) n seM seM'
@@ -1772,6 +2031,7 @@ Proof
 QED
 
 (*
+(* variant of cstep_seqR_NRC_slc_inv but without the dynamic block *)
 Theorem cstep_seq_NRC_slc_inv:
   !cid n seM seM'.
   NRC (cstep_seq spinlock_concrete cid) n seM seM'
@@ -1841,6 +2101,7 @@ Proof
   >> fs[]
 QED
 
+(* consequence of is_certifiedR_promise_disch and cstep_seqR_NRC_slc_inv, clstep_slc_inv *)
 Theorem is_certifiedR_locking:
   !cid s M msg t jump_after blocks unlock_entry.
   is_certifiedR
@@ -1849,7 +2110,7 @@ Theorem is_certifiedR_locking:
       (spinlock_concrete2 blocks jump_after unlock_entry) cid)
     (s,(M ++ [msg]))
   /\ slc_inv 0w jump_after unlock_entry cid s (M ++ [msg])
-  /\ labels_wf blocks jump_after unlock_entry
+  /\ labels_wf blocks jump_after unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)
   /\ wf_ext_p (BirProgram blocks) cid
   /\ well_formed cid (M ++ [msg]) s
   /\ MEM (LENGTH M + 1) s.bst_prom
@@ -1942,7 +2203,8 @@ Proof
   >> disch_then assume_tac
 *)
   >> dxrule_then assume_tac $ iffLR slc_inv_def
-  (* TODO continue *)
+  >> cheat (* simply a lifting of theorem is_certifiedR_locking to  *)
+(*
   >> gvs[clstep_cases,bst_pc_tuple_def,listTheory.MEM_FILTER,bir_labels_of_program_APPEND]
   >> imp_res_tac bir_get_current_statement_SOME_MEM
   >> fs[bir_labels_of_program_APPEND]
@@ -1997,8 +2259,11 @@ Proof
   >> dxrule_then (fs o single) latest_t_latest_is_lowest
   >> imp_res_tac mem_get_mem_read
   >> fs[latest_exact]
+*)
 QED
 
+(* earlier version of is_certifiedR_locking for a program containing only lock
+ * and unlock but no other block, uses theorem cstep_seq_NRC_slc_inv *)
 (*
 Theorem is_certified_locking:
   !cid s M msg t.
@@ -2127,7 +2392,7 @@ Theorem is_certifiedR_locking_slc_prop:
       (spinlock_concrete2 blocks jump_after unlock_entry) cid)
     (s,(M ++ [msg]))
   /\ slc_inv 0w jump_after unlock_entry cid s (M ++ [msg])
-  /\ labels_wf blocks jump_after unlock_entry
+  /\ labels_wf blocks jump_after unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)
   /\ wf_ext_p (BirProgram blocks) cid
   /\ well_formed cid (M ++ [msg]) s
   /\ msg.cid = cid
@@ -2185,9 +2450,9 @@ QED
 Theorem parstep_preserves_slc_mem_correct_inv:
   !cid cores M cores' M' s jump_after blocks unlock_entry.
   parstepR_tr (step_restr jump_after blocks unlock_entry)
-    (λmem msg. T) cid (cores,M) (cores',M')
+    cid (cores,M) (cores',M')
   /\ slc_inv 0w jump_after unlock_entry cid s M
-  /\ labels_wf blocks jump_after unlock_entry
+  /\ labels_wf blocks jump_after unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)
   /\ wf_ext_p (BirProgram blocks) cid
   /\ sl_mem_correct_inv M
   /\ FLOOKUP cores cid = SOME $ Core cid (spinlock_concrete2 blocks jump_after unlock_entry) s
@@ -2202,6 +2467,7 @@ Proof
 QED
 
 (* instantiation of the program block *)
+
 Definition prog_block_def:
   prog_block jump_after unlock_entry =
     BBlock_Stmts <|bb_label := BL_Address (Imm64 jump_after);
@@ -2214,9 +2480,6 @@ Definition prog_block_def:
 End
 
 (* the init state when running the program *)
-Definition prog_block_init_def:
-  prog_block_init s M = T
-End
 
 Theorem prog_block_bir_labels_of_program:
   !jump_after unlock_entry.
@@ -2231,17 +2494,17 @@ Theorem prog_block_addr_unchanged:
    jump_after' = 20w /\ jump_after = BL_Address (Imm64 jump_after') /\
      unlock_entry = jump_after' + 4w /\
     blocks = [prog_block jump_after' unlock_entry] /\
-   cstep P (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s' M'
+   cstep (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s' M'
   ==>
    addr_unchanged lock_addr_val s.bst_pc s.bst_coh s'.bst_coh s.bst_prom
      s'.bst_prom M
-     [lock lock_addr 0w (BL_Address (Imm64 20w)); unlock lock_addr 24w]
+    [lock lock_addr 0w jump_after; unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)]
 Proof
   rpt strip_tac
   >> fs[bir_labels_of_program_unlock,bir_labels_of_program_lock,addr_unchanged_def,listTheory.EVERY_MEM]
   >> strip_tac
   >> imp_res_tac cstep_bgcs_imp
-  >> qmatch_assum_rename_tac `cstep P _ cid s M prom s' M'`
+  >> qmatch_assum_rename_tac `cstep _ cid s M prom s' M'`
   >> reverse $ Cases_on `M = M'`
   >> gvs[cstep_cases]
   >> gvs[spinlock_concrete2_def,lock_wrap_def]
@@ -2277,10 +2540,10 @@ Theorem prog_block_jump_constraints:
    jump_after' = 20w /\ jump_after = BL_Address (Imm64 jump_after') /\
      unlock_entry = jump_after' + 4w /\
     blocks = [prog_block jump_after' unlock_entry] /\
-   cstep P (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom
+   cstep (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom
      s' M' ==>
    jump_constraints s.bst_pc s'.bst_pc
-     [unlock lock_addr 24w; lock lock_addr 0w (BL_Address (Imm64 20w))]
+      [unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w); lock lock_addr 0w jump_after]
 Proof
   rpt strip_tac
   >> drule_then assume_tac cstep_same_label
@@ -2349,7 +2612,7 @@ Theorem trace_prop:
   /\ well_formed cid M s
   /\ well_formed cid M' s'
   /\ jump_constraints s.bst_pc s'.bst_pc
-      [unlock lock_addr 24w; lock lock_addr 0w (BL_Address (Imm64 20w))]
+      [unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w); lock lock_addr 0w jump_after]
   /\ in_cs_inv (BirProgram [prog_block 20w 24w]) s.bst_pc.bpc_label M
       s.bst_coh lock_addr_val (Imm64 1w)
   ==> in_cs_inv (BirProgram [prog_block 20w 24w]) s'.bst_pc.bpc_label M'
@@ -2367,48 +2630,6 @@ Proof
   (*
     show that from s through
   *)
-QED
-*)
-
-(*
-TODO fix
-Theorem prog_:
-  !jump_after jump_after' unlock_entry blocks P prom cid s M s' M'.
-  jump_after' = 20w
-  /\ jump_after = BL_Address $ Imm64 jump_after'
-  /\ unlock_entry = jump_after' + 4w
-  /\ blocks = [prog_block jump_after' unlock_entry]
-  /\ cstep P (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s' M'
-  /\ well_formed cid M s
-  /\ well_formed cid M' s'
-  ==> step_restr jump_after blocks unlock_entry (s,M) (s',M')
-Proof
-  rpt strip_tac >> fs[step_restr_def]
-  >> conj_asm1_tac
-  >~ [`addr_unchanged`]
-  >- (
-    irule prog_block_addr_unchanged
-    >> gvs[]
-    >> goal_assum drule
-  )
-  >> conj_tac
-  >~ [`jump_constraints`]
-  >- (
-    irule prog_block_jump_constraints
-    >> gvs[]
-    >> goal_assum drule
-  )
-  >> conj_asm2_tac
-  >~ [`cstep P _ cid s M prom s' M'`,`in_cs_inv _ _ M' _ _ _`]
-  >- (
-    drule_then drule addr_unchanged_in_cs_inv
-    >> fs[prog_block_bir_labels_of_program,bir_labels_of_program_APPEND,bir_labels_of_program_unlock,bir_labels_of_program_lock,list_disj_def]
-clstep_in_cs_inv
-cstep_in_cs_inv
-  )
-  (* in_cs_inv *)
-  >> fs[in_cs_inv_def,bir_labels_of_program_def,bir_label_of_block_def,prog_block_def]
-  >> cheat
 QED
 *)
 
@@ -2440,7 +2661,7 @@ End
 Theorem lock_v_rOld_eq_coh_inv:
   !blocks jump_after unlock_entry cid s M s' prom jump_after_lock y.
   clstep (BirProgram $ lock lock_addr 0w $ BL_Address $ Imm64 jump_after_lock) cid s M prom s'
-  /\ labels_wf blocks (BL_Address (Imm64 jump_after_lock)) unlock_entry
+  /\ labels_wf blocks jump_after unlock_entry (BL_Address (Imm64 (unlock_entry + 12w)))
   /\ jump_after = BL_Address (Imm64 jump_after_lock)
   /\ s.bst_pc.bpc_label = BL_Address $ Imm64 y
   /\ MEM y [0w; 4w; 8w]
@@ -2460,7 +2681,7 @@ QED
 Theorem spinlock_concrete2_v_rOld_eq_coh_inv:
   !blocks jump_after unlock_entry cid s M s' prom jump_after_lock y.
   clstep (spinlock_concrete2 blocks jump_after unlock_entry) cid s M prom s'
-  /\ labels_wf blocks (BL_Address (Imm64 jump_after_lock)) unlock_entry
+  /\ labels_wf blocks jump_after unlock_entry (BL_Address (Imm64 (unlock_entry + 12w)))
   /\ jump_after = BL_Address (Imm64 jump_after_lock)
   /\ s.bst_pc.bpc_label = BL_Address $ Imm64 y
   /\ MEM y [0w; 4w; 8w]
@@ -2516,7 +2737,6 @@ Definition spinlock_ref1_core_def:
       ==> bir_read_reg "x5" c.bst_environ 1w (* 1w = locked *)
     )
 (*
-slc_inv
    /\ (
       (lbl = lock_entry + 12w /\ index = 0w)
       (* following assumption is to be discharged by spinlock_concrete2_v_rOld_eq_coh_inv *)
@@ -2569,54 +2789,6 @@ slc_inv
         a = c
     )
 End
-
-(*
-Definition spinlock_ref1_core_def:
-  spinlock_ref1_core (c, M) (a, aM) <=>
-  M = aM /\ a.bst_prom = c.bst_prom
-  /\ (c.bst_status = BST_Running ==> a.bst_status = c.bst_status)
-  /\ (a.bst_coh lock_addr_val <= c.bst_coh lock_addr_val)
-  /\ !lbl index.
-    bst_pc_tuple c.bst_pc = (BL_Address $ Imm64 lbl, index)
-      ==>
-    (lbl = 16w /\ 0 < index ==> ?v. bir_read_reg "success" c.bst_environ v)
-    /\ (lbl = 20w ==> ?v. bir_read_reg "success" c.bst_environ v)
-    (* not (yet) taking the lock *)
-    /\ (lbl <= 16w /\ (lbl = 16w ==> index = 0)
-      ==> bst_pc_tuple a.bst_pc = (BL_Address $ Imm64 0w,0))
-    /\ (
-      (lbl = 12w /\ index = 1) \/
-      (lbl = 16w /\ index = 0)
-      ==> bir_read_reg "x5" c.bst_environ 1w (* 1w = locked *)
-    )
-    (* unsuccessful store *)
-    /\ (lbl = 16w /\ 0 < index /\ bir_read_reg_nonzero "success" c.bst_environ
-      ==> bst_pc_tuple a.bst_pc = (BL_Address $ Imm64 0w,0))
-    /\ (lbl = 20w /\ index = 0 /\ bir_read_reg_nonzero "success" c.bst_environ
-      ==> bst_pc_tuple a.bst_pc = (BL_Address $ Imm64 0w,0))
-    (* successful store *)
-    /\ (lbl = 16w /\ 0 < index /\ bir_read_reg_zero "success" c.bst_environ
-      ==> bst_pc_tuple a.bst_pc = (BL_Address $ Imm64 4w,0))
-    /\ (lbl = 20w /\ index = 0 /\ bir_read_reg_zero "success" c.bst_environ
-      ==> bst_pc_tuple a.bst_pc = (BL_Address $ Imm64 4w,0))
-    (* after lock, before unlock *)
-    /\ (
-      20w < lbl /\ lbl <= 32w /\ (lbl = 32w ==> index = 0)
-      ==> bst_pc_tuple a.bst_pc = (BL_Address $ Imm64 4w,0)
-    )
-    (* after unlock *)
-    /\ (
-      32w <= lbl /\ (lbl = 32w ==> index = 1)
-      ==> bst_pc_tuple a.bst_pc = (BL_Address $ Imm64 8w,0)
-    )
-End
-*)
-
-(*
-MEM c'.bst_pc.bpc_label (bir_labels_of_program (BirProgram blocks))
-==> spinlock_ref1_core 0w unlock_entry jump_after_lock (unlock_entry + 12w) (c',M) (c',M)
-*)
-
 
 Theorem spinlock_ref1_core_promises_self:
   !c M a aM msg f.
@@ -2892,6 +3064,7 @@ Proof
   >> rpt $ goal_assum $ rev_drule_at Any
   >> gvs[bir_exec_stmt_jmp_APPEND_MEM1',bir_exec_stmt_cjmp_APPEND_MEM1']
   >> fs[COND_RAND,COND_RATOR,bir_labels_of_program_APPEND]
+  >> cheat (* a jump constraint for external state is required *)
 QED
 
 Definition jmp_targets_in_region_def:
@@ -2913,6 +3086,10 @@ Definition jmp_targets_in_region_def:
       | _ => T
 End
 
+(*
+      | SOME $ BSExt R => !lbl P R'. R = ext_loop (BirProgram p) lbl P R' ==> MEM lbl labels
+*)
+
 Theorem jmp_targets_in_region_APPEND1:
   jmp_targets_in_region B pc env
   /\ MEM pc.bpc_label (bir_labels_of_program $ BirProgram B)
@@ -2931,22 +3108,31 @@ Proof
   >> first_x_assum drule >> fs[]
 QED
 
+Theorem jmp_targets_in_region_PERM:
+  PERM A B /\ ALL_DISTINCT A
+  ==> jmp_targets_in_region A pc env = jmp_targets_in_region B pc env
+Proof
+  cheat
+QED
+
 Theorem jmp_targets_in_region_APPEND2:
   jmp_targets_in_region B pc env
   /\ MEM pc.bpc_label (bir_labels_of_program $ BirProgram B)
   /\ list_disj (bir_labels_of_program $ BirProgram B)
     (bir_labels_of_program $ BirProgram A)
+  /\ ALL_DISTINCT (A ++ B)
   ==> jmp_targets_in_region (B ++ A) pc env
 Proof
-  fs[jmp_targets_in_region_def,optionTheory.option_case_compute]
-  >> rpt strip_tac
-  >> drule bir_get_current_statement_APPEND1
-  >> disch_then $ drule_then $ fs o single
-  >> dxrule_then strip_assume_tac $ iffLR optionTheory.IS_SOME_EXISTS
-  >> rpt BasicProvers.TOP_CASE_TAC
-  >> gvs[]
-  >> rw[] >> fs[bir_labels_of_program_APPEND]
-  >> first_x_assum drule >> fs[]
+  rpt strip_tac
+  >> qsuff_tac `jmp_targets_in_region (A ++ B) pc env`
+  >- (
+    `jmp_targets_in_region (A ++ B) pc env = jmp_targets_in_region (B ++ A) pc env` by (
+      irule jmp_targets_in_region_PERM
+      >> fs[sortingTheory.PERM_APPEND]
+    )
+    >> asm_rewrite_tac[]
+  )
+  >> fs[jmp_targets_in_region_APPEND1,list_disj_sym_imp]
 QED
 
 Theorem clstep_APPEND_MEM1_imp2:
@@ -2963,7 +3149,16 @@ Proof
   >> imp_res_tac clstep_MEM_bir_labels_of_program
   >> fs[clstep_cases]
   >~ [`BSExt`]
-  >- dsimp[bir_labels_of_program_APPEND]
+  >- (
+    qpat_assum `bir_eval_label_exp _ _ = SOME _` $ irule_at Any
+    >> gvs[bir_labels_of_program_APPEND,jmp_targets_in_region_def]
+    >> gs[bir_exec_stmt_jmp_to_label_def,COND_RAND,COND_EXPAND_OR,COND_RATOR,bir_labels_of_program_APPEND]
+    >> dsimp[bir_exec_stmt_jmp_to_label_def,optionTheory.option_case_compute,COND_RAND,COND_RATOR,COND_EXPAND_OR,bir_labels_of_program_APPEND]
+    >> drule_all bir_exec_stmt_jmp_to_label_APPEND_MEM1
+    >> 
+    dsimp[bir_labels_of_program_APPEND]
+    >> gs[bir_exec_stmt_jmp_to_label_APPEND_MEM1]
+  )
   >> gs[bmc_exec_general_stmt_exists]
   >> rpt $ goal_assum $ rev_drule_at Any
   >> fs[]
@@ -3072,6 +3267,14 @@ Proof
 QED
 
 (* same transition with a common part *)
+
+Theorem bir_exec_stmt_jmp_to_label_MEM2:
+  MEM lbl1 $ bir_labels_of_program $ BirProgram p
+  ==> bir_exec_stmt_jmp_to_label (BirProgram $ p ++ p') lbl1 c
+    = bir_exec_stmt_jmp_to_label (BirProgram $ p ++ p'') lbl1 c
+Proof
+  dsimp[bir_exec_stmt_jmp_to_label_def,optionTheory.option_case_compute,COND_RAND,COND_RATOR,COND_EXPAND_OR,bir_labels_of_program_APPEND]
+QED
 
 Theorem bir_exec_stmt_jmp_to_label_MEM:
   MEM lbl1 $ bir_labels_of_program $ BirProgram p''
@@ -3331,17 +3534,17 @@ only ensures that the condition holds
 (*
  * refinement of lock and abstract lock
  *)
+(* TODO remove? *)
 Theorem clstep_concrete_abstract_refinement_lock:
    clstep
      (BirProgram
         (lock lock_addr 0w (BL_Address (Imm64 jump_after_lock)) ++ blocks ++
          unlock lock_addr unlock_entry)) cid c M prom c' /\
-   jump_after_unlock = unlock_entry + 12w /\ lock_entry = 0w /\
-   labels_wf blocks (BL_Address (Imm64 jump_after_lock)) unlock_entry /\
+   jump_after_unlock = unlockentry + 12w /\ lock_entry = 0w /\
+   labels_wf blocks jump_after unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w) /\
    prog_addr64 blocks /\
    jump_constraints c.bst_pc c'.bst_pc
-     [unlock lock_addr unlock_entry;
-      lock lock_addr 0w (BL_Address (Imm64 jump_after_lock))] /\
+      [unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w); lock lock_addr 0w jump_after] /\
    spinlock_ref1_core lock_entry unlock_entry jump_after_lock
      jump_after_unlock (c,M) (a,aM) /\
    MEM c.bst_pc.bpc_label
@@ -3371,10 +3574,10 @@ Theorem clstep_preserves_spinlock_ref1_core:
     clstep (spinlock_concrete2 blocks (BL_Address $ Imm64 jump_after_lock) unlock_entry) cid c M prom c'
     /\ jump_after_unlock = unlock_entry + 12w
     /\ lock_entry = 0w
-    /\ labels_wf blocks (BL_Address $ Imm64 jump_after_lock) unlock_entry
+    /\ labels_wf blocks jump_after unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w)
     /\ prog_addr64 blocks
     /\ jump_constraints c.bst_pc c'.bst_pc
-      [unlock lock_addr unlock_entry; lock lock_addr 0w (BL_Address $ Imm64 jump_after_lock)]
+      [unlock lock_addr unlock_entry (BL_Address $ Imm64 $ unlock_entry + 12w); lock lock_addr 0w jump_after]
     /\ spinlock_ref1_core lock_entry unlock_entry jump_after_lock jump_after_unlock  (c,M) (a,aM)
     ==>
     (* reflexive case cannot happen when promises are discharged *)
@@ -3988,15 +4191,6 @@ Definition control_flow_def:
         /\ m.cid = cid ==> m.val = BVal_Imm $ Imm64 1w)) (* 1w = locked *)
 End
 
-(* relativise theorems *)
-Theorem bir_get_stmt_spinlock_cprog_BMCStmt_Load =
-  EVAL ``bir_get_current_statement (BirProgram $ lock addr lock_entry) pc
-    = SOME $ BSGen $ BStmtB $ BMCStmt_Load var a_e opt_cast xcl acq rel``
-  |> CONV_RULE $ RHS_CONV $ SIMP_CONV (srw_ss() ++ boolSimps.DNF_ss) [bir_programTheory.bir_get_program_block_info_by_label_THM,pairTheory.LAMBDA_PROD,wordsTheory.NUMERAL_LESS_THM,bir_programTheory.bir_get_current_statement_def,CaseEq"option",AllCaseEqs()]
-  |> CONV_RULE $ RHS_CONV $ SIMP_CONV  (srw_ss() ++ boolSimps.CONJ_ss) [GSYM pairTheory.PEXISTS_THM]
-  |> SIMP_RULE (bool_ss ++ boolSimps.DNF_ss) [listTheory.EL,wordsTheory.NUMERAL_LESS_THM]
-  |> SIMP_RULE (srw_ss() ++ boolSimps.CONJ_ss) []
-
 Theorem bir_get_current_statement_list_disj1:
   !pc A B blocks address labels1 labels2.
   list_disj
@@ -4198,30 +4392,6 @@ Proof
 QED
 
 (*
-  /\ cstep P p cid s M prom s' M'
-
-well_formed_def
-well_formed_fwdb_def
-
-Theorem clstep_mutex_addr_unchanged:
-  !p b blocks1 A blocks2 B blocks3.
-  p = BirProgram $ blocks1 ++ A ++ blocks2 ++ B ++ blocks3
-  /\ well_formed cid M s
-  /\ clstep spinlock_concrete cid s M prom s'
-  /\ op_on_addr address p
-    ((bir_labels_of_program $ BirProgram A) ++ (bir_labels_of_program $ BirProgram B))
-  /\ control_flow M cid p (s.bst_coh address) pc (bir_pc_first $ BirProgram A) (bir_pc_first $ BirProgram B)
-    ((bir_labels_of_program $ BirProgram A) ++ (bir_labels_of_program $ BirProgram B))
-  /\ bst_pc_tuple s.bst_pc = (label,index)
-  /\
-  ==>
-Proof
-
-QED
-*)
-
-
-(*
 calculate size of lock and unlock code:
 EVAL ``MAP (λx. case x of BL_Address $ Imm64 x => x) $ bir_labels_of_program $ BirProgram $ lock lock_addr 0w``
 EVAL ``MAP (λx. case x of BL_Address $ Imm64 x => x) $ bir_labels_of_program $ BirProgram $ unlock lock_addr 0w``
@@ -4242,8 +4412,6 @@ Proof
   >> rpt conj_tac
   >> fs[word_add_n2w]
 QED
-
-(* here be dragons *)
 
 (* the coherence does not change through certain labels *)
 Definition mem_loc_coh_value_inv_def:
@@ -4278,6 +4446,8 @@ Definition op_on_addr_ext_def:
     ==> s.bst_coh loc_val = s'.bst_coh loc_val
 End
 
+(* try to establish that the coherence remains unchanged under certain
+ * constraints *)
 Theorem cstep_coherence_unchanged:
   !P p cid s M prom s' M' block0 block1 block2 b1l b0l A B.
   A = lock lock_addr b0l
@@ -4328,388 +4498,7 @@ Proof
   >- (
     gs[op_on_addr_ext_def]
   )
-
-QED
-
-(* from $CAKEMLDIR/misc/miscScript.sml *)
-Definition steps_rel_def:
-  steps_rel R x [] = T
-  /\ (steps_rel R x ((j,y)::tr) <=> R x j y /\ steps_rel R y tr)
-End
-
-(* definition of a trace *)
-
-Definition trace_from_l_def:
-  trace_from_l cores_from P tr =
-    steps_rel (λ(cores,M) cid (cores',M'). parstep P cid cores M cores' M') cores_from tr
-End
-
-Theorem trace_from_wf:
-  !tr P cores M.
-  trace_from_l (cores,M) P tr /\ well_formed_cores cores M /\ well_formed_ext_cores cores
-  ==> EVERY (λ(lbl,(cores,M)). well_formed_cores cores M /\ well_formed_ext_cores cores) tr
-Proof
-  Induct >> fs[trace_from_l_def,pairTheory.FORALL_PROD]
-  >> rpt gen_tac >> strip_tac
-  >> fs[steps_rel_def]
-  >> drule_all_then assume_tac parstep_preserves_wf
-  >> drule_all_then assume_tac parstep_preserves_wf_ext_cores
-  >> first_x_assum $ drule_then $ irule_at Any
-  >> asm_rewrite_tac[]
-QED
-
-Definition trace_from_def:
-  trace_from x P tr <=>
-    ?tr'. trace_from_l x P tr' /\ tr = MAP SND tr'
-End
-
-(* spinlock trace *)
-
-Definition spl_trace_def:
-  spl_trace params P tr =
-    ?cores blocks jump_after unlock_entry. init cores
-    /\ params = (blocks,jump_after,unlock_entry)
-    /\ (!cid s p. FLOOKUP cores cid = SOME $ Core cid p s ==> p = spinlock_concrete2 blocks jump_after unlock_entry)
-    /\ trace_from_l (cores,[]) P tr
-End
-
-(* There is The point in a trace (not certifying), when a promise is made *)
-(* subsumed by more specific version  parstep_promise_step_LRC *)
-Theorem parstep_promise_step_RTC:
-  !t cores M cores' M' P.
-  RTC (λ(cores,M) (cores',M'). ?cid. parstep P cid cores M cores' M') (cores,M) (cores',M')
-  /\ LENGTH M < t /\ t <= LENGTH M' /\ 0 < t
-  ==> ?cores'' M'' cores''' M''' cid.
-    RTC (λ(cores,M) (cores',M'). ?cid. parstep P cid cores M cores' M') (cores,M) (cores'',M'')
-    /\ RTC (λ(cores,M) (cores',M'). ?cid. parstep P cid cores M cores' M') (cores''',M''') (cores',M')
-    /\ parstep P cid cores'' M'' cores''' M'''
-    /\ (EL (PRE t) M''').cid = cid /\ SUC $ LENGTH M'' = t /\ LENGTH M''' = t
-Proof
-  rpt strip_tac
-  >> dxrule_then strip_assume_tac arithmeticTheory.RTC_NRC
-  >> qmatch_asmsub_rename_tac `NRC _ n (cores,M) (cores',M')`
-  >> qmatch_asmsub_abbrev_tac `NRC R n (cores,M) (cores',M')`
-  >> Cases_on `0 < n` >> gvs[]
-  >> Cases_on `!m. m <= n ==> !cores'' M''.
-    NRC R m (cores,M) (cores'',M'') /\ NRC R (n - m) (cores'',M'') (cores',M')
-    ==> LENGTH M'' < t`
-  >- (first_x_assum $ drule_at Any >> fs[])
-  >> PRED_ASSUM is_neg $ mp_tac o SIMP_RULE std_ss [NOT_FORALL_THM]
-  >> qho_match_abbrev_tac `(?m. P' m) ==> _`
-  >> disch_then assume_tac
-  >> dxrule_then strip_assume_tac arithmeticTheory.WOP
-  >> qmatch_asmsub_rename_tac `P' m`
-  >> `0 < m /\ m <= n` by (
-    unabbrev_all_tac
-    >> fs[] >> Cases_on `m` >> gvs[]
-  )
-  >> `PRE m < m` by decide_tac
-  >> unabbrev_all_tac
-  >> Cases_on `m` >> gs[DISJ_EQ_IMP,arithmeticTheory.NRC_SUC_RECURSE_LEFT,pairTheory.LAMBDA_PROD]
-  >> fs[pairTheory.ELIM_UNCURRY,arithmeticTheory.NOT_LESS]
-  >> qmatch_asmsub_rename_tac `parstep P cid (FST x)`
-  >> PairCases_on `x` >> fs[]
-  >> `LENGTH x1 < t` by (
-    first_x_assum irule
-    >> goal_assum $ drule_at Any
-    >> `n - n' = SUC $ n - SUC n'` by decide_tac
-    >> pop_assum $ ONCE_REWRITE_TAC o single
-    >> once_rewrite_tac[arithmeticTheory.NRC]
-    >> fs[PULL_EXISTS]
-    >> goal_assum $ drule_at Any
-    >> fs[]
-    >> goal_assum drule
-  )
-  >> drule_then strip_assume_tac $ iffLR parstep_cases
-  >> imp_res_tac cstep_mem_mono
-  >> gvs[cstep_cases,GSYM arithmeticTheory.ADD1]
-  >> qmatch_asmsub_rename_tac `t <= SUC $ LENGTH x1`
-  >> `t = SUC $ LENGTH x1` by fs[arithmeticTheory.LESS_OR_EQ]
-  >> drule_then (irule_at Any) arithmeticTheory.NRC_RTC
-  >> drule_then (irule_at Any) arithmeticTheory.NRC_RTC
-  >> fs[rich_listTheory.EL_APPEND2]
-QED
-
-(* existence of index in trace where a promise is discharged *)
-
-(* TODO generalise reasoning to arbitrary traces and use in this theorem and in is_certified_promise_disch *)
-(* TODO move next to is_certified_promise_disch *)
-(* There is The point in a trace (not certifying), when a promise is made *)
-Theorem parstep_promise_step_LRC:
-  !cores M t R ls cores' M' P.
-  Abbrev (R = (λcM cM'. ?cid. parstep_tr P cid cM cM'))
-  /\ LRC R ls (cores,M) (cores',M')
-  /\ LENGTH M < t /\ t <= LENGTH M'
-  ==> ?k last. (* t <= k : consequence of #memory updates <= #transitions  *)
-    SUC k <= LENGTH ls
-    /\ last = (if SUC k = LENGTH ls then (cores',M') else EL (SUC k) ls)
-    /\ LRC R (TAKE k ls) (cores,M) (EL k ls)
-    /\ LRC R (DROP (SUC k) ls) last (cores',M')
-    /\ SUC $ LENGTH $ SND $ EL k ls = t
-    /\ LENGTH $ SND $ last = t
-    /\ ?cid. parstep_tr P cid (EL k ls) last
-    /\ (EL (PRE t) $ SND $ last).cid = cid
-Proof
-  rpt strip_tac
-  >> qmatch_asmsub_rename_tac `LRC _ ls (cores,M) (cores',M')`
-  >> qabbrev_tac `n = LENGTH ls`
-  >> qmatch_asmsub_abbrev_tac `LRC R ls (cores,M) (cores',M')`
-  >> Cases_on `0 < n` >> gvs[listTheory.LRC_def]
-  >> Cases_on `!m. m <= n ==> !cM''. (cM'' = if m = n then (cores',M') else EL m ls)
-    /\ LRC R (TAKE m ls) (cores,M) cM'' /\ LRC R (DROP m ls) cM'' (cores',M')
-    ==> LENGTH $ SND cM'' < t`
-  >- (
-    `n <= n` by fs[]
-    >> first_x_assum drule
-    >> unabbrev_all_tac
-    >> fs[TAKE_LENGTH_ID,DROP_LENGTH_NIL,LRC_def]
-  )
-  >> PRED_ASSUM is_neg $ mp_tac o SIMP_RULE std_ss [NOT_FORALL_THM]
-  >> qho_match_abbrev_tac `(?m. P' m) ==> _`
-  >> disch_then assume_tac
-  >> dxrule_then strip_assume_tac arithmeticTheory.WOP
-  >> qmatch_asmsub_rename_tac `P' m`
-  >> `0 < m /\ m <= n` by (
-    unabbrev_all_tac
-    >> gvs[GSYM NULL_EQ,LENGTH_NOT_NULL]
-    >> imp_res_tac LRC_HD
-    >> fs[] >> Cases_on `m`
-    >> gs[pairTheory.ELIM_UNCURRY,GSYM NULL_EQ]
-    >> pop_assum $ fs o single o GSYM
-  )
-  >> `PRE m < m` by decide_tac
-  >> unabbrev_all_tac
-  >> Cases_on `m` >> gs[DISJ_EQ_IMP,arithmeticTheory.NRC_SUC_RECURSE_LEFT,pairTheory.LAMBDA_PROD]
-  >> fs[pairTheory.ELIM_UNCURRY,arithmeticTheory.NOT_LESS]
-  >> qmatch_asmsub_rename_tac `SUC n <= LENGTH ls`
-  >> `LENGTH $ SND $ EL n ls < t` by (
-    first_x_assum irule
-    >> rev_drule_at (Pat `LRC`) $ iffLR LRC_TAKE_DROP
-    >> fs[]
-  )
-  >> PRED_ASSUM is_forall kall_tac
-  >> gs[LRC_TAKE_SUC]
-  >> rpt $ goal_assum $ drule_at $ Pat `LRC`
-  >> unabbrev_all_tac
-  >> fs[parstep_tr_def]
-  >> REWRITE_TAC[CONJ_ASSOC]
-  >> qmatch_goalsub_abbrev_tac `A /\ parstep _ cid' _ _ _ _`
-  >> qsuff_tac `cid' = cid /\ A` >- fs[]
-  >> unabbrev_all_tac
-  >> qmatch_asmsub_abbrev_tac `parstep _ _ _ _ _ $ SND last`
-  >> drule_then strip_assume_tac $ iffLR parstep_cases
-  >> imp_res_tac cstep_mem_mono
-  >> gvs[cstep_cases,GSYM ADD1]
-  >> qmatch_asmsub_rename_tac `t <= SUC $ LENGTH $ SND $ EL n ls`
-  >> `t = SUC $ LENGTH $ SND $ EL n ls` by fs[arithmeticTheory.LESS_OR_EQ]
-  >> fs[rich_listTheory.EL_APPEND2]
-QED
-
-Definition trace_prom_index_def:
-  trace_prom_index P cores M t ls cores' M' k =
-  ?R last. (R = (λcM cM'. ?cid. parstep_tr P cid cM cM'))
-    /\ SUC k <= LENGTH ls
-    /\ last = (if SUC k = LENGTH ls then (cores',M') else EL (SUC k) ls)
-    /\ LRC R (TAKE k ls) (cores,M) (EL k ls)
-    /\ LRC R (DROP (SUC k) ls) last (cores',M')
-    /\ SUC $ LENGTH $ SND $ EL k ls = t
-    /\ LENGTH $ SND $ last = t
-    /\ ?cid. parstep_tr P cid (EL k ls) last
-    /\ (EL (PRE t) $ SND $ last).cid = cid
-End
-
-Theorem trace_prom_index_exists:
-  !cores M t R ls cores' M' P.
-  Abbrev (R = (λcM cM'. ?cid. parstep_tr P cid cM cM'))
-  /\ LRC R ls (cores,M) (cores',M')
-  /\ LENGTH M < t /\ t <= LENGTH M'
-  ==> ?k. trace_prom_index P cores M t ls cores' M' k
-Proof
-  rw[trace_prom_index_def]
-  >> drule_all_then strip_assume_tac parstep_promise_step_LRC
-  >> rpt $ goal_assum $ drule_at Any
-  >> gs[]
-QED
-
-Theorem trace_prom_index_unique:
-  !k k' cores M t R ls cores' M' P.
-  Abbrev (R = (λcM cM'. ?cid. parstep_tr P cid cM cM'))
-  /\ LRC R ls (cores,M) (cores',M')
-  /\ LENGTH M < t /\ t <= LENGTH M'
-  /\ trace_prom_index P cores M t ls cores' M' k
-  /\ trace_prom_index P cores M t ls cores' M' k'
-  ==> k = k'
-Proof
-  ntac 2 gen_tac
-  >> spose_not_then mp_tac
-  >> wlog_tac `k < k'` []
-  >- (
-    strip_tac
-    >> dxrule_then assume_tac LESS_CASES_IMP
-    >> gs[AND_IMP_INTRO,PULL_FORALL,DISJ_EQ_IMP]
-    >> first_x_assum drule
-    >> ntac 2 $ disch_then $ drule_at Any
-    >> strip_tac
-    >> gs[]
-  )
-  >> strip_tac
-  >> fs[trace_prom_index_def]
-  >> cheat (* the promise t can only be fulfiled once *)
-QED
-
-(* uniqueness of index in trace where a promise is discharged *)
-
-(* for a promise in a trace  trace_from cores_from P tr
- * returns the index at which the promise is discharged
- *)
-Definition prom_disch_index_def:
-  prom_disch_index t (cores,M) P tr =
-    if ~NULL tr /\ 0 < t /\ t <= LENGTH $ SND $ LAST tr
-    then SOME @k. trace_prom_index P cores M t tr (FST $ LAST tr) (SND $ LAST tr) k
-    else NONE
-End
-
-Theorem prom_disch_index_distinct_time:
-  Abbrev (R = (λcM cM'. ?cid. parstep_tr P cid cM cM'))
-  /\ LRC R tr (cores,M) (cores',M')
-  /\ prom_disch_index t (cores,M) P tr = SOME k
-  /\ prom_disch_index t' (cores,M) P tr = SOME k'
-  ==> (t <> t' <=> k <> k')
-Proof
-  cheat (* trace_prom_index_unique *)
-QED
-
-(* mutual exclusion
- * for a trace with two stores t and t' to protected locations by different
- * cores with t < t' it holds that at state of the promise of t it is impossible
- * for a store to M(t').loc of any value to be (promised and) certified.
- *)
-
-Definition mut_ex_def:
-  mut_ex x P procloc <=>
-    !tr t t' k k' loc loc' cid cid'.
-    trace_from x P tr /\ 0 < t /\ t < t' /\ t' < LENGTH tr
-    /\ prom_disch_index t x P tr = SOME k
-    /\ prom_disch_index t' x P tr = SOME k'
-    /\ loc = (EL t $ SND $ LAST tr).loc /\ loc' = (EL t' $ SND $ LAST tr).loc
-    /\ cid = (EL t $ SND $ LAST tr).cid /\ cid' = (EL t' $ SND $ LAST tr).cid
-    /\ MEM loc procloc /\ MEM loc' procloc
-    /\ cid <> cid'
-    ==> k < k'
-End
-
-Theorem mut_ex_spinlock_concrete2:
-  init cores
-  /\ labels_wf blocks (BL_Address (Imm64 jump_after_lock)) unlock_entry
-  /\ prog_addr64 blocks
-  /\ jump_constraints c.bst_pc c'.bst_pc
-    [unlock lock_addr unlock_entry; lock lock_addr 0w (BL_Address (Imm64 jump_after_lock))]
-  /\ (!cid p s. FLOOKUP cores cid = SOME $ Core cid p s
-    ==> p = spinlock_concrete2 blocks jump_after unlock_entry)
-  ==> mut_ex (cores,[]) (λx y. T) procloc
-Proof
-  rw[mut_ex_def]
   >> cheat
 QED
-
-(*
-
-(* also requires coherence loc is unchanged *)
-Theorem cstep_mem_loc_coh_value_inv:
-  !P p cid s M prom s' M'.
-  p = BirProgram $ block0 ++ A ++ block1 ++ B ++ block2
-  /\ cstep P p cid s M prom s' M'
-  /\ mem_loc_coh_value_inv M loc s.bst_pc
-    (bir_labels_of_program block1 ++ bir_labels_of_program block2) (s.bst_coh loc) v
-  /\ well_formed cid M s
-  ==> mem_loc_coh_value_inv M' loc s'.bst_pc
-    (bir_labels_of_program block1) (s'.bst_coh loc) v
-Proof
-
-QED
-
-(* correctness of memory with the additional constraints on
- * control flow and on operations on protected address *)
-(*
-  - make refinement relation spinlock_ref1_core relative to
-    concrete and abstract - lock_entry and unlock_entry addresses
-  - add possibility to have additional blocks (before, between and after CS)
-    - to abstract program
-    - to concrete program
-  - add to refinement the synchronisation of other unrelated blocks
-  - proof for arbitary program block concatenation
-    if  op_on_addr  holds for the labels in a block then the location remains
-    unchanged in all other blocks
-    o define bir_pc_last -- only necessary (?) due to jump statements in BSGen generic statements
-    * define invariant: program mem_loc_coh_value
-    - prove above invariant
-    - prove property on steps, namely coherence of protected location does not
-      change in certain sections, assuming op_on_addr and control_flow
-      p = block1 ++ A ++ block2 ++ B ++ block3
-        p = BirProgram A ++ block ++ B
-        /\ op_on_addr addr p
-          ((bir_labels_of_program $ BirProgram A) ++ (bir_labels_of_program $ BirProgram B))
-        /\
-
-->     - rephrase op_on_addr to contain evaluated address!!!
-
-
-*)
-
-Theorem parstep_spinlock_abstract_prog_mem_correct:
-  !cid cores M cores' M' acores aM as.
-    parstep_tr (λmem msg. T) cid (cores,M) (cores',M')
-    /\ run_progc cores ( spinlock_concrete
-    /\ FEVERY_prog spinlock_concrete (λcid s.
-      spinlock_ref1_core (core_state cid cores,M) (core_state cid acores,aM)
-      /\ well_formed cid M s /\ slc_inv 4w 24w cid s M
-    ) cores
-    /\ run_progc acores spinlock_abstract
-    /\ FLOOKUP acores cid = SOME $ Core cid spinlock_abstract as
-    /\ sl_mem_correct_inv M
-  ==> sl_mem_correct_inv M'
-Proof
-  rpt strip_tac
-  >> drule_all_then strip_assume_tac parstep_preserves_spinlock_ref1
-  >> `?s. FLOOKUP cores cid = SOME $ Core cid spinlock_concrete s
-    /\ spinlock_ref1_core (s,M) (as,aM)` by (
-    gvs[FEVERY_prog_def,parstep_tr_def,parstep_cases,run_progc_def,run_prog_def,FLOOKUP_FEVERY]
-    >> rpt $ first_x_assum $ drule_then assume_tac
-    >> gs[core_zoo]
-  )
-  >> imp_res_tac $ cj 1 $ iffLR spinlock_ref1_core_def
-  >> fs[]
-  >> drule_all parstep_preserves_sla_mem_correct_inv
-  >> `?s as. FLOOKUP cores' cid = SOME $ Core cid spinlock_concrete s
-    /\ FLOOKUP acores' cid = SOME $ Core cid spinlock_abstract as
-    /\ spinlock_ref1_core (s,M') (as,aM')` by (
-    gvs[FEVERY_prog_def,parstep_tr_def,parstep_cases,run_progc_def,run_prog_def,FLOOKUP_FEVERY]
-    >> gs[core_zoo,FLOOKUP_UPDATE,COND_EXPAND,COND_RAND,COND_RATOR]
-  )
-  >> fs[FEVERY_prog_def,FLOOKUP_FEVERY]
-  >> rpt $ first_x_assum $ drule_then assume_tac
-  >> fs[]
-  >> imp_res_tac $ cj 1 $ iffLR spinlock_ref1_core_def
-  >> fs[]
-QED
-
-
-
-Definition in_lock_concrete_def:
-  in_lock_concrete pc =
-  !lbl index.
-    bst_pc_tuple pc = (BL_Address $ Imm64 lbl, index)
-    ==> 0w <= lbl /\ lbl <= 20w
-      /\ (lbl = 0w ==> index = 1)
-End
-
-Definition in_unlock_concrete_def:
-  in_unlock_concrete pc =
-  !lbl index.
-    bst_pc_tuple pc = (BL_Address $ Imm64 lbl, index)
-    ==> 24w <= lbl /\ lbl <= 36w
-      /\ (lbl = 24w ==> index = 1)
-End
-*)
 
 val _ = export_theory();

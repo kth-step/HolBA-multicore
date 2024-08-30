@@ -1,6 +1,15 @@
 (*
- * Theorems about promising semantics
- *)
+  Theorems about promising semantics relevant for refinement proofs with composition
+
+  One central definition is `transition_within`, which defines jumps within a
+  program.
+  
+  Contains theorems valid for composition ("APPEND") and permutation of
+  programs (search for "PERM"), valid for BIR constants
+  `bir_labels_of_program`, `bir_get_current_statement`
+  Defines constant list_disj for disjunction of lists, list_subset for subset
+  of lists
+*)
 
 open HolKernel boolLib bossLib Parse;
 open listTheory rich_listTheory arithmeticTheory
@@ -11,6 +20,21 @@ open listTheory rich_listTheory arithmeticTheory
      pairTheory
 
 val _ = new_theory "promising_thms";
+
+(* for strong post condition generation *)
+
+Definition bir_stmts_of_progs_def:
+  bir_stmts_of_progs $ BirProgram p =
+    MAP (λbl.
+      let stmts =
+        case bl of
+        | BBlock_Stmts stmts =>
+          SOME (LENGTH stmts.bb_statements,stmts.bb_statements,stmts.bb_last_statement)
+        | BBlock_Ext R => NONE
+      in
+        (bir_label_of_block bl, stmts)
+    ) p
+End
 
 Definition bst_pc_tuple_def:
   bst_pc_tuple x = (x.bpc_label,x.bpc_index)
@@ -135,6 +159,12 @@ Definition list_disj_def:
   list_disj l1 l2 = !x. MEM x l1 ==> ~MEM x l2
 End
 
+Theorem list_disj_eq:
+  list_disj l1 l2 = DISJOINT (set l1) (set l2)
+Proof
+  fs[pred_setTheory.DISJOINT_ALT,list_disj_def]
+QED
+
 Theorem list_disj_ALL_DISTINCT:
   !l1 l2. ALL_DISTINCT (l1 ++ l2) ==> list_disj l1 l2
 Proof
@@ -198,6 +228,12 @@ QED
 Definition list_subset_def:
   list_subset l1 l2 = !x. MEM x l1 ==> MEM x l2
 End
+
+Theorem list_subset_eq:
+  list_subset l1 l2 <=> (set l1) SUBSET (set l2)
+Proof
+  fs[pred_setTheory.SUBSET_DEF,list_subset_def]
+QED
 
 Theorem list_subset_id:
   !l1. list_subset l1 l1
@@ -483,35 +519,38 @@ QED
 
 (* jump within a program *)
 
-Definition is_jump_within_def:
-  is_jump_within p' c <=>
-  (
-    !cond_e lbl1 lbl2 v v'.
-    bir_get_current_statement (BirProgram p') c.bst_pc =
-      SOME $ BSGen $ BStmtE $ BStmt_CJmp cond_e lbl1 lbl2
-    /\ bir_eval_exp cond_e c.bst_environ = SOME v'
-    /\ bir_dest_bool_val v' = SOME v
-    ==> (v ==> !lbl1'. bir_eval_label_exp lbl1 c.bst_environ = SOME lbl1' ==> MEM lbl1' $ bir_labels_of_program $ BirProgram p')
-      /\ (~v ==> !lbl2'. bir_eval_label_exp lbl2 c.bst_environ = SOME lbl2' ==> MEM lbl2' $ bir_labels_of_program $ BirProgram p')
-  )
-  /\ (
-    !e lbl lbl'.
-    bir_get_current_statement (BirProgram p') c.bst_pc =
-      SOME $ BSGen $ BStmtE $ BStmt_Jmp e
-    /\ bir_eval_label_exp lbl c.bst_environ = SOME lbl'
-    ==> MEM lbl' $ bir_labels_of_program $ BirProgram p'
-  )
-  /\ (
-    !R prom c' M.
-    bir_get_current_statement (BirProgram p') c.bst_pc = SOME $ BSExt R
-    /\ R (c,M,prom) c'
-    ==> MEM c'.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p'
-  )
+(* restrict an external program to a fixed shape that either encodes progress to
+ * a certain label if a condition P holds, or stagnates *)
+Definition ext_loop_def:
+  ext_loop p lbl P R' (s,prom,M) s' =
+    if P (s,prom,M) then s = s' else
+      (s' = bir_exec_stmt_jmp_to_label p lbl s' /\ R' (s,prom,M) s')
 End
 
+(* all external programs have a certain fixed shape *)
+Definition ext_loops_def:
+  ext_loops (BirProgram p) =
+    EVERY (λstmt.
+      !x. stmt = BBlock_Ext x
+      ==> ?lbl P R'. x.beb_relation = ext_loop (BirProgram p) lbl P R'
+    ) p
+End
+
+Definition is_jump_def:
+  is_jump p c <=>
+    ?stmt. bir_get_current_statement (BirProgram p) c.bst_pc = SOME stmt
+    /\ (
+      (?cond_e lbl1 lbl2. stmt = BSGen $ BStmtE $ BStmt_CJmp cond_e lbl1 lbl2)
+      \/ (?e. stmt = BSGen (BStmtE (BStmt_Jmp e)))
+      \/ ?lbl P R'. stmt = BSExt $ ext_loop (BirProgram p) lbl P R'
+    )
+End
+
+(* a jump to a given label *)
 Definition is_jump_to_label_def:
   is_jump_to_label p' c lbl <=>
-  (
+  is_jump p' c
+  /\ (
     !cond_e lbl1 lbl2 v v'.
     bir_get_current_statement (BirProgram p') c.bst_pc =
       SOME $ BSGen $ BStmtE $ BStmt_CJmp cond_e lbl1 lbl2
@@ -521,62 +560,24 @@ Definition is_jump_to_label_def:
       /\ (~v ==> bir_eval_label_exp lbl2 c.bst_environ = SOME lbl)
   )
   /\ (
-    !e lbl lbl'.
+    !lbl'.
     bir_get_current_statement (BirProgram p') c.bst_pc =
-      SOME $ BSGen $ BStmtE $ BStmt_Jmp e
-    /\ bir_eval_label_exp lbl' c.bst_environ = SOME lbl
+      SOME $ BSGen $ BStmtE $ BStmt_Jmp lbl'
+    ==> bir_eval_label_exp lbl' c.bst_environ = SOME lbl
   )
   /\ (
-    !R prom c' M.
-    bir_get_current_statement (BirProgram p') c.bst_pc = SOME $ BSExt R
-    /\ R (c,M,prom) c' ==> lbl = c'.bst_pc.bpc_label /\ c'.bst_pc.bpc_index = 0
+    ?lbl' P R.
+    bir_get_current_statement (BirProgram p') c.bst_pc
+    = SOME $ BSExt $ ext_loop (BirProgram p') lbl' P R
+    ==> lbl' = lbl
   )
 End
 
-(* use with clstep_permute_prog *)
-
-Theorem clstep_imp_clstep_APPEND:
-  clstep (BirProgram $ p ++ p') cid c M prom c'
-  /\ MEM c.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p'
-  /\ list_disj (bir_labels_of_program $ BirProgram p)
-           (bir_labels_of_program $ BirProgram p')
-  /\ is_jump_within p' c
-  ==> clstep (BirProgram p') cid c M prom c'
-Proof
-  rpt strip_tac
-  >> imp_res_tac clstep_bgcs_imp
-  >> drule_then assume_tac bir_get_current_statement_MEM2
-  >> gs[clstep_cases,bir_eval_exp_view_def,bmc_exec_general_stmt_exists,is_jump_within_def]
-  >> rpt $ qpat_x_assum `SOME _ = _` $ assume_tac o GSYM
-  >> fs[]
-  >~ [`BSGen $ BStmtB $ BMCStmt_Load var a_e opt_cast xcl acq rel`]
-  >- (
-    qhdtm_x_assum `mem_read` $ irule_at Any
-    >> fs[]
-  )
-  >~ [`BSGen $ BStmtB $ BMCStmt_Amo var a_e v_e acq rel`]
-  >- (
-    qhdtm_x_assum `mem_read` $ irule_at Any
-    >> fs[]
-  )
-  >~ [`bir_exec_stmt_cjmp`]
-  >- (
-    MK_COMB_TAC >> fs[bir_exec_stmt_cjmp_def]
-    >> ntac 2 CASE_TAC >> fs[]
-    >> rw[bir_exec_stmt_jmp_def]
-    >> CASE_TAC
-    >> fs[bir_exec_stmt_jmp_to_label_def,bir_labels_of_program_APPEND]
-  )
-  >~ [`bir_exec_stmt_jmp`]
-  >- (
-    fs[bir_exec_stmt_jmp_def] >> CASE_TAC >> gs[]
-    >> fs[bir_exec_stmt_jmp_to_label_def]
-    >> first_x_assum $ drule_then assume_tac
-    >> fs[bir_labels_of_program_APPEND]
-  )
-  >~ [`BSExt`]
-  >- first_x_assum $ drule_then irule
-QED
+(* the central definition of a jump within a program *)
+Definition transition_within_def:
+  transition_within p c <=>
+    !lbl. is_jump_to_label p c lbl ==> MEM lbl $ bir_labels_of_program $ BirProgram p
+End
 
 Theorem well_formed_mem_read_view_zero:
   !cid M s l.
@@ -769,9 +770,196 @@ Proof
   >~ [`BSExt`]
   >- (
     drule_then assume_tac bir_labels_of_program_PERM
-    >> dxrule_all $ iffRL PERM_MEM
+    >> dxrule_then assume_tac PERM_MEM
+    >> drule_all_then (gs o single) bir_exec_stmt_jmp_to_label_PERM
+    >> goal_assum drule
     >> fs[]
   )
+QED
+
+Theorem bir_exec_stmt_jmp_to_label_APPEND1:
+  !p p' lbl c.
+    MEM lbl $ bir_labels_of_program $ BirProgram p
+    ==> bir_exec_stmt_jmp_to_label (BirProgram $ p ++ p') lbl c
+    = bir_exec_stmt_jmp_to_label (BirProgram p) lbl c
+Proof
+  rpt strip_tac
+  >> fs[bir_exec_stmt_jmp_to_label_def,bir_labels_of_program_APPEND]
+QED
+
+Theorem bir_exec_stmt_jmp_to_label_APPEND2:
+  !p p' lbl c.
+    MEM lbl $ bir_labels_of_program $ BirProgram p'
+    ==> bir_exec_stmt_jmp_to_label (BirProgram $ p ++ p') lbl c
+    = bir_exec_stmt_jmp_to_label (BirProgram p') lbl c
+Proof
+  rpt strip_tac
+  >> fs[bir_exec_stmt_jmp_to_label_def,bir_labels_of_program_APPEND]
+QED
+
+Theorem bir_get_current_statement_BSExt:
+  bir_get_current_statement (BirProgram p) c.bst_pc = SOME $ BSExt R
+  ==> ?x. MEM (BBlock_Ext x) p /\ R = x.beb_relation
+Proof
+  gs[bir_get_current_statement_def,optionTheory.option_case_eq,ELIM_UNCURRY,PULL_EXISTS,bir_get_program_block_info_by_label_THM]
+  >> Induct >> rw[] >> fs[]
+  >> BasicProvers.every_case_tac
+  >> gvs[bir_get_program_block_info_by_label_THM]
+  >> irule_at Any EQ_REFL
+  >> qpat_assum `EL _ _ = BBlock_Ext _` $ rewrite_tac o single o GSYM
+  >> fs[EL_MEM]
+QED
+
+Theorem clstep_imp_clstep_APPEND:
+  clstep (BirProgram $ p ++ p') cid c M prom c'
+  /\ MEM c.bst_pc.bpc_label $ bir_labels_of_program $ BirProgram p'
+  /\ list_disj (bir_labels_of_program $ BirProgram p)
+           (bir_labels_of_program $ BirProgram p')
+  /\ ext_loops $ BirProgram p'
+  /\ transition_within p' c
+  ==> clstep (BirProgram p') cid c M prom c'
+Proof
+  rpt strip_tac
+  >> imp_res_tac clstep_bgcs_imp
+  >> drule_then assume_tac bir_get_current_statement_MEM2
+  >> gs[clstep_cases,is_jump_to_label_def,bir_eval_exp_view_def,bmc_exec_general_stmt_exists,transition_within_def]
+  >> rpt $ qpat_x_assum `SOME _ = _` $ assume_tac o GSYM
+  >> fs[]
+  >~ [`BSGen $ BStmtB $ BMCStmt_Load var a_e opt_cast xcl acq rel`]
+  >- (
+    qhdtm_x_assum `mem_read` $ irule_at Any
+    >> fs[]
+  )
+  >~ [`BSGen $ BStmtB $ BMCStmt_Amo var a_e v_e acq rel`]
+  >- (
+    qhdtm_x_assum `mem_read` $ irule_at Any
+    >> fs[]
+  )
+  >~ [`bir_exec_stmt_cjmp`]
+  >- (
+    MK_COMB_TAC >> fs[]
+    >> fs[bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bir_labels_of_program_APPEND,bir_block_pc_def]
+    >> BasicProvers.every_case_tac
+    >> gs[is_jump_def]
+  )
+  >~ [`bir_exec_stmt_jmp`]
+  >- (
+    fs[bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bir_labels_of_program_APPEND,bir_block_pc_def]
+    >> BasicProvers.every_case_tac
+    >> gvs[is_jump_def]
+  )
+  >~ [`BSExt`]
+  >- (
+    gs[bir_exec_stmt_jmp_to_label_APPEND2,EVERY_MEM,ext_loops_def]
+    >> drule_then strip_assume_tac bir_get_current_statement_BSExt
+    >> gvs[PULL_FORALL,is_jump_def,PULL_EXISTS,ext_loop_def]
+    >> first_x_assum $ drule_then strip_assume_tac
+    >> qmatch_asmsub_abbrev_tac `_ = ext_loop _ lbl' P R'`
+    >> qmatch_goalsub_abbrev_tac `bir_exec_stmt_jmp_to_label _ lbl _`
+    >> gvs[ext_loop_def]
+    >> first_x_assum $ qspecl_then [`lbl'`,`lbl'`,`P`,`R`] assume_tac
+    >> gvs[COND_EXPAND_OR,bir_exec_stmt_jmp_to_label_def]
+    >> cheat
+    (* use transition_within_def and definition of jump *)
+  )
+QED
+
+Theorem clstep_imp_clstep_APPEND1':
+  clstep (BirProgram p) cid c M prom c'
+  /\ list_disj (bir_labels_of_program $ BirProgram p)
+      (bir_labels_of_program $ BirProgram p')
+  /\ ext_loops $ BirProgram p
+  /\ transition_within p c
+  ==> clstep (BirProgram $ p ++ p') cid c M prom c'
+Proof
+  rpt strip_tac
+  >> imp_res_tac clstep_bgcs_imp
+  >> imp_res_tac bir_get_current_statement_SOME_MEM
+  >> drule_all_then assume_tac bir_get_current_statement_APPEND1
+  >> gs[clstep_cases,bir_eval_exp_view_def,bmc_exec_general_stmt_exists,transition_within_def]
+  >> rpt $ qpat_x_assum `SOME _ = _` $ assume_tac o GSYM
+  >> fs[]
+  >~ [`BSGen $ BStmtB $ BMCStmt_Load var a_e opt_cast xcl acq rel`]
+  >- (
+    qhdtm_x_assum `mem_read` $ irule_at Any
+    >> fs[]
+  )
+  >~ [`BSGen $ BStmtB $ BMCStmt_Amo var a_e v_e acq rel`]
+  >- (
+    qhdtm_x_assum `mem_read` $ irule_at Any
+    >> fs[]
+  )
+  >~ [`bir_exec_stmt_cjmp`]
+  >- (
+    MK_COMB_TAC >> fs[]
+    >> fs[bir_exec_stmt_cjmp_def,bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bir_labels_of_program_APPEND,bir_block_pc_def]
+    >> BasicProvers.every_case_tac
+    >> gs[is_jump_to_label_def]
+    >> cheat
+  )
+  >~ [`bir_exec_stmt_jmp`]
+  >- (
+    fs[bir_exec_stmt_jmp_def,bir_exec_stmt_jmp_to_label_def,bir_labels_of_program_APPEND,bir_block_pc_def]
+    >> BasicProvers.every_case_tac
+    >> gvs[is_jump_to_label_def]
+  >> cheat
+  )
+  >~ [`BSExt`]
+  >- (
+    gs[is_jump_to_label_def,bir_exec_stmt_jmp_to_label_APPEND1]
+    >> fs[bir_exec_stmt_jmp_to_label_def,bir_block_pc_def,bir_labels_of_program_APPEND]
+    >> cheat
+  )
+QED
+
+Theorem clstep_imp_clstep_APPEND2':
+  clstep (BirProgram p) cid c M prom c'
+  /\ list_disj (bir_labels_of_program $ BirProgram p)
+      (bir_labels_of_program $ BirProgram p')
+  /\ ALL_DISTINCT $ bir_labels_of_program $ BirProgram $ p ++ p'
+  /\ ext_loops $ BirProgram p
+  /\ transition_within p c
+  ==> clstep (BirProgram $ p' ++ p) cid c M prom c'
+Proof
+  rpt strip_tac
+  >> drule clstep_imp_clstep_APPEND1'
+  >> disch_then drule
+  >> disch_then $ drule_then assume_tac
+  >> `PERM (p ++ p') (p' ++ p)` by fs[sortingTheory.PERM_APPEND]
+  >> gs[]
+  >> drule_all $ iffLR clstep_permute_prog
+  >> fs[]
+QED
+
+Theorem clstep_RC_imp_clstep_APPEND1:
+  RC (λ(s,M) (s',M'). ?prom. clstep (BirProgram p) cid s M prom s' /\ M = M') s s'
+  /\ list_disj (bir_labels_of_program $ BirProgram p)
+      (bir_labels_of_program $ BirProgram p')
+  /\ ext_loops $ BirProgram p
+  /\ transition_within p (FST s)
+  ==> RC (λ(s,M) (s',M'). ?prom. clstep (BirProgram $ p ++ p') cid s M prom s' /\ M = M') s s'
+Proof
+  rpt strip_tac
+  >> fs[RC_DEF,ELIM_UNCURRY]
+  >> dxrule_all_then assume_tac clstep_imp_clstep_APPEND1'
+  >> disj2_tac >> gs[]
+  >> goal_assum drule
+QED
+
+Theorem clstep_RC_imp_clstep_APPEND2:
+  RC (λ(s,M) (s',M'). ?prom. clstep (BirProgram p) cid s M prom s' /\ M = M') s s'
+  /\ list_disj (bir_labels_of_program $ BirProgram p)
+      (bir_labels_of_program $ BirProgram p')
+  /\ ALL_DISTINCT $ bir_labels_of_program $ BirProgram $ p ++ p'
+  /\ ext_loops $ BirProgram p
+  /\ transition_within p (FST s)
+  ==> RC (λ(s,M) (s',M'). ?prom. clstep (BirProgram $ p' ++ p) cid s M prom s' /\ M = M') s s'
+Proof
+  rpt strip_tac
+  >> fs[RC_DEF,ELIM_UNCURRY]
+  >> dxrule_all_then assume_tac clstep_imp_clstep_APPEND2'
+  >> disj2_tac >> gs[]
+  >> goal_assum drule
 QED
 
 (* read a variable from a state *)
@@ -825,8 +1013,6 @@ QED
 Definition bir_read_reg_nonzero_def:
   bir_read_reg_nonzero var env = ?v. bir_read_reg var env v /\ v <> 0w
 End
-
-
 
 Theorem mem_get_EVERY:
   !t M l v f. mem_get M l t = SOME v /\ 0 < t /\ EVERY f M ==> f v

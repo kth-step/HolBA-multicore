@@ -1,5 +1,11 @@
 (*
   automate post condition generation for given program
+
+  Provides a library for deriving and automatically proving strong post
+  condition invariants of BIR multicore code. The library is used in the
+  examples.
+
+  The "bgcs" acronym stands for the bir_get_current_statement constant.
 *)
 
 structure strongPostCondLib :> strongPostCondLib =
@@ -411,7 +417,10 @@ val ("BExp_Const",cexp_val::_) = term_to_string_args exp
             { dependents = [],
               constraint =
               ``?v t. bir_read_reg (bir_var_name ^var) s.bst_environ v
-              /\ mem_read M (BVal_Imm ^cexp_val) t = SOME $ BVal_Imm $ Imm64 v``
+              /\ mem_read M (BVal_Imm ^cexp_val) t = SOME $ BVal_Imm $ Imm64 v
+              (* TODO this is a sketch needs to be updated whenever the exclusive bank is updated *)
+              /\ (^xcl ==> IS_SOME s.bst_xclb)
+              ``
               (* read from address cexp_val into register var *)
             }
           ),
@@ -568,9 +577,9 @@ fun get_cjmp_targets jmp_stmt =
   handle _ =>
     raise ERR "get_jmp_target" "unhandled jump target"
 
-(* linearisation points *)
+(* commit points *)
 
-(* Is stmt a store to the linearisation address?
+(* Is stmt a store to the commit address?
    For exclusive stores this returns the success register *)
 fun is_store_to_lin_addr lin_addr stmt =
 case term_to_string_args stmt of
@@ -585,13 +594,13 @@ case term_to_string_args stmt of
 | _ => (false, NONE)
 
 
-(* linearisation constraints *)
+(* commit constraints *)
 
 type lc = {current: term list,
      last_point: (term * int * term) option,
      lin_addr: term, old: term list list, store_fail: term list}
 
-(* updates the set of linearisation points according to the current statement *)
+(* updates the set of commit points according to the current statement *)
 fun lin_constr (lc : lc) (addr,index,stmt) =
 let
   val (store_to_lin,xcl_opt) = is_store_to_lin_addr (#lin_addr lc) stmt
@@ -603,11 +612,11 @@ in
     {old=(#old lc), current=[], lin_addr=(#lin_addr lc),last_point=SOME (addr,index,valOf xcl_opt), store_fail=(#current lc)@[addr_label_cj_index addr index]}
   else if store_to_lin
   then
-    (* here an non-exclusive store resets all earlier branching of linearisation points *)
+    (* here an non-exclusive store resets all earlier branching of commit points *)
     {old=(#old lc)@[#store_fail lc]@[#current lc@[addr_label_cj_index addr index]], current=[], lin_addr=(#lin_addr lc),last_point=NONE, store_fail=[]}
   else if isSome (#last_point lc)
   then
-    (* the current pc is part of both equivalence classes of linearisation points (as the branching condition has not yet been checked in a cjmp) *)
+    (* the current pc is part of both equivalence classes of commit points (as the branching condition has not yet been checked in a cjmp) *)
     {old=(#old lc),current=(#current lc)@[
       mk_conj(addr_label_cj_index addr index, bir_eval_exp_den_imm (#3 (valOf (#last_point lc))) ``v_succ``)
     ],lin_addr=(#lin_addr lc),last_point=(#last_point lc),store_fail=(#store_fail lc)@[
@@ -669,8 +678,7 @@ val block_term = ``T``
           val term' =
             constrs_to_term (addr,index) constr cjmp_constr
           val (constr,cjmp_constr) = update_constr stmt constr cjmp_constr
-          (* linearisation constraint only needs to remember index and label of
-             change of  *)
+          (* commit constraint only needs to remember index and label of *)
           val lc = lin_constr lc (addr,index,stmt)
         in
 (*
@@ -713,7 +721,7 @@ in
   (target, visited_pcs, block_post_cond, constr, cjmp_constr, cjmp_path, lc)
 end
 
-(* calculate post condition and linearisation term *)
+(* calculate post condition and commit term *)
 fun calculate_terms prog =
 let
   (* (bir_label_t # option) list *)
@@ -764,7 +772,7 @@ val len = length stmts
     old = [] : term list list,
     current = [] : term list,
     last_point = NONE : (term * int * term) option, (* SOME (addr,index,success reg) *)
-    lin_addr = Term $ `BExp_Const (Imm64 42w)`, (* address to guess linearisation points *)
+    lin_addr = Term $ `BExp_Const (Imm64 42w)`, (* address to guess commit points *)
     (* following a store, this keeps the failure pcs until to the conditional jump
       non-empty means: the jump has not yet occurred *)
     store_fail = [] : term list
@@ -790,7 +798,7 @@ val len = length stmts
     )
     (init_state,lc)
     addresses_stmts
-  (* print linearisation points for the refinement relation *)
+  (* print commit points for the refinement relation *)
   val lin_term =
     list_mk_conj $
       map (fn (index, addrs) =>
