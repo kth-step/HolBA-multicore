@@ -20,6 +20,7 @@ val _ = new_theory "bir_wp";
 
 (* Lemmata to move: *)
 
+
 val bir_varinit_invar_bstmt =
   store_thm("bir_varinit_invar_bstmt",
   ``!s s' obs vars (bstmt:'a bir_stmt_basic_t).
@@ -894,7 +895,7 @@ val exec_preserves_initialized_vars_thm = prove(
 
 rpt gen_tac >>
 strip_tac >>
-ho_match_mp_tac listTheory.EVERY_MONOTONIC >>
+match_mp_tac listTheory.EVERY_MONOTONIC >>
 rpt strip_tac >>
 REV_FULL_SIMP_TAC std_ss [bir_varinit_invar_bstmt]
 );

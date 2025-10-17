@@ -16,6 +16,11 @@ val bir_stmtB_is_not_assume_def = Define `
   (bir_stmtB_is_not_assume _ = T)
 `;
 
+val bir_state_t_bst_status_fupd = DB.fetch "bir_program" "bir_state_t_fn_updates";
+val bir_state_t_bst_environ_fupd = DB.fetch "bir_program" "bir_state_t_fn_updates";
+val bir_state_t_bst_status = DB.fetch "bir_program" "bir_state_t_accessors";
+val bir_state_t_bst_pc = DB.fetch "bir_program" "bir_state_t_accessors";
+
 val bir_stmtB_not_assume_never_assumviol =
   store_thm ("bir_stmtB_not_assume_never_assumviol",
   ``!stmtb st obs st'.
@@ -23,8 +28,6 @@ val bir_stmtB_not_assume_never_assumviol =
     (st.bst_status <> BST_AssumptionViolated) ==>
     (bir_exec_stmtB stmtb st = (obs, st')) ==>
     (st'.bst_status <> BST_AssumptionViolated)``,
-    cheat
-    (*
   REPEAT STRIP_TAC >>
   Cases_on `st` >>
   Cases_on `st'` >>
@@ -91,7 +94,6 @@ val bir_stmtB_not_assume_never_assumviol =
 
     FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_exec_stmt_fence_def]
   ]
-  *)
 );
 
 val bir_stmtsB_has_no_assumes_def = Define `
@@ -233,8 +235,6 @@ Theorem bir_block_not_assume_never_assumviol:
     (bir_exec_block prog bl st = (l', c', st')) ==>
     (st'.bst_status <> BST_AssumptionViolated)
 Proof
-cheat
-(*
   FULL_SIMP_TAC std_ss [bir_block_has_no_assumes_def,
                         bir_exec_block_def] >>
   REPEAT STRIP_TAC >>
@@ -280,7 +280,6 @@ cheat
                         [bir_state_t_fn_updates]
     )
   ]
-  *)
 QED
 
 val bir_prog_has_no_assumes_def = Define `
