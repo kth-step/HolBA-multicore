@@ -18,8 +18,6 @@ open bir_lifterSimps;
 (* Function libraries from examples/l3-machine-code: *)
 open arm8_stepLib m0_stepLib riscv_stepLib;
 
-open riscv_step_wrapperLib;
-
 (* Abbreviations used in this file:
  * BMR: BIR machine record. *)
 
@@ -200,8 +198,10 @@ end;
 
 end;
 
-val arm8_state_mem_tm = prim_mk_const{Name="arm8_state_MEM", Thy="arm8"};
+val arm8_state_mem_tm = prim_mk_const {Thy="arm8",
+ Name = TypeBasePure.mk_recordtype_fieldsel {tyname = "arm8_state", fieldname = "MEM"}};
 val arm8_dest_mem = HolKernel.dest_binop arm8_state_mem_tm (ERR "arm8_dest_mem" "");
+
 
 val arm8_REWRS = (
    (type_rws ``:arm8_state``) @
@@ -304,9 +304,9 @@ fun m0_mk_data_mm ef mem_loc hex_code =
   end
 end;
 
-val m0_state_mem_tm = prim_mk_const{Name="m0_state_MEM", Thy="m0"};
-val m0_dest_mem = HolKernel.dest_binop m0_state_mem_tm
-                                       (ERR "m0_dest_mem" "");
+val m0_state_mem_tm = prim_mk_const {Thy="m0",
+ Name = TypeBasePure.mk_recordtype_fieldsel {tyname = "m0_state", fieldname = "MEM"}};
+val m0_dest_mem = HolKernel.dest_binop m0_state_mem_tm (ERR "m0_dest_mem" "");
 
 val m0_REWRS = (RName_distinct :: (
    (type_rws ``:m0_state``) @
@@ -773,7 +773,7 @@ in
   fun riscv_step_hex' is_multicore vn hex_code = let
     val pc_mem_thms = prepare_mem_contains_thms vn hex_code
 
-    val step_thms0 = [(riscv_step_rem_ss_hex ["word arith", "word ground", "word logic", "word shift", "word subtract"]) hex_code]
+   val step_thms0 = [riscv_step_hex hex_code]
 
     val step_thms1 =
       List.map (process_riscv_thm is_multicore vn pc_mem_thms) step_thms0
@@ -1192,11 +1192,10 @@ end;
  * arm8_state_MEM. This is since the arm8_state record has an entry
  * called MEM, RISC-V seems to have a corresponding one called MEM8
  * of the same type. *)
-val riscv_state_mem_tm =
-  prim_mk_const{Name="riscv_state_MEM8", Thy="riscv"};
+val riscv_state_mem_tm = prim_mk_const { Thy="riscv",
+ Name = TypeBasePure.mk_recordtype_fieldsel {tyname = "riscv_state", fieldname = "MEM8"}};
 val riscv_dest_mem =
   HolKernel.dest_binop riscv_state_mem_tm (ERR "riscv_dest_mem" "");
-
 
 val riscv_bmr_rec : bmr_rec = {
   bmr_const                =

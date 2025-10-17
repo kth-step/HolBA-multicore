@@ -1,0 +1,14 @@
+{
+	"name": "HolBA-multicore Dev Container",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"oskarabrahamsson.hol4-mode"
+			]
+		}
+	}
+	
+}

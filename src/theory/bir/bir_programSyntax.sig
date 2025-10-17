@@ -88,6 +88,41 @@ sig
    val is_BStmt_Fence   : term -> bool
    val mk_BStmt_Fence   : term * term -> term
 
+val BMCStmt_Load_tm : term
+val dest_BMCStmt_Load : term -> term * term * term * term * term * term
+val is_BMCStmt_Load : term -> bool
+val mk_BMCStmt_Load : term * term * term * term * term * term -> term
+
+val BMCStmt_Store_tm : term
+val dest_BMCStmt_Store : term -> term * term * term * term * term * term
+val is_BMCStmt_Store : term -> bool
+val mk_BMCStmt_Store : term * term * term * term * term * term -> term
+
+val BMCStmt_Amo_tm : term
+val dest_BMCStmt_Amo : term -> term * term * term * term * term
+val is_BMCStmt_Amo : term -> bool
+val mk_BMCStmt_Amo : term * term * term * term * term -> term
+
+val BMCStmt_Assign_tm : term
+val dest_BMCStmt_Assign : term -> term * term
+val is_BMCStmt_Assign : term -> bool
+val mk_BMCStmt_Assign : term * term -> term
+
+val BMCStmt_Fence_tm : term
+val dest_BMCStmt_Fence : term -> term * term
+val is_BMCStmt_Fence : term -> bool
+val mk_BMCStmt_Fence : term * term -> term
+
+val BMCStmt_Assert_tm : term
+val dest_BMCStmt_Assert : term -> term
+val is_BMCStmt_Assert : term -> bool
+val mk_BMCStmt_Assert : term -> term
+
+val BMCStmt_Assume_tm : term
+val dest_BMCStmt_Assume : term -> term
+val is_BMCStmt_Assume : term -> bool
+val mk_BMCStmt_Assume : term -> term
+
 
    (******************)
    (* bir_stmt_end_t *)
@@ -135,6 +170,7 @@ sig
    (* bir_block_t *)
    (***************)
 
+
    val bir_mc_tags_t_ty : hol_type
    val dest_bir_mc_tags : term -> term * term * term
    val is_bir_mc_tags : term -> bool
@@ -148,13 +184,13 @@ sig
 
    val dest_bir_block : term -> term * term * term * term
    val is_bir_block   : term -> bool
-   val mk_bir_block   : term * term * term * term -> term
+   val mk_bir_block   : term * term * term * term -> term  
 
    (* Often one is interested in the list of basic statements in a block.
       The following code splits the term containing a list of basic statements
       into an SML list of terms. In case the empty list is used, thereby the
       type ob observation is lost and therefore made explicit. *)
-   val dest_bir_block_list : term -> hol_type * term  * term * term list * term
+   val dest_bir_block_list : term -> hol_type * term * term * term list * term
    val mk_bir_block_list   : hol_type * term  * term * term list * term -> term
 
 

@@ -67,7 +67,6 @@ sig
    val is_BMLM   : term -> bool
    val mk_BMLM   : term * term -> term
 
-
    val bmr_field_extra_tm   : term
    val dest_bmr_field_extra : term -> term * term
    val is_bmr_field_extra   : term -> bool
@@ -92,7 +91,6 @@ sig
    val dest_bmr_field_step_fun : term -> term * term
    val is_bmr_field_step_fun   : term -> bool
    val mk_bmr_field_step_fun   : term * term -> term
-
 
 
    (******************)

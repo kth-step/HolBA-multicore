@@ -55,10 +55,6 @@ val bir_val_TF_bool2b_DEF = store_thm ("bir_val_TF_bool2b_DEF",
     (bir_val_false = BVal_Imm (bool2b F))``,
 SIMP_TAC std_ss [BVal_Imm_bool2b_TF_DEF]);
 
-val BVal_Imm_bool2b_TF_DEF = store_thm ("BVal_Imm_bool2b_TF_DEF",
-  ``!b. (BVal_Imm (bool2b b) = if b then bir_val_true else bir_val_false)``,
-Cases >> SIMP_TAC (std_ss++holBACore_ss) [bir_val_true_def, bir_val_false_def]);
-
 val BVal_Imm_bool2b_EQ_TF_REWRS = store_thm ("BVal_Imm_bool2b_EQ_TF_REWRS",
   ``(!b. (BVal_Imm (bool2b b) = bir_val_true) <=> b) /\
     (!b. (BVal_Imm (bool2b b) = bir_val_false) <=> ~b)``,

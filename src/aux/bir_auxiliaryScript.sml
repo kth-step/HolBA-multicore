@@ -85,20 +85,26 @@ ASM_SIMP_TAC list_ss []);
 
 
 
-val INDEX_FIND_EQ_NONE = store_thm ("INDEX_FIND_EQ_NONE",
-  ``!l i P. (INDEX_FIND i P l = NONE) <=> (~(EXISTS P l))``,
-Induct >> SIMP_TAC list_ss [listTheory.INDEX_FIND_def] >>
-REPEAT GEN_TAC >> COND_CASES_TAC >> ASM_SIMP_TAC list_ss []);
+Theorem INDEX_FIND_EQ_NONE:
+ !l i P. (INDEX_FIND i P l = NONE) <=> (~(EXISTS P l))
+Proof
+  Induct >>  
+  SIMP_TAC list_ss [listTheory.INDEX_FIND_def] >>
+  REPEAT GEN_TAC >> 
+  fs []
+QED
 
 
-val INDEX_FIND_EQ_SOME = store_thm ("INDEX_FIND_EQ_SOME",
-  ``!l i P j e. (INDEX_FIND i P l = SOME (j, e)) <=> (
+Theorem INDEX_FIND_EQ_SOME:
+  !l i P j e. (INDEX_FIND i P l = SOME (j, e)) <=> (
        (i <= j) /\ (j - i < LENGTH l) /\
        (EL (j - i) l = e) /\ P e /\
-       (!j'. (i <= j' /\ j' < j) ==> ~(P (EL (j' - i) l))))``,
+       (!j'. (i <= j' /\ j' < j) ==> ~(P (EL (j' - i) l))))
+Proof
 
 Induct >> SIMP_TAC list_ss [listTheory.INDEX_FIND_def] >>
-REPEAT GEN_TAC >> COND_CASES_TAC >| [
+REPEAT GEN_TAC >> COND_CASES_TAC 
+>- (
   SIMP_TAC list_ss [] >>
   EQ_TAC >| [
     SIMP_TAC list_ss [] >>
@@ -112,10 +118,12 @@ REPEAT GEN_TAC >> COND_CASES_TAC >| [
       `i = j` by DECIDE_TAC >>
       FULL_SIMP_TAC list_ss []
     ]
-  ],
-
+  ]
+)
+>- (
   ONCE_ASM_REWRITE_TAC[] >>
-  EQ_TAC >> STRIP_TAC >> ASM_SIMP_TAC list_ss [] >| [
+  EQ_TAC >> STRIP_TAC >> ASM_SIMP_TAC list_ss [] 
+  >| [
      REPEAT STRIP_TAC >- (
        `j - i = SUC (j - SUC i)` by DECIDE_TAC >>
        ASM_SIMP_TAC list_ss []
@@ -125,9 +133,8 @@ REPEAT GEN_TAC >> COND_CASES_TAC >| [
      ) >>
      Q.PAT_X_ASSUM `!j'. _ ==> ~(P _)` (MP_TAC o Q.SPEC `j'`) >>
      `j' - i = SUC (j' - SUC i)` by DECIDE_TAC >>
-     FULL_SIMP_TAC list_ss [],
-
-
+     FULL_SIMP_TAC list_ss []
+     ,
      Cases_on `i = j` >- (
        FULL_SIMP_TAC list_ss []
      ) >>
@@ -138,7 +145,8 @@ REPEAT GEN_TAC >> COND_CASES_TAC >| [
      `j' - i = SUC (j' - SUC i)` by DECIDE_TAC >>
      FULL_SIMP_TAC list_ss []
   ]
-]);
+)
+QED
 
 
 val INDEX_FIND_EQ_SOME_0 = store_thm ("INDEX_FIND_EQ_SOME_0",
@@ -390,9 +398,9 @@ REPEAT STRIP_TAC >>
   Cases_on `i` >> FULL_SIMP_TAC arith_ss []
 ) >>
 BasicProvers.VAR_EQ_TAC >>
-DEEP_INTRO_TAC whileTheory.LEAST_ELIM >>
+DEEP_INTRO_TAC WhileTheory.LEAST_ELIM >>
 REPEAT STRIP_TAC >- METIS_TAC[] >>
-DEEP_INTRO_TAC whileTheory.LEAST_ELIM >>
+DEEP_INTRO_TAC WhileTheory.LEAST_ELIM >>
 REPEAT STRIP_TAC >- METIS_TAC[] >>
 rename1 `n1' = SUC n2` >>
 `?n1. n1' = SUC n1` by (
@@ -414,15 +422,15 @@ Induct >> (
 ) >>
 rpt strip_tac >| [
  qexists_tac `0` >>
- fs [whileTheory.OLEAST_EQ_SOME, listTheory.oEL_THM],
+ fs [WhileTheory.OLEAST_EQ_SOME, listTheory.oEL_THM],
 
  qpat_assum `!x. _` (fn thm => imp_res_tac thm) >>
  Cases_on `h = x` >- (
   qexists_tac `0` >>
-  fs [whileTheory.OLEAST_EQ_SOME, listTheory.oEL_THM]
+  fs [WhileTheory.OLEAST_EQ_SOME, listTheory.oEL_THM]
  ) >>
  qexists_tac `SUC i` >>
- fs [whileTheory.OLEAST_EQ_SOME, listTheory.oEL_THM] >>
+ fs [WhileTheory.OLEAST_EQ_SOME, listTheory.oEL_THM] >>
  rpt strip_tac >>
  Cases_on `i'` >- (
   fs []
@@ -755,18 +763,18 @@ Proof
 rpt strip_tac >>
 CCONTR_TAC >>
 Cases_on `n' = n` >- (
- fs [whileTheory.OLEAST_EQ_SOME]
+ fs [WhileTheory.OLEAST_EQ_SOME]
 ) >>
 subgoal `n' > n` >- (
  gs []
 ) >>
 subgoal `FUNPOW_OPT f (n' - n) s = SOME s'` >- (
  irule FUNPOW_OPT_split2 >>
- fs [whileTheory.OLEAST_EQ_SOME] >>
+ fs [WhileTheory.OLEAST_EQ_SOME] >>
  qexists_tac `s` >>
  fs []
 ) >>
-fs [whileTheory.OLEAST_EQ_SOME] >>
+fs [WhileTheory.OLEAST_EQ_SOME] >>
 QSPECL_X_ASSUM ``!n''. n'' < n' ==> FUNPOW_OPT f n'' s <> SOME s'`` [`n' - n`] >>
 gs []
 QED

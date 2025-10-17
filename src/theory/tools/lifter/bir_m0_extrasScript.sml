@@ -332,11 +332,6 @@ val m0_LIFT_STORE_HALF_BE_CHANGE_INTERVAL = store_thm ("m0_LIFT_STORE_HALF_BE_CH
 SIMP_TAC (list_ss++wordsLib.WORD_ss) [m0_mem_store_half_BE_def, WI_MEM_WI_size, WI_ELEM_LIST_compute, w2n_n2w, updateTheory.APPLY_UPDATE_THM, FUNS_EQ_OUTSIDE_WI_size_def]);
 
 
-val m0_LIFT_STORE_HALF_LE_CHANGE_INTERVAL = store_thm ("m0_LIFT_STORE_HALF_LE_CHANGE_INTERVAL",
-``!va vv mem_f. FUNS_EQ_OUTSIDE_WI_size va 2 (m0_mem_store_half_LE va vv mem_f) mem_f``,
-SIMP_TAC (list_ss++wordsLib.WORD_ss) [m0_mem_store_half_LE_def, WI_MEM_WI_size, WI_ELEM_LIST_compute, w2n_n2w, updateTheory.APPLY_UPDATE_THM, FUNS_EQ_OUTSIDE_WI_size_def]);
-
-
 val m0_LIFT_STORE_BYTE_CHANGE_INTERVAL = store_thm ("m0_LIFT_STORE_BYTE_CHANGE_INTERVAL",
 ``!va vv mem_f. FUNS_EQ_OUTSIDE_WI_size va 1 (m0_mem_store_byte va vv mem_f) mem_f``,
 SIMP_TAC (list_ss++wordsLib.WORD_ss) [m0_mem_store_byte_def, WI_MEM_WI_size, WI_ELEM_LIST_compute, w2n_n2w, updateTheory.APPLY_UPDATE_THM, FUNS_EQ_OUTSIDE_WI_size_def]);
@@ -476,7 +471,7 @@ ASM_SIMP_TAC std_ss [integer_wordTheory.w2i_n2w_pos] >>
      METIS_TAC[]
   ) >>
   Q.ABBREV_TAC `m = LEAST i. w ' i` >>
-  `w ' m /\ (!i. i < m ==> ~(w ' i))` by METIS_TAC[whileTheory.LEAST_EXISTS_IMP] >>
+  `w ' m /\ (!i. i < m ==> ~(w ' i))` by METIS_TAC[WhileTheory.LEAST_EXISTS_IMP] >>
   `m < dimindex (:'a)` by (
      `~(i < m)` by METIS_TAC[] >>
      DECIDE_TAC
@@ -520,7 +515,7 @@ Q.SUBGOAL_THEN `(n MOD dimword (:'a) = 0) = (n2w n = (0w:'a word))` SUBST1_TAC >
 Cases_on `n2w n = (0w:'a word)` >> ASM_SIMP_TAC std_ss [LowestSetBit_ALT_DEF] >>
 FULL_SIMP_TAC std_ss [word_eq_0] >>
 Q.ABBREV_TAC `m = LEAST i. (n2w n) ' i` >>
-`((n2w n):'a word) ' m /\ (!i. i < m ==> ~(((n2w n):'a word) ' i))` by METIS_TAC[whileTheory.LEAST_EXISTS_IMP] >>
+`((n2w n):'a word) ' m /\ (!i. i < m ==> ~(((n2w n):'a word) ' i))` by METIS_TAC[WhileTheory.LEAST_EXISTS_IMP] >>
 `m < dimindex (:'a)` by (
    `~(i < m)` by METIS_TAC[] >>
    DECIDE_TAC

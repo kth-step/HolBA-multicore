@@ -14,7 +14,7 @@ DEPENDENCIES   =
 
 # configuration
 # ----------------------------------
-HOLHEAP        = riscv_step_wrapper/HolBATools_Lifter_riscv_step_wrapper-heap
+HOLHEAP        = ../../shared/HolBAShared-heap
 NEWHOLHEAP     = HolBATools_Lifter-heap
 
 HEAPINC_EXTRA  = 

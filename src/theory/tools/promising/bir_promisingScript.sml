@@ -321,9 +321,9 @@ End
 Definition fulfil_update_viewenv_def:
   fulfil_update_viewenv p s v_post =
     case bir_get_current_statement p s.bst_pc of
-    | SOME $ BStmtB $ BMCStmt_Store var_succ _ _ T _ _
-      => SOME (s.bst_viewenv |+ (var_succ, v_post))
-    | SOME $ BStmtB $ BMCStmt_Store var_succ _ _ F _ _
+    | SOME (BStmtB ( BMCStmt_Store var_succ _ _ T _ _))
+      => SOME ((var_succ, v_post) =+ s.bst_viewenv)
+    | SOME (BStmtB ( BMCStmt_Store var_succ _ _ F _ _))
       => SOME s.bst_viewenv
     | _ => NONE
 End

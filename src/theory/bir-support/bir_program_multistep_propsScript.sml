@@ -587,7 +587,7 @@ val bir_exec_infinite_steps_COUNT_STEPS_UNFOLD = store_thm (
       OPT_NUM_SUC (bir_exec_infinite_steps_COUNT_STEPS pc_cond max_steps_opt' p st')))``,
 
 SIMP_TAC std_ss [bir_exec_infinite_steps_COUNT_STEPS_def,
-  whileTheory.OLEAST_def] >>
+  WhileTheory.OLEAST_def] >>
 REPEAT GEN_TAC >>
 Q.ABBREV_TAC `P = \max_steps_opt st i.
    (bir_state_is_terminated (bir_exec_infinite_steps_fun p st i) \/
@@ -678,7 +678,7 @@ val bir_exec_infinite_steps_COUNT_STEPS_EQ_SOME = store_thm ("bir_exec_infinite_
     ((bir_state_is_terminated (bir_exec_infinite_steps_fun p state i)) \/
     (max_steps_opt = SOME (bir_exec_infinite_steps_fun_COUNT_PCs pc_cond p state i))))``,
 
-SIMP_TAC std_ss [bir_exec_infinite_steps_COUNT_STEPS_def, whileTheory.OLEAST_def] >>
+SIMP_TAC std_ss [bir_exec_infinite_steps_COUNT_STEPS_def, WhileTheory.OLEAST_def] >>
 Q.ABBREV_TAC `P = (\max_steps_opt state i.
    (bir_state_is_terminated ((bir_exec_infinite_steps_fun p state i))) \/
    (max_steps_opt =
@@ -689,7 +689,7 @@ Q.ABBREV_TAC `P = (\max_steps_opt state i.
   Q.UNABBREV_TAC `P` >> SIMP_TAC std_ss []) >>
 ASM_SIMP_TAC std_ss [] >> POP_ASSUM (K ALL_TAC) >>
 EQ_TAC >> STRIP_TAC >| [
-  METIS_TAC[whileTheory.LEAST_EXISTS_IMP],
+  METIS_TAC[WhileTheory.LEAST_EXISTS_IMP],
   METIS_TAC[bitTheory.LEAST_THM]
 ]);
 
@@ -701,7 +701,7 @@ val bir_exec_infinite_steps_COUNT_STEPS_EQ_NONE = store_thm (
     (case max_steps_opt of NONE => T | SOME max_steps =>
        (!i. bir_exec_infinite_steps_fun_COUNT_PCs pc_cond p state i < max_steps))``,
 
-SIMP_TAC std_ss [bir_exec_infinite_steps_COUNT_STEPS_def, whileTheory.OLEAST_def] >>
+SIMP_TAC std_ss [bir_exec_infinite_steps_COUNT_STEPS_def, WhileTheory.OLEAST_def] >>
 SIMP_TAC (std_ss++boolSimps.EQUIV_EXTRACT_ss) [FORALL_AND_THM] >>
 STRIP_TAC >>
 Cases_on `max_steps_opt` >> SIMP_TAC std_ss [] >>

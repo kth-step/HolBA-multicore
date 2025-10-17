@@ -15,21 +15,24 @@ val _ = new_theory "bir_program";
 (* Datatypes                                                                 *)
 (* ------------------------------------------------------------------------- *)
 
-val _ = Datatype `bir_label_t =
-    BL_Label string
+Datatype:
+bir_label_t =
+  | BL_Label string
   | BL_Address bir_imm_t
-`;
+End
 
-val _ = Datatype `bir_label_exp_t =
-    BLE_Label bir_label_t
+Datatype:
+  bir_label_exp_t =
+  | BLE_Label bir_label_t
   | BLE_Exp bir_exp_t
-`;
+End
 
-val _ = Datatype `bir_memop_t =
-    BM_Read
+Datatype:
+  bir_memop_t =
+  | BM_Read
   | BM_Write
   | BM_ReadWrite
-`;
+End
 
 (*
   Assign variable expression
@@ -37,7 +40,8 @@ val _ = Datatype `bir_memop_t =
   Assume expression
   Observe observation_id condition_expression expression_list observation_function
 *)
-Datatype: bir_stmt_basic_t =
+Datatype:
+  bir_stmt_basic_t =
   | BStmt_Assign  bir_var_t bir_exp_t
   | BStmt_Assert  bir_exp_t
   | BStmt_Assume  bir_exp_t
@@ -48,17 +52,11 @@ End
 (* bir multicore statements *)
 Datatype:
   bmc_stmt_basic_t =
-  (* reg, address, cast, xcl, acq rel *)
-  | BMCStmt_Load bir_var_t bir_exp_t ((bir_cast_t # bir_immtype_t) option) bool bool bool
-  (* success reg, address, value, xcl, acq, rel *)
-  | BMCStmt_Store bir_var_t bir_exp_t bir_exp_t bool bool bool
-  (* success reg, address, value, acq, rel *)
-  | BMCStmt_Amo bir_var_t bir_exp_t bir_exp_t bool bool
+  | BMCStmt_Load   bir_var_t bir_exp_t ((bir_cast_t # bir_immtype_t) option) bool bool bool
+  | BMCStmt_Store  bir_var_t bir_exp_t bir_exp_t bool bool bool
+  | BMCStmt_Amo    bir_var_t bir_exp_t bir_exp_t bool bool
   | BMCStmt_Assign bir_var_t bir_exp_t
-  | BMCStmt_Fence bir_memop_t bir_memop_t
-(*
-  | BMCStmt_Put       (* takes view of the input *)
-*)
+  | BMCStmt_Fence  bir_memop_t bir_memop_t
   | BMCStmt_Assert bir_exp_t
   | BMCStmt_Assume bir_exp_t
 End
@@ -69,16 +67,20 @@ Datatype: bir_stmt_end_t =
   | BStmt_Halt    bir_exp_t
 End
 
-val _ = Datatype `bir_mc_tags_t = <|
+Datatype:
+  bir_mc_tags_t = <|
   mc_acq            : bool;
   mc_rel            : bool;
-  mc_atomic         : bool |>`;
+  mc_atomic         : bool |>
+End
 
-val _ = Datatype `bir_generic_block_t = <|
+Datatype:
+  bir_generic_block_t = <|
   bb_label          : bir_label_t;
   bb_mc_tags        : bir_mc_tags_t option;
   bb_statements     : 'a list;
-  bb_last_statement : bir_stmt_end_t |>`;
+  bb_last_statement : bir_stmt_end_t |>
+End
 
 Datatype:
   bir_generic_stmt_t =
@@ -86,43 +88,55 @@ Datatype:
   | BStmtE bir_stmt_end_t
 End
 
-Type bir_stmt_t = ``:('a bir_stmt_basic_t) bir_generic_stmt_t``
-Type bmc_stmt_t = ``:bmc_stmt_basic_t bir_generic_stmt_t``
+Type bir_stmt_t = ``:('a bir_stmt_basic_t) bir_generic_stmt_t``;
+Type bmc_stmt_t = ``:bmc_stmt_basic_t bir_generic_stmt_t``;
 
 Datatype:
   bir_generic_program_t = BirProgram (('a bir_generic_block_t) list)
 End
 
-Type bir_block_t = `` :('a bir_stmt_basic_t) bir_generic_block_t``
-Type bmc_block_t = `` :bmc_stmt_basic_t bir_generic_block_t``
+Type bir_block_t = `` :('a bir_stmt_basic_t) bir_generic_block_t``;
+Type bmc_block_t = `` :bmc_stmt_basic_t bir_generic_block_t``;
 
-Type bir_program_t = ``:('a bir_stmt_basic_t) bir_generic_program_t``
-Type bmc_program_t = ``:bmc_stmt_basic_t bir_generic_program_t``
+Type bir_program_t = ``:('a bir_stmt_basic_t) bir_generic_program_t``;
+Type bmc_program_t = ``:bmc_stmt_basic_t bir_generic_program_t``;
 
-val _ = Datatype `bir_programcounter_t = <| bpc_label:bir_label_t; bpc_index:num |>`;
+Datatype:
+  bir_programcounter_t = <|
+    bpc_label : bir_label_t;
+    bpc_index : num |>
+End                                                            
 
 val bir_pc_ss = rewrites (type_rws ``:bir_programcounter_t``);
 
-val _ = Datatype `bir_status_t =
+Datatype:
+  bir_status_t =
     BST_Running                  (* BIR program is still running *)
   | BST_TypeError                (* BIR program execution encountered a type error *)
   | BST_Failed                   (* BIR program execution failed, should not happen when starting in a state where pc is available in the program to execute *)
   | BST_AssumptionViolated       (* BIR program execution aborted, because assumption was violated *)
   | BST_AssertionViolated       (* BIR program execution failed, because assertion was violated *)
   | BST_Halted bir_val_t        (* Halt called *)
-  | BST_JumpOutside bir_label_t (* Jump to unknown label *)`;
+  | BST_JumpOutside bir_label_t (* Jump to unknown label *)
+End
 
 (* forward buffer, part of the core-local state *)
-val fwdb_def = Datatype`
-  fwdb_t = <| fwdb_time : num; fwdb_view : num; fwdb_xcl : bool |>
-`;
+Datatype:
+  fwdb_t = <|
+    fwdb_time : num;
+    fwdb_view : num;
+    fwdb_xcl  : bool |>
+End
 
 (* exclusives bank, part of the core-local state *)
-val xclb_def = Datatype`
-  xclb_t = <| xclb_time : num; xclb_view : num |>
-`;
+Datatype:
+  xclb_t = <|
+    xclb_time : num;
+    xclb_view : num |>
+End
 
-val _ = Datatype `bir_state_t = <|
+Datatype:
+  bir_state_t = <|
   bst_pc       : bir_programcounter_t;
   bst_environ  : bir_var_environment_t;
   bst_status   : bir_status_t;
@@ -137,33 +151,33 @@ val _ = Datatype `bir_state_t = <|
   bst_prom     : num list;
   bst_fwdb     : bir_val_t -> fwdb_t;
   bst_xclb     : xclb_t option
-|>`;
+  |>
+End
 
-
-val bir_varset_of_basic_stmt_def = Define`
+Definition bir_varset_of_basic_stmt_def:
    bir_varset_of_basic_stmt (BStmt_Assign var exp) = { var } UNION bir_varset_of_exp exp
 /\ bir_varset_of_basic_stmt (BStmt_Assert exp) = bir_varset_of_exp exp
 /\ bir_varset_of_basic_stmt (BStmt_Assume exp) = bir_varset_of_exp exp
 /\ bir_varset_of_basic_stmt (BStmt_Observe n exp1 expl fn) = bir_varset_of_exp exp1
       UNION (FOLDR (\a b. a UNION b) {} (MAP bir_varset_of_exp expl))
 /\ bir_varset_of_basic_stmt (BStmt_Fence _ _) = {}
-`;
+End
 
-val bir_varset_of_label_exp_def = Define`
+Definition bir_varset_of_label_exp_def:
    bir_varset_of_label_exp (BLE_Label _) = {}
 /\ bir_varset_of_label_exp (BLE_Exp exp) = bir_varset_of_exp exp
-`;
+End
 
-val bir_varset_of_end_stmt_def = Define`
+Definition bir_varset_of_end_stmt_def:
    bir_varset_of_end_stmt (BStmt_Jmp lexp) = bir_varset_of_label_exp lexp
 /\ bir_varset_of_end_stmt (BStmt_CJmp cond exp1 exp2) = bir_varset_of_exp cond UNION bir_varset_of_label_exp exp1 UNION bir_varset_of_label_exp exp2
 /\ bir_varset_of_end_stmt (BStmt_Halt exp) = bir_varset_of_exp exp
-`;
+End
 
-val bir_varset_of_stmt_def = Define`
+Definition bir_varset_of_stmt_def:
    bir_varset_of_stmt (BStmtB bstmt) = bir_varset_of_basic_stmt bstmt
 /\ bir_varset_of_stmt (BStmtE estmt) = bir_varset_of_end_stmt estmt
-`;
+End
 
 val bir_state_t_component_equality = DB.fetch "-" "bir_state_t_component_equality";
 val bir_programcounter_t_component_equality = DB.fetch "-" "bir_programcounter_t_component_equality";

@@ -8,17 +8,17 @@ functor bir_inst_liftingFunctor (MD : sig val mr : bir_lifting_machinesLib.bmr_r
 (* dependencies *)
 (* ================================================ *)
 open HolKernel boolLib liteLib simpLib Parse bossLib;
-open bir_inst_liftingTheory
-open bir_lifting_machinesTheory
+open bir_inst_liftingTheory;
+open bir_lifting_machinesTheory;
 open bir_lifting_machinesLib bir_lifting_machinesLib_instances;
-open bir_interval_expTheory bir_update_blockTheory
-open bir_exp_liftingLib bir_typing_expSyntax
-open bir_lifter_general_auxTheory
-open bir_programSyntax bir_interval_expSyntax
-open bir_program_labelsTheory
-open bir_immTheory
-open intel_hexLib
-open bir_inst_liftingLibTypes
+open bir_interval_expTheory bir_update_blockTheory;
+open bir_exp_liftingLib bir_typing_expSyntax;
+open bir_lifter_general_auxTheory;
+open bir_programSyntax bir_interval_expSyntax;
+open bir_program_labelsTheory;
+open bir_immTheory;
+open intel_hexLib;
+open bir_inst_liftingLibTypes;
 open bir_inst_liftingHelpersLib;
 open bir_lifterSimps;
 (* ================================================ *)

@@ -8,6 +8,8 @@ open bir_immTheory bir_valuesTheory bir_programTheory bir_init_progTheory;
 val ERR = mk_HOL_ERR "bir_programSyntax"
 val wrap_exn = Feedback.wrap_exn "bir_programSyntax"
 
+fun mkselnm ty f = TypeBasePure.mk_recordtype_fieldsel{tyname=ty,fieldname=f}
+
 fun syntax_fns n d m = HolKernel.syntax_fns {n = n, dest = d, make = m} "bir_program"
 
 fun syntax_fns0 s = let val (tm, _, _, is_f) = syntax_fns 0
@@ -15,10 +17,39 @@ fun syntax_fns0 s = let val (tm, _, _, is_f) = syntax_fns 0
        if Term.same_const tm1 tm2 then () else raise e)
    (fn tm => fn () => tm) s in (tm, is_f) end;
 
+fun dest_pentaop c e tm =
+   case with_exn strip_comb tm e of
+      (t, [t1, t2, t3, t4, t5]) =>
+         if same_const t c then (t1, t2, t3, t4, t5) else raise e
+    | _ => raise e;
+fun dest_hexop c e tm =
+   case with_exn strip_comb tm e of
+      (t, [t1, t2, t3, t4, t5, t6]) =>
+         if same_const t c then (t1, t2, t3, t4, t5, t6) else raise e
+    | _ => raise e;
+fun dest_septaop c e tm =
+   case with_exn strip_comb tm e of
+      (t, [t1, t2, t3, t4, t5, t6, t7]) =>
+         if same_const t c then (t1, t2, t3, t4, t5, t6, t7) else raise e
+    | _ => raise e;
+
+fun list_of_pentuple (x1,x2,x3,x4,x5) = [x1,x2,x3,x4,x5];
+fun list_of_hexuple  (x1,x2,x3,x4,x5,x6) = [x1,x2,x3,x4,x5,x6];
+fun list_of_septuple (x1,x2,x3,x4,x5,x6,x7) = [x1,x2,x3,x4,x5,x6,x7];
+
+
+fun mk_pentaop tm = list_mk_icomb tm o list_of_pentuple;
+fun mk_hexaop tm = list_mk_icomb tm o list_of_hexuple;
+fun mk_septaop tm = list_mk_icomb tm o list_of_septuple;
+
 val syntax_fns1 = syntax_fns 1 HolKernel.dest_monop HolKernel.mk_monop;
 val syntax_fns2 = syntax_fns 2 HolKernel.dest_binop HolKernel.mk_binop;
 val syntax_fns3 = syntax_fns 3 HolKernel.dest_triop HolKernel.mk_triop;
 val syntax_fns4 = syntax_fns 4 HolKernel.dest_quadop HolKernel.mk_quadop;
+val syntax_fns5 = syntax_fns 5 dest_pentaop mk_pentaop;
+val syntax_fns6 = syntax_fns 6 dest_hexop mk_hexaop;
+val syntax_fns7 = syntax_fns 7 dest_septaop mk_septaop;
+
 
 
 
@@ -64,6 +95,13 @@ val (BStmt_Assume_tm,  mk_BStmt_Assume, dest_BStmt_Assume, is_BStmt_Assume)  = s
 val (BStmt_Observe_tm,  mk_BStmt_Observe, dest_BStmt_Observe, is_BStmt_Observe)  = syntax_fns4 "BStmt_Observe";
 val (BStmt_Fence_tm,  mk_BStmt_Fence, dest_BStmt_Fence, is_BStmt_Fence)  = syntax_fns2 "BStmt_Fence";
 
+val (BMCStmt_Load_tm, mk_BMCStmt_Load, dest_BMCStmt_Load, is_BMCStmt_Load) = syntax_fns6 "BMCStmt_Load";
+val (BMCStmt_Store_tm, mk_BMCStmt_Store, dest_BMCStmt_Store, is_BMCStmt_Store) = syntax_fns6 "BMCStmt_Store";
+val (BMCStmt_Amo_tm, mk_BMCStmt_Amo, dest_BMCStmt_Amo, is_BMCStmt_Amo) = syntax_fns5 "BMCStmt_Amo";
+val (BMCStmt_Assign_tm, mk_BMCStmt_Assign, dest_BMCStmt_Assign, is_BMCStmt_Assign) = syntax_fns2 "BMCStmt_Assign";
+val (BMCStmt_Fence_tm, mk_BMCStmt_Fence, dest_BMCStmt_Fence, is_BMCStmt_Fence) = syntax_fns2 "BMCStmt_Fence";
+val (BMCStmt_Assert_tm, mk_BMCStmt_Assert, dest_BMCStmt_Assert, is_BMCStmt_Assert) = syntax_fns1 "BMCStmt_Assert";
+val (BMCStmt_Assume_tm, mk_BMCStmt_Assume, dest_BMCStmt_Assume, is_BMCStmt_Assume) = syntax_fns1 "BMCStmt_Assume";
 
 
 (* bir_stmt_end_t *)
@@ -175,7 +213,6 @@ fun mk_bir_block_list (ty, tm_lbl, tm_mc_tags, l_stmts, tm_last_stmt) = let
 in
   mk_bir_block (tm_lbl, tm_mc_tags, tm_stmts, tm_last_stmt)
 end handle e => raise wrap_exn "mk_bir_block_list" e;
-
 
 (* bir_program_t *)
 
@@ -292,12 +329,14 @@ in
   TypeBase.mk_record (bir_state_t_ty, l)
 end handle e => raise wrap_exn "mk_bir_state" e;
 
+val (bst_status_tm,  mk_bst_status, dest_bst_status, is_bst_status) =
+ syntax_fns1 (mkselnm "bir_state_t" "bst_status");
 
-val (bst_status_tm,  mk_bst_status, dest_bst_status, is_bst_status)  = syntax_fns1 "bir_state_t_bst_status";
+val (bst_environ_tm,  mk_bst_environ, dest_bst_environ, is_bst_environ) =
+ syntax_fns1 (mkselnm "bir_state_t" "bst_environ");
 
-val (bst_environ_tm,  mk_bst_environ, dest_bst_environ, is_bst_environ)  = syntax_fns1 "bir_state_t_bst_environ";
-
-val (bst_pc_tm,  mk_bst_pc, dest_bst_pc, is_bst_pc)  = syntax_fns1 "bir_state_t_bst_pc";
+val (bst_pc_tm,  mk_bst_pc, dest_bst_pc, is_bst_pc) =
+ syntax_fns1 (mkselnm "bir_state_t" "bst_pc");
 
 
 val (bir_state_init_tm,  mk_bir_state_init, dest_bir_state_init, is_bir_state_init)  =

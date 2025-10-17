@@ -892,14 +892,10 @@ val exec_preserves_initialized_vars_thm = prove(
              ) stmts
       )``,
 
-REPEAT (GEN_TAC ORELSE DISCH_TAC) >>
-ASSUME_TAC (ISPECL [``(\stmt:'a bir_stmt_basic_t.
-                        bir_env_vars_are_initialised st.bst_environ
-                          (bir_vars_of_stmtB stmt))``,
-                    ``(\stmt:'a bir_stmt_basic_t.
-                        bir_env_vars_are_initialised r.bst_environ
-                          (bir_vars_of_stmtB stmt))``]
-                   listTheory.EVERY_MONOTONIC) >>
+rpt gen_tac >>
+strip_tac >>
+ho_match_mp_tac listTheory.EVERY_MONOTONIC >>
+rpt strip_tac >>
 REV_FULL_SIMP_TAC std_ss [bir_varinit_invar_bstmt]
 );
 
@@ -1060,7 +1056,7 @@ val bir_vars_are_initialized_block_then_every_stmts_thm = prove(
       )``,
 
 FULL_SIMP_TAC std_ss [bir_vars_of_block_def,
-                      listTheory.EVERY_MEM] >>
+                      listTheory.EVERY_MEM,LIST_TO_SET_THM] >>
 REPEAT STRIP_TAC >>
 
 METIS_TAC [bir_env_vars_are_initialised_UNION,
@@ -1352,7 +1348,7 @@ val bir_env_vars_are_initialised_prog_block_thm = prove(
 
 REPEAT (GEN_TAC ORELSE DISCH_TAC) >>
 Cases_on `p` >>
-FULL_SIMP_TAC std_ss [bir_vars_of_program_def] >>
+FULL_SIMP_TAC std_ss [bir_vars_of_program_def,LIST_TO_SET_THM] >>
 subgoal `bl IN (set l')` >- (
   IMP_RES_TAC
     bir_get_program_block_info_by_label_MEM >>
