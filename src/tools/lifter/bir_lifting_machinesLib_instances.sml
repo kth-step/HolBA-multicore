@@ -23,6 +23,44 @@ open arm8_stepLib m0_stepLib riscv_stepLib;
 
 val ERR = mk_HOL_ERR "bir_lifting_machinesLib_instances"
 
+(* Generic function for lifting an instruction to custom BIR basic statement list using cheat *)
+fun lift_by_cheat mu_b mu_e pc hex_code is_atomic_tm is_acq_tm is_rel_tm bstmt_list arch =
+  let
+    val bmr_tm =
+      if arch = "riscv"
+      then ``riscv_bmr``
+      else if arch = "arm8"
+      then ``arm8_bmr``
+      else raise ERR "lift_by_cheat" ("Architecture "^arch^" not supported")
+    val pc_word = wordsSyntax.mk_wordi (pc, 64)
+    val pc_imm = bir_immSyntax.gen_mk_Imm pc_word
+    val pc_next_imm = bir_immSyntax.gen_mk_Imm (wordsSyntax.mk_wordii ((Arbnum.toInt pc)+4, 64))
+    val wi_end =
+      bir_interval_expSyntax.mk_WI_end (wordsSyntax.mk_wordii (Arbnum.toInt mu_b, 64),
+                                        wordsSyntax.mk_wordii (Arbnum.toInt mu_e, 64))
+    val byte_instruction = get_byte_word_l hex_code
+    val mc_tags = mk_bir_mc_tags (is_atomic_tm, is_acq_tm, is_rel_tm)
+    val prog =
+      mk_BirProgram_list (block_observe_ty,
+	[mk_bir_block_list (block_observe_ty,
+			    mk_BL_Address_HC (pc_imm, stringSyntax.fromMLstring hex_code),
+                            optionSyntax.mk_some mc_tags,
+			    (map (inst [Type.alpha |-> block_observe_ty]) bstmt_list),
+			    mk_BStmt_Jmp (mk_BLE_Label (mk_BL_Address pc_next_imm))
+	)]
+      )
+    val lifted_tm =
+      mk_bir_is_lifted_inst_prog (bmr_tm,
+                                  pc_imm,
+                                  wi_end,
+                                  pairSyntax.mk_pair (pc_word, byte_instruction),
+                                  prog
+      )
+    val lifted_thm = add_tag (Tag.read "multicore", prove(lifted_tm, cheat))
+  in
+    lifted_thm
+  end
+
 (**************************)
 (* Instantiation for ARM8 *)
 (**************************)
@@ -181,6 +219,73 @@ in
   end
 end;
 
+
+
+(* ARMv8 multicore wrapper *)
+local
+
+(* Parses the hex-format barrier instruction into its fields. *)
+fun parse_barrier hex_code =
+  let
+    val bin = hex_to_bin_pad_zero 32 hex_code
+    (* Note this starts out at bit 31 using the terminology of the ARMv8 encoding
+     * online manual *)
+    val opcode = substring (bin, 0, 20)
+    val crm = substring (bin, 20, 4)
+    val op2 = substring (bin, 24, 3)
+    val rt = substring (bin, 27, 5)
+  in
+    (opcode, crm, op2, rt)
+  end
+
+(* Checks if hex-format instruction is an ARMv8 barrier. *)
+fun is_barrier hex_code =
+  let
+    val (opcode, crm, op2, rt) = parse_barrier hex_code
+  in
+    if (opcode = "11010101000000110011") andalso
+       (rt = "11111")
+    then
+      if (op2 = "101") orelse (* DMB *)
+         (op2 = "110") (* ISB *)
+      then true
+      else raise ERR "is_barrier" ("Barrier instruction "^hex_code^" is unknown barrier type")
+    else false
+  end
+
+(* Gets the barrier bstmts from hex-format instruction. *)
+fun get_barrier_bstmts hex_code =
+  let
+    val (_, crm, op2, _) = parse_barrier hex_code
+  in
+    if (op2 = "101") (* DMB *)
+    then if crm = "1111" (* DMB.SY *)
+     then [mk_BStmt_Fence (BM_ReadWrite_tm, BM_ReadWrite_tm)]
+     else if crm = "1110" (* DMB.ST *)
+     then [mk_BStmt_Fence (BM_Write_tm, BM_Write_tm)]
+     else if crm = "1101" (* DMB.LD *)
+     then [mk_BStmt_Fence (BM_Read_tm, BM_ReadWrite_tm)]
+     else raise ERR "get_barrier_bstmts" ("Barrier instruction "^hex_code^" has unsupported crm bits: "^funct3)
+    else if (op2 = "110") (* ISB *)
+    then raise ERR "get_barrier_bstmts" ("Instruction synchronization barriers not yet supported (hexcode: "^hex_code^").")
+    else raise ERR "get_barrier_bstmts" ("Barrier instruction "^hex_code^" has unsupported op2 bits: "^op2)
+  end
+
+fun lift_barrier mu_b mu_e pc hex_code =
+  let
+    val bstmt_list = get_barrier_bstmts hex_code
+  in
+    lift_by_cheat mu_b mu_e pc hex_code F F F bstmt_list "arm8"
+  end
+
+in
+fun arm8_mc_lift_instr (mu_b, mu_e) pc hex_code =
+  if is_barrier hex_code
+  then SOME (lift_barrier mu_b mu_e pc hex_code)
+  else NONE
+end
+;
+
 local
   val addr_ty = fcpLib.index_type (Arbnum.fromInt 64);
   val val_ty = fcpLib.index_type (Arbnum.fromInt 8);
@@ -223,7 +328,7 @@ val arm8_bmr_rec : bmr_rec = {
   bmr_extra_ss             = arm8_extra_ss,
   bmr_step_hex             = arm8_step_hex',
   bmr_mc_step_hex          = NONE,
-  bmr_mc_lift_instr        = NONE,
+  bmr_mc_lift_instr        = SOME arm8_mc_lift_instr,
   bmr_mk_data_mm           = arm8_mk_data_mm,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
   bmr_ihex_param           = SOME (4, true)
@@ -605,7 +710,7 @@ in
   bmr_extra_ss             = m0_mod_extra_ss,
   bmr_step_hex             = m0_mod_step_hex' (endian_fl, sel_fl),
   bmr_mc_step_hex          = NONE,
-  bmr_mc_lift_instr           = NONE,
+  bmr_mc_lift_instr        = NONE,
   bmr_mk_data_mm           = m0_mod_mk_data_mm endian_fl,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
   bmr_ihex_param           = NONE
@@ -773,7 +878,7 @@ in
   fun riscv_step_hex' is_multicore vn hex_code = let
     val pc_mem_thms = prepare_mem_contains_thms vn hex_code
 
-   val step_thms0 = [riscv_step_hex hex_code]
+    val step_thms0 = [riscv_step_hex hex_code]
 
     val step_thms1 =
       List.map (process_riscv_thm is_multicore vn pc_mem_thms) step_thms0
@@ -782,7 +887,7 @@ in
   end
 end;
 
-(* RISC-V Multicore wrapper *)
+(* RISC-V multicore wrapper *)
 local
 
 (* Auxiliary function to obtain a padded binary string from a hex instruction. *)
@@ -1097,45 +1202,12 @@ fun get_lrsc_bstmts mu_b mu_e hex_code =
   end
 ;
 
-(* Generic function for lifting an instruction to custom BIR basic statement list using cheat *)
-fun lift_by_cheat mu_b mu_e pc hex_code is_atomic_tm is_acq_tm is_rel_tm bstmt_list =
-  let
-    val riscv_bmr_tm = ``riscv_bmr``; (* TODO: Obtain this in a smarter way *)
-    val pc_word = wordsSyntax.mk_wordi (pc, 64)
-    val pc_imm = bir_immSyntax.gen_mk_Imm pc_word
-    val pc_next_imm = bir_immSyntax.gen_mk_Imm (wordsSyntax.mk_wordii ((Arbnum.toInt pc)+4, 64))
-    val wi_end =
-      bir_interval_expSyntax.mk_WI_end (wordsSyntax.mk_wordii (Arbnum.toInt mu_b, 64),
-                                        wordsSyntax.mk_wordii (Arbnum.toInt mu_e, 64))
-    val byte_instruction = get_byte_word_l hex_code
-    val mc_tags = mk_bir_mc_tags (is_atomic_tm, is_acq_tm, is_rel_tm)
-    val prog =
-      mk_BirProgram_list (block_observe_ty,
-	[mk_bir_block_list (block_observe_ty,
-			    mk_BL_Address_HC (pc_imm, stringSyntax.fromMLstring hex_code),
-                            optionSyntax.mk_some mc_tags,
-			    (map (inst [Type.alpha |-> block_observe_ty]) bstmt_list),
-			    mk_BStmt_Jmp (mk_BLE_Label (mk_BL_Address pc_next_imm))
-	)]
-      )
-    val lifted_tm =
-      mk_bir_is_lifted_inst_prog (riscv_bmr_tm,
-                                  pc_imm,
-                                  wi_end,
-                                  pairSyntax.mk_pair (pc_word, byte_instruction),
-                                  prog
-      )
-    val lifted_thm = add_tag (Tag.read "multicore", prove(lifted_tm, cheat))
-  in
-    lifted_thm
-  end
-
 (* Lifts a fence instruction by producing a cheat. *)
 fun lift_fence mu_b mu_e pc hex_code =
   let
     val bstmt_list = get_fence_bstmts hex_code
   in
-    lift_by_cheat mu_b mu_e pc hex_code F F F bstmt_list
+    lift_by_cheat mu_b mu_e pc hex_code F F F bstmt_list "riscv"
   end
 
 (* Lifts an atomic memory operation instruction by producing a cheat. *)
@@ -1143,7 +1215,7 @@ fun lift_amo mu_b mu_e pc hex_code =
   let
     val (bstmt_list, is_aq, is_rl) = get_amo_bstmts mu_b mu_e hex_code
   in
-    lift_by_cheat mu_b mu_e pc hex_code T (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list
+    lift_by_cheat mu_b mu_e pc hex_code T (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list "riscv"
   end
 
 (* Lifts a load-reserve or store-conditional by producing a cheat. *)
@@ -1151,7 +1223,7 @@ fun lift_lrsc mu_b mu_e pc hex_code =
   let
     val (bstmt_list, is_aq, is_rl) = get_lrsc_bstmts mu_b mu_e hex_code
   in
-    lift_by_cheat mu_b mu_e pc hex_code F (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list
+    lift_by_cheat mu_b mu_e pc hex_code F (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list "riscv"
   end
 
 in
