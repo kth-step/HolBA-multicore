@@ -103,6 +103,10 @@ fun lift_da_and_store prog_name da_name prog_interval =
   lift_da_and_store_gen prog_name da_name prog_interval false "arm8"
 ;
 
+fun lift_da_and_store_mc prog_name da_name prog_interval =
+  lift_da_and_store_gen prog_name da_name prog_interval true "arm8"
+;
+
 fun lift_da_and_store_mc_riscv prog_name da_name prog_interval =
   lift_da_and_store_gen prog_name da_name prog_interval true "riscv"
 ;
