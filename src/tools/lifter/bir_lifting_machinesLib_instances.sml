@@ -165,7 +165,6 @@ fun bmr_normalise_step_thm (r_step_rel:term) var_name thm =
   val thms' = arm8_step_hex' vn hex_code
 *)
 
-(* TODO: Document this function. *)
 fun bytes_of_hex_code hex_code = let
   val _ = if (String.size hex_code mod 2 = 0)
           then ()
@@ -263,6 +262,7 @@ end;
 local
 
 (* BARRIERS *)
+(* Includes dmb.sy, dmb.ld and dmb.st *)
 
 (* Parses the hex-format barrier instruction into its fields. *)
 fun parse_barrier hex_code =
@@ -319,6 +319,8 @@ fun lift_barrier mu_b mu_e pc hex_code =
   end
 
 (* EXCLUSIVE AND ORDERED MEMORY INSTRUCTIONS *)
+(* Includes stxr, ldxr, stlr, ldar and aliases *)
+(* TODO: Add cas to this family *)
 
 fun parse_excl_aqrl hex_code =
   let
@@ -340,7 +342,7 @@ fun parse_excl_aqrl hex_code =
 
 fun is_excl_aqrl hex_code =
   let
-    val (size, bits1, l, bits2, rs, oo, rt2, rn, rt) = parse_excl_aqrl hex_code
+    val (size, bits1, _, bits2, _, oo, _, _, _) = parse_excl_aqrl hex_code
   in
     if ((size = "11") orelse (size = "10")) andalso
        (bits1 = "0010001") andalso
@@ -497,10 +499,133 @@ fun lift_excl_aqrl mu_b mu_e pc hex_code =
     lift_by_cheat mu_b mu_e pc hex_code F (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list "arm8"
   end
 
+
+(* ATOMIC INSTRUCTIONS *)
+(* Includes swp, ldadd, ldclr, ldeor, ldset, ldsmax, ldsmin, ldumax and ldumin *)
+
+fun parse_atomic hex_code =
+  let
+    val bin = hex_to_bin_pad_zero 32 hex_code
+    (* Note this starts out at bit 31 using the terminology of the ARMv8 encoding
+     * online manual *)
+    val size = substring (bin, 0, 2)
+    (* TODO: bits1 includes the VR bit of unknown significance *)
+    val bits1 = substring (bin, 2, 6)
+    val a = substring (bin, 8, 1)
+    val r = substring (bin, 9, 1)
+    val bits2 = substring (bin, 10, 1)
+    val rs = substring (bin, 11, 5)
+    val o3 = substring (bin, 16, 1)
+    val opc = substring (bin, 17, 5)
+    val rn = substring (bin, 22, 5)
+    val rt = substring (bin, 27, 5)
+  in
+    (size, bits1, a, r, bits2, rs, o3, opc, rn, rt)
+  end
+
+fun is_atomic hex_code =
+  let
+    val (size, bits1, _, _, bits2, _, o3, opc, _, _) = parse_atomic hex_code
+  in
+    (* Atomic RMW *)
+    if ((size = "11") orelse (size = "10"))
+    then
+     if (bits1 = "111000") andalso
+        (bits2 = "1") andalso
+        (o3 = "0") andalso
+        ((opc = "00000") orelse (* LDADD *)
+         (opc = "00100") orelse (* LDCLR *)
+         (opc = "01000") orelse (* LDEOR *)
+         (opc = "01100") orelse (* LDSET *)
+         (opc = "10000") orelse (* LDSMAX *)
+         (opc = "10100") orelse (* LDSMIN *)
+         (opc = "11000") orelse (* LDUMAX *)
+         (opc = "11100") (* LDUMIN *)
+        )
+     then true
+     (* Atomic swaps *)
+     else if (bits1 = "111000") andalso
+	     (bits2 = "1") andalso
+	     (o3 = "1") andalso
+	     (opc = "00000") (* SWP *)
+     then true
+     else false
+    else false
+  end
+
+fun mk_arm8_atomic_binop bexp_tmp bexp_rs o3 opc =
+ if o3 = "1" (* Swap *)
+ then
+  if opc = "00000" (* SWP *)
+  then bexp_rs
+  else raise ERR "mk_atomic_binop" ("Unsupported opc bits: "^opc)
+ else (* Standard RMW *)
+  if opc = "00000" (* ADD *)
+  then bplus (bexp_tmp, bexp_rs) 
+  else if opc = "00100" (* CLR *)
+  then band (bexp_tmp, bnot bexp_rs)
+  else if opc = "01000" (* EOR *)
+  then bxor (bexp_tmp, bexp_rs)
+  else if opc = "01100" (* SET *)
+  then bor (bexp_tmp, bexp_rs)
+  else if opc = "10000" (* SMAX *)
+  then bite (bslt (bexp_tmp, bexp_rs), bexp_rs, bexp_tmp)
+  else if opc = "10100" (* SMIN *)
+  then bite (bslt (bexp_tmp, bexp_rs), bexp_tmp, bexp_rs)
+  else if opc = "11000" (* UMAX *)
+  then bite (blt (bexp_tmp, bexp_rs), bexp_rs, bexp_tmp)
+  else if opc = "11100" (* UMIN *)
+  then bite (blt (bexp_tmp, bexp_rs), bexp_tmp, bexp_rs)
+  else raise ERR "mk_atomic_binop" ("Unsupported opc bits: "^opc)
+
+fun get_atomic_bstmts mu_b mu_e hex_code =
+  let
+    val (size, _, a, r, _, rs, o3, opc, rn, rt) = parse_atomic hex_code
+
+    (* TODO: Support both 32 and 64-bit *)
+    val _ =
+     if size <> "11"
+     then raise ERR "get_atomic_bstmts" ("Only 64-bit atomic instructions supported.")
+     else ()
+
+    val bvar_rt = bvarimm64 $ mk_xreg_var_name rt
+    val bexp_rn = if is_arm8_zeroreg rn then bconstii 64 0 else bden $ bvarimm64 $ mk_xreg_var_name rn
+    val bexp_rs = if is_arm8_zeroreg rs then bconstii 64 0 else bden $ bvarimm64 $ mk_xreg_var_name rs
+    val bvar_tmp = bvarimm64 "tmp"
+    val bexp_tmp = bden $ bvar_tmp
+    val is_aq = (str_to_bool a) andalso (not $ is_arm8_zeroreg rt)
+    val is_rl = str_to_bool r
+    val atomic_op_res = mk_arm8_atomic_binop bexp_tmp bexp_rs o3 opc
+    val bir_block_base =
+     [(* 1. Load data value from address in Rn, place value into temporary register *)
+      bassert (baligned Bit64_tm (numSyntax.term_of_int 3, bexp_rn)),
+      bassert (mk_BExp_unchanged_mem_interval_distinct (Bit64_tm, numSyntax.mk_numeral mu_b, numSyntax.mk_numeral mu_e, bexp_rn, numSyntax.term_of_int 8)),
+      bassign (bvar_tmp, bload64_le (bden (bvarmem64_8 "MEM")) bexp_rn),
+      (* 2. Apply binary operation to the loaded value and the value in Rs,
+	    then store the result back to the address in Rn *)
+      bassign (bvarmem64_8 "MEM", bstore_le (bden (bvarmem64_8 "MEM"))
+					     bexp_rn
+					     atomic_op_res)
+     ]
+    (* 3. Place value of temporary register in destination register Rt *)
+    val bir_block_rt = if is_arm8_zeroreg rt then [] else [bassign (bvar_rt, bexp_tmp)]
+  in
+    (bir_block_base@bir_block_rt, is_aq, is_rl)
+  end
+
+fun lift_atomic mu_b mu_e pc hex_code =
+  let
+    val (bstmt_list, is_aq, is_rl) = get_atomic_bstmts mu_b mu_e hex_code
+  in
+    lift_by_cheat mu_b mu_e pc hex_code T (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list "arm8"
+  end
+
 in
 fun arm8_mc_lift_instr (mu_b, mu_e) pc hex_code =
   if is_barrier hex_code
   then SOME (lift_barrier mu_b mu_e pc hex_code)
+  else if is_atomic hex_code
+  then SOME (lift_atomic mu_b mu_e pc hex_code)
   else if is_excl_aqrl hex_code
   then SOME (lift_excl_aqrl mu_b mu_e pc hex_code)
   else NONE
@@ -1253,25 +1378,25 @@ val rs1 = "00011"
 val rs2 = "00111"
 *)
 
-fun mk_atomic_binop bexp_rd bexp_rs2 funct5 =
+fun mk_atomic_binop bexp_tmp bexp_rs2 funct5 =
   if funct5 = "00001"
   then bexp_rs2
   else if funct5 = "00000"
-  then bplus (bexp_rd, bexp_rs2)
+  then bplus (bexp_tmp, bexp_rs2)
   else if funct5 = "00100"
-  then bxor (bexp_rd, bexp_rs2)
+  then bxor (bexp_tmp, bexp_rs2)
   else if funct5 = "01100"
-  then band (bexp_rd, bexp_rs2)
+  then band (bexp_tmp, bexp_rs2)
   else if funct5 = "01000"
-  then bor (bexp_rd, bexp_rs2)
+  then bor (bexp_tmp, bexp_rs2)
   else if funct5 = "10000"
-  then bite (bslt (bexp_rd, bexp_rs2), bexp_rd, bexp_rs2)
+  then bite (bslt (bexp_tmp, bexp_rs2), bexp_tmp, bexp_rs2)
   else if funct5 = "10100"
-  then bite (bslt (bexp_rd, bexp_rs2), bexp_rs2, bexp_rd)
+  then bite (bslt (bexp_tmp, bexp_rs2), bexp_rs2, bexp_tmp)
   else if funct5 = "11000"
-  then bite (blt (bexp_rd, bexp_rs2), bexp_rd, bexp_rs2)
+  then bite (blt (bexp_tmp, bexp_rs2), bexp_tmp, bexp_rs2)
   else if funct5 = "11100"
-  then bite (blt (bexp_rd, bexp_rs2), bexp_rs2, bexp_rd)
+  then bite (blt (bexp_tmp, bexp_rs2), bexp_rs2, bexp_tmp)
   else  raise ERR "mk_atomic_binop" ("Unsupported funct5 bits: "^funct5)
 
 fun is_zeroreg reg =
