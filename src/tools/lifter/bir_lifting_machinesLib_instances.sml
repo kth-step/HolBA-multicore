@@ -260,6 +260,9 @@ end;
 
 (* ARMv8 multicore wrapper *)
 local
+(* TODO: Double-check usage of MEM_R *)
+(* TODO: Some instructions have special behaviour when an operand is the zero register,
+ *       in particular zero register as Xn (address) is interpreted as the SP. *)
 
 (* BARRIERS *)
 (* Includes dmb.sy, dmb.ld and dmb.st *)
@@ -319,8 +322,7 @@ fun lift_barrier mu_b mu_e pc hex_code =
   end
 
 (* EXCLUSIVE AND ORDERED MEMORY INSTRUCTIONS *)
-(* Includes stxr, ldxr, stlr, ldar and aliases *)
-(* TODO: Add cas to this family *)
+(* Includes cas, stxr, ldxr, stlr, ldar and aliases *)
 
 fun parse_excl_aqrl hex_code =
   let
@@ -332,27 +334,32 @@ fun parse_excl_aqrl hex_code =
     val l = substring (bin, 9, 1)
     val bits2 = substring (bin, 10, 1)
     val rs = substring (bin, 11, 5)
-    val oo = substring (bin, 16, 1)
+    val o0 = substring (bin, 16, 1)
     val rt2 = substring (bin, 17, 5)
     val rn = substring (bin, 22, 5)
     val rt = substring (bin, 27, 5)
   in
-    (size, bits1, l, bits2, rs, oo, rt2, rn, rt)
+    (size, bits1, l, bits2, rs, o0, rt2, rn, rt)
   end
 
 fun is_excl_aqrl hex_code =
   let
-    val (size, bits1, _, bits2, _, oo, _, _, _) = parse_excl_aqrl hex_code
+    val (size, bits1, _, bits2, _, o0, rt2, _, _) = parse_excl_aqrl hex_code
   in
-    if ((size = "11") orelse (size = "10")) andalso
+    if ((size = "11") orelse (size = "10")) andalso (* acquire-release *)
        (bits1 = "0010001") andalso
        (bits2 = "0") andalso
-       (oo = "1") (* acquire-release *)
+       (o0 = "1")
     then true
-    else if ((size = "11") orelse (size = "10")) andalso
+    else if ((size = "11") orelse (size = "10")) andalso (* exclusive *)
             (bits1 = "0010000") andalso
             (bits2 = "0") andalso
-            (oo = "0") (* exclusive *)
+            (o0 = "0")
+     then true
+    else if ((size = "11") orelse (size = "10")) andalso (* compare-and-set *)
+            (bits1 = "0010001") andalso
+            (bits2 = "1") andalso
+            (rt2 = "11111") (* TODO: Strangely, these bits are fixed for this instruction... *)
      then true
     else false
   end
@@ -415,7 +422,7 @@ fun is_arm8_zeroreg reg =
 
 fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
   let
-    val (size, _, l, _, rs, oo, rt2, rn, rt) = parse_excl_aqrl hex_code
+    val (size, _, l, bits2, rs, o0, rt2, rn, rt) = parse_excl_aqrl hex_code
 
     (* TODO: Both 32 and 64-bit *)
     val _ =
@@ -429,11 +436,13 @@ fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
     (* Memory holding reserved addresses *)
     val mem_reserved = bden (bvarmem64_8 "MEM_R")
     val (al, load_exp, ones, bytes, res_load_exp, cast) =
-      (3, bload64_le, ones_64, 8, bload32_le, fn v => v)
+     (3, bload64_le, ones_64, 8, bload32_le, fn v => v)
 
-    val is_excl = not $ str_to_bool oo
-    val is_aq = str_to_bool l andalso str_to_bool oo
-    val is_rl = (not $ str_to_bool l) andalso str_to_bool oo
+    val is_cas = str_to_bool bits2
+    val is_excl = not $ str_to_bool o0
+    (* TODO: Can the last conjunct of the below two be removed? *)
+    val is_aq = str_to_bool l andalso (not $ is_arm8_zeroreg rt) andalso (str_to_bool o0 orelse is_cas)
+    val is_rl = str_to_bool o0 andalso ((not $ str_to_bool l) orelse is_cas) 
 
     (* Rt is the register loaded to or stored from *)
     val bvar_rt = bvarimm64 $ mk_xreg_var_name rt
@@ -441,6 +450,8 @@ fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
     val bexp_rn = if is_arm8_zeroreg rn then bconstii 64 0 else bden $ bvarimm64 $ mk_xreg_var_name rn
     (* Rs holds the success flag (for store-exclusive) *)
     val bvar_rs = bvarimm64 $ mk_xreg_var_name rs
+    (* Temporary register for compare-and-swap *)
+    val bvar_tmp = bvarimm64 "tmp"
 
     val bir_block_base =
       if str_to_bool l (* Load exclusive or load acquire *)
@@ -486,6 +497,16 @@ fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
 	   bassign (bvarmem64_8 "MEM_R", mem_zero)
 	  ]
          else [])
+      else if is_cas (* Compare-and-set *)
+      then
+       [bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rn)),
+	bassert (mk_BExp_unchanged_mem_interval_distinct (Bit64_tm, numSyntax.mk_numeral mu_b, numSyntax.mk_numeral mu_e, bexp_rn, numSyntax.term_of_int bytes))]@
+       (* 1. Load from Rn *)
+       [bassign (bvar_tmp, load_exp (bden (bvarmem64_8 "MEM")) bexp_rn)]@
+       (* TODO: Implementation decides whether loaded value should be stored back or not *)
+       (* 2. Store conditionally based on comparison between loaded value and Rs *)
+       [bassign (bvarmem64_8 "MEM",
+                 bstore_le (bden (bvarmem64_8 "MEM")) bexp_rn (cast (bite (beq (bden bvar_tmp, bden $ bvar_rs), if is_arm8_zeroreg rt then bconstii 64 0 else bden bvar_rt, bden bvar_tmp))))]
       else raise ERR "get_excl_aqrl_bstmts" ("Exclusive or ordered memory instruction "^hex_code^" unsupported.")
   in
     (bir_block_base, is_aq, is_rl)
