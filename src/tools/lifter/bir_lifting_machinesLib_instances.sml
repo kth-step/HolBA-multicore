@@ -320,7 +320,7 @@ fun lift_barrier mu_b mu_e pc hex_code =
 
 (* EXCLUSIVE AND ORDERED MEMORY INSTRUCTIONS *)
 
-fun parse_excl hex_code =
+fun parse_excl_aqrl hex_code =
   let
     val bin = hex_to_bin_pad_zero 32 hex_code
     (* Note this starts out at bit 31 using the terminology of the ARMv8 encoding
@@ -338,9 +338,9 @@ fun parse_excl hex_code =
     (size, bits1, l, bits2, rs, oo, rt2, rn, rt)
   end
 
-fun is_excl hex_code =
+fun is_excl_aqrl hex_code =
   let
-    val (size, bits1, l, bits2, rs, oo, rt2, rn, rt) = parse_excl hex_code
+    val (size, bits1, l, bits2, rs, oo, rt2, rn, rt) = parse_excl_aqrl hex_code
   in
     if ((size = "11") orelse (size = "10")) andalso
        (bits1 = "0010001") andalso
@@ -357,19 +357,68 @@ fun is_excl hex_code =
 
 (* Construct the name of a ARMv8 64-bit-register *)
 fun mk_xreg_var_name bit_code =
-  ("x"^(Arbnum.toString (Arbnum.fromBinString bit_code)))
+  ("R"^(Arbnum.toString (Arbnum.fromBinString bit_code)))
 
 fun is_arm8_zeroreg reg =
   (Arbnum.fromBinString reg = (Arbnum.fromInt 31))
 
-fun get_excl_bstmts mu_b mu_e hex_code =
+(* ARMv8 Load:
+
+[]
+     |- bir_is_lifted_inst_prog arm8_bmr (Imm64 0x10030w)
+          (WI_end 0w 0x1000000w) (0x10030w,[64w; 0w; 64w; 249w])
+          (BirProgram
+             [<|bb_label := BL_Address_HC (Imm64 0x10030w) "ldr x0, [x2, #0]";
+                bb_statements :=
+                  [BStmt_Assert
+                     (BExp_Aligned Bit64 3
+                        (BExp_Den (BVar "R2" (BType_Imm Bit64))));
+                   BStmt_Assign (BVar "R0" (BType_Imm Bit64))
+                     (BExp_Load
+                        (BExp_Den (BVar "MEM" (BType_Mem Bit64 Bit8)))
+                        (BExp_Den (BVar "R2" (BType_Imm Bit64)))
+                        BEnd_LittleEndian Bit64)];
+                bb_last_statement :=
+                  BStmt_Jmp (BLE_Label (BL_Address (Imm64 0x10034w)))|>])
+
+*)
+
+(* ARMv8 Store:
+
+[]
+     |- bir_is_lifted_inst_prog arm8_bmr (Imm64 0x10030w)
+          (WI_end 0w 0x1000000w) (0x10030w,[64w; 4w; 0w; 249w])
+          (BirProgram
+             [<|bb_label := BL_Address_HC (Imm64 0x10030w) "str x0, [x2, #8]";
+                bb_statements :=
+                  [BStmt_Assert
+                     (BExp_Aligned Bit64 3
+                        (BExp_Den (BVar "R2" (BType_Imm Bit64))));
+                   BStmt_Assert
+                     (BExp_unchanged_mem_interval_distinct Bit64 0 16777216
+                        (BExp_BinExp BIExp_Plus
+                           (BExp_Den (BVar "R2" (BType_Imm Bit64)))
+                           (BExp_Const (Imm64 8w))) 8);
+                   BStmt_Assign (BVar "MEM" (BType_Mem Bit64 Bit8))
+                     (BExp_Store
+                        (BExp_Den (BVar "MEM" (BType_Mem Bit64 Bit8)))
+                        (BExp_BinExp BIExp_Plus
+                           (BExp_Den (BVar "R2" (BType_Imm Bit64)))
+                           (BExp_Const (Imm64 8w))) BEnd_LittleEndian
+                        (BExp_Den (BVar "R0" (BType_Imm Bit64))))];
+                bb_last_statement :=
+                  BStmt_Jmp (BLE_Label (BL_Address (Imm64 0x10034w)))|>])
+
+*)
+
+fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
   let
-    val (size, _, l, _, rs, oo, rt2, rn, rt) = parse_excl hex_code
+    val (size, _, l, _, rs, oo, rt2, rn, rt) = parse_excl_aqrl hex_code
 
     (* TODO: Both 32 and 64-bit *)
     val _ =
      if size <> "11"
-     then raise ERR "get_excl_bstmts" ("Only 64-bit exclusive or ordered memory instructions supported.")
+     then raise ERR "get_excl_aqrl_bstmts" ("Only 64-bit exclusive or ordered memory instructions supported.")
      else ()
     (* "01010101" in hex *)
     val ones_64 = bconst64 72340172838076673
@@ -380,6 +429,7 @@ fun get_excl_bstmts mu_b mu_e hex_code =
     val (al, load_exp, ones, bytes, res_load_exp, cast) =
       (3, bload64_le, ones_64, 8, bload32_le, fn v => v)
 
+    val is_excl = not $ str_to_bool oo
     val is_aq = str_to_bool l andalso str_to_bool oo
     val is_rl = (not $ str_to_bool l) andalso str_to_bool oo
 
@@ -390,109 +440,69 @@ fun get_excl_bstmts mu_b mu_e hex_code =
     (* Rs holds the success flag (for store-exclusive) *)
     val bvar_rs = bvarimm64 $ mk_xreg_var_name rs
 
-    (* TODO: Double-check loads and stores using lifted ARMv8 instructions *)
     val bir_block_base =
-      if str_to_bool l andalso (not $ str_to_bool oo) (* Load exclusive *)
+      if str_to_bool l (* Load exclusive or load acquire *)
       then
        [(* 1. Load data value from address in rn, place value into rt *)
 	bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rn))
        ]@(if is_arm8_zeroreg rt
 	  then []
 	  else
-	    [bassign (bvar_rt, load_exp (bden (bvarmem64_8 "MEM")) bexp_rn)]
-	 )@
-       [(* 2. Set reservation of memory *)
-	bassign (bvarmem64_8 "MEM_R", bstore_le mem_zero bexp_rn ones)
-       ]
-      else if (not $ str_to_bool l) andalso (not $ str_to_bool oo) (* Store exclusive *)
+	    [bassign (bvar_rt, load_exp (bden (bvarmem64_8 "MEM")) bexp_rn)])
+       @(if is_excl
+         then
+	  [(* 2. Set reservation of memory *)
+	   bassign (bvarmem64_8 "MEM_R", bstore_le mem_zero bexp_rn ones)
+	  ]
+         else [])
+      else if (not $ str_to_bool l) (* Store exclusive or store release *)
       then
        [(* 1. Store value in rt into address in rn *)
 	bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rn)),
 	bassert (mk_BExp_unchanged_mem_interval_distinct (Bit64_tm, numSyntax.mk_numeral mu_b, numSyntax.mk_numeral mu_e, bexp_rn, numSyntax.term_of_int bytes)),
 	bassign (bvarmem64_8 "MEM",
-		 bite (beq (res_load_exp mem_reserved bexp_rn,
-			    ones),
-                       (* TODO: Cast from constant can be avoided with better logic *)
-		       bstore_le (bden (bvarmem64_8 "MEM")) bexp_rn (cast (if is_arm8_zeroreg rt then bconstii 64 0 else bden bvar_rt)),
-		       bden (bvarmem64_8 "MEM")
-		      )
+                 if is_excl
+                 then
+		  bite (beq (res_load_exp mem_reserved bexp_rn,
+			     ones),
+			(* TODO: Cast from constant in 32-bit case can be avoided with better logic *)
+			bstore_le (bden (bvarmem64_8 "MEM")) bexp_rn (cast (if is_arm8_zeroreg rt then bconstii 64 0 else bden bvar_rt)),
+			bden (bvarmem64_8 "MEM")
+		       )
+                 else
+                  bstore_le (bden (bvarmem64_8 "MEM")) bexp_rn (cast (if is_arm8_zeroreg rt then bconstii 64 0 else bden bvar_rt))
 	)
 	(* 2. Assign code (zero on success, non-zero on failure) to status result register *)
-       ]@(if is_arm8_zeroreg rs
+       ]@(if is_arm8_zeroreg rs orelse not $ is_excl
 	  then []
 	  else
-	    [bassign (bvar_rs, bite (beq (res_load_exp mem_reserved bexp_rn, ones), bconst64 0, ones_64))]
-	 )@
-       [(* 3. Reset reservation of memory *)
-	bassign (bvarmem64_8 "MEM_R", mem_zero)
-       ]
-      else raise ERR "get_excl_bstmts" ("Exclusive or ordered memory instruction "^hex_code^" unsupported.")
-(* OLD
-    val bvar_rd = bvarimm64 $ mk_gpr_var_name rd
-    val bexp_rs1 = if is_zeroreg rs1 then bconstii 64 0 else bden $ bvarimm64 $ mk_gpr_var_name rs1
-    val bexp_rs2 = if is_zeroreg rs2 then bconstii 64 0 else bden $ bvarimm64 $ mk_gpr_var_name rs2
-
-    (* "01010101" in hex *)
-    val ones_32 = bconst32 16843009
-    val ones_64 = bconst64 72340172838076673
-    (* Empty memory *)
-    val mem_zero = bden (bvarmem64_8 "MEM8_Z")
-    (* Memory holding reserved addresses *)
-    val mem_reserved = bden (bvarmem64_8 "MEM8_R")
-    val (al, load_exp, ones, bytes, res_load_exp, cast) =
-      if funct3 = "010" (* .W (RV32) *)
-      then (2, (fn m => fn a => bscast64 (bload32_le m a)), ones_32, 4, bload64_le, blowcast32)
-      else if funct3 = "011" (* .D (RV64) *)
-      then (3, bload64_le, ones_64, 8, bload32_le, fn v => v)
-      else raise ERR "get_lrsc_bstmts" ("LR/SC instruction "^hex_code^" has unsupported funct3 bits: "^funct3)
-    val bir_block_base =
-      if funct5 = "00010" (* LR *)
-      then if rs2 = "00000"
-	then
-	  [(* 1. Load data value from address in rs1, place value into rd *)
-	   bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rs1))
-          ]@(if is_zeroreg rd
-             then []
-             else
-	       [bassign (bvar_rd, load_exp (bden (bvarmem64_8 "MEM8")) bexp_rs1)]
-            )@
-          [(* 2. Set reservation of memory *)
-	   bassign (bvarmem64_8 "MEM8_R", bstore_le mem_zero bexp_rs1 ones)
-	  ]
-	else raise ERR "get_lrsc_bstmts" ("LR instruction "^hex_code^" has non-zero rs2 bits: "^rs2)
-      else if funct5 = "00011" (* SC *)
-      then
-	  [(* 1. Store value in rs2 into address in rs1 *)
-	   bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rs1)),
-	   bassert (mk_BExp_unchanged_mem_interval_distinct (Bit64_tm, numSyntax.mk_numeral mu_b, numSyntax.mk_numeral mu_e, bexp_rs1, numSyntax.term_of_int bytes)),
-	   bassign (bvarmem64_8 "MEM8", 
-		    bite (beq (res_load_exp mem_reserved bexp_rs1,
-			       ones),
-			  bstore_le (bden (bvarmem64_8 "MEM8")) bexp_rs1 (cast bexp_rs2),
-			  bden (bvarmem64_8 "MEM8")
-			 )
-	   )
-	   (* 2. Assign code (zero on success, non-zero on failure) to success register *)
-          ]@(if is_zeroreg rd
-             then []
-             else
-	       [bassign (bvar_rd, bite (beq (res_load_exp mem_reserved bexp_rs1, ones), bconst64 0, ones_64))]
-            )@
+	    [bassign (bvar_rs,
+                      bite (beq (res_load_exp mem_reserved bexp_rn, ones), bconst64 0, ones_64))])
+       @(if is_excl
+         then
 	  [(* 3. Reset reservation of memory *)
-	   bassign (bvarmem64_8 "MEM8_R", mem_zero)
+	   bassign (bvarmem64_8 "MEM_R", mem_zero)
 	  ]
-      else raise ERR "get_lrsc_bstmts" ("LR/SC instruction "^hex_code^" has unsupported funct5 bits: "^funct5)
-*)
+         else [])
+      else raise ERR "get_excl_aqrl_bstmts" ("Exclusive or ordered memory instruction "^hex_code^" unsupported.")
   in
     (bir_block_base, is_aq, is_rl)
   end
 ;
 
+fun lift_excl_aqrl mu_b mu_e pc hex_code =
+  let
+    val (bstmt_list, is_aq, is_rl) = get_excl_aqrl_bstmts mu_b mu_e hex_code
+  in
+    lift_by_cheat mu_b mu_e pc hex_code F (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list "arm8"
+  end
 
 in
 fun arm8_mc_lift_instr (mu_b, mu_e) pc hex_code =
   if is_barrier hex_code
   then SOME (lift_barrier mu_b mu_e pc hex_code)
+  else if is_excl_aqrl hex_code
+  then SOME (lift_excl_aqrl mu_b mu_e pc hex_code)
   else NONE
 end
 ;
