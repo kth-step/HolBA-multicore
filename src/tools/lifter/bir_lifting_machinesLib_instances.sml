@@ -369,55 +369,6 @@ fun mk_xreg_var_name bit_code =
 fun is_arm8_zeroreg reg =
   (Arbnum.fromBinString reg = (Arbnum.fromInt 31))
 
-(* ARMv8 Load:
-
-[]
-     |- bir_is_lifted_inst_prog arm8_bmr (Imm64 0x10030w)
-          (WI_end 0w 0x1000000w) (0x10030w,[64w; 0w; 64w; 249w])
-          (BirProgram
-             [<|bb_label := BL_Address_HC (Imm64 0x10030w) "ldr x0, [x2, #0]";
-                bb_statements :=
-                  [BStmt_Assert
-                     (BExp_Aligned Bit64 3
-                        (BExp_Den (BVar "R2" (BType_Imm Bit64))));
-                   BStmt_Assign (BVar "R0" (BType_Imm Bit64))
-                     (BExp_Load
-                        (BExp_Den (BVar "MEM" (BType_Mem Bit64 Bit8)))
-                        (BExp_Den (BVar "R2" (BType_Imm Bit64)))
-                        BEnd_LittleEndian Bit64)];
-                bb_last_statement :=
-                  BStmt_Jmp (BLE_Label (BL_Address (Imm64 0x10034w)))|>])
-
-*)
-
-(* ARMv8 Store:
-
-[]
-     |- bir_is_lifted_inst_prog arm8_bmr (Imm64 0x10030w)
-          (WI_end 0w 0x1000000w) (0x10030w,[64w; 4w; 0w; 249w])
-          (BirProgram
-             [<|bb_label := BL_Address_HC (Imm64 0x10030w) "str x0, [x2, #8]";
-                bb_statements :=
-                  [BStmt_Assert
-                     (BExp_Aligned Bit64 3
-                        (BExp_Den (BVar "R2" (BType_Imm Bit64))));
-                   BStmt_Assert
-                     (BExp_unchanged_mem_interval_distinct Bit64 0 16777216
-                        (BExp_BinExp BIExp_Plus
-                           (BExp_Den (BVar "R2" (BType_Imm Bit64)))
-                           (BExp_Const (Imm64 8w))) 8);
-                   BStmt_Assign (BVar "MEM" (BType_Mem Bit64 Bit8))
-                     (BExp_Store
-                        (BExp_Den (BVar "MEM" (BType_Mem Bit64 Bit8)))
-                        (BExp_BinExp BIExp_Plus
-                           (BExp_Den (BVar "R2" (BType_Imm Bit64)))
-                           (BExp_Const (Imm64 8w))) BEnd_LittleEndian
-                        (BExp_Den (BVar "R0" (BType_Imm Bit64))))];
-                bb_last_statement :=
-                  BStmt_Jmp (BLE_Label (BL_Address (Imm64 0x10034w)))|>])
-
-*)
-
 fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
   let
     val (size, _, l, bits2, rs, o0, rt2, rn, rt) = parse_excl_aqrl hex_code
