@@ -373,19 +373,24 @@ fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
   let
     val (size, _, l, bits2, rs, o0, rt2, rn, rt) = parse_excl_aqrl hex_code
 
-    (* TODO: Both 32 and 64-bit *)
-    val _ =
-     if size <> "11"
-     then raise ERR "get_excl_aqrl_bstmts" ("Only 64-bit exclusive or ordered memory instructions supported.")
-     else ()
-    (* "01010101" in hex *)
+    (* Distinguishes between 32 and 64-bit *)
+    val is_64bit =
+     if size = "11"
+     then true
+     else if size = "10"
+     then false
+     else raise ERR "get_excl_aqrl_bstmts" ("Unsupported size encoding: "^size^".")
+    (* "01010101..." in hex *)
+    val ones_32 = bconst32 16843009
     val ones_64 = bconst64 72340172838076673
     (* Empty memory *)
     val mem_zero = bden (bvarmem64_8 "MEM_Z")
     (* Memory holding reserved addresses *)
     val mem_reserved = bden (bvarmem64_8 "MEM_R")
     val (al, load_exp, ones, bytes, res_load_exp, cast) =
-     (3, bload64_le, ones_64, 8, bload32_le, fn v => v)
+     if is_64bit
+     then (3, bload64_le, ones_64, 8, bload32_le, fn v => v)
+     else (2, (fn m => fn a => bucast64 (bload32_le m a)), ones_32, 4, bload64_le, blowcast32)
 
     val is_cas = str_to_bool bits2
     val is_excl = not $ str_to_bool o0
@@ -552,11 +557,13 @@ fun get_atomic_bstmts mu_b mu_e hex_code =
   let
     val (size, _, a, r, _, rs, o3, opc, rn, rt) = parse_atomic hex_code
 
-    (* TODO: Support both 32 and 64-bit *)
-    val _ =
-     if size <> "11"
-     then raise ERR "get_atomic_bstmts" ("Only 64-bit atomic instructions supported.")
-     else ()
+    (* Distinguishes between 32 and 64-bit *)
+    val is_64bit =
+     if size = "11"
+     then true
+     else if size = "10"
+     then false
+     else raise ERR "get_excl_aqrl_bstmts" ("Unsupported size encoding: "^size^".")
 
     val bvar_rt = bvarimm64 $ mk_xreg_var_name rt
     val bexp_rn = if is_arm8_zeroreg rn then bden $ bvarimm64 "SP_EL0" else bden $ bvarimm64 $ mk_xreg_var_name rn
@@ -566,16 +573,21 @@ fun get_atomic_bstmts mu_b mu_e hex_code =
     val is_aq = (str_to_bool a) andalso (not $ is_arm8_zeroreg rt)
     val is_rl = str_to_bool r
     val atomic_op_res = mk_arm8_atomic_binop bexp_tmp bexp_rs o3 opc
+    val (al, load_exp, bytes, cast) =
+     if is_64bit
+     then (3, bload64_le, 8, fn v => v)
+     else (2, (fn m => fn a => bucast64 (bload32_le m a)), 4, blowcast32)
+
     val bir_block_base =
      [(* 1. Load data value from address in Rn, place value into temporary register *)
-      bassert (baligned Bit64_tm (numSyntax.term_of_int 3, bexp_rn)),
-      bassert (mk_BExp_unchanged_mem_interval_distinct (Bit64_tm, numSyntax.mk_numeral mu_b, numSyntax.mk_numeral mu_e, bexp_rn, numSyntax.term_of_int 8)),
-      bassign (bvar_tmp, bload64_le (bden (bvarmem64_8 "MEM")) bexp_rn),
+      bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rn)),
+      bassert (mk_BExp_unchanged_mem_interval_distinct (Bit64_tm, numSyntax.mk_numeral mu_b, numSyntax.mk_numeral mu_e, bexp_rn, numSyntax.term_of_int bytes)),
+      bassign (bvar_tmp, load_exp (bden (bvarmem64_8 "MEM")) bexp_rn),
       (* 2. Apply binary operation to the loaded value and the value in Rs,
 	    then store the result back to the address in Rn *)
       bassign (bvarmem64_8 "MEM", bstore_le (bden (bvarmem64_8 "MEM"))
 					     bexp_rn
-					     atomic_op_res)
+					     (cast atomic_op_res))
      ]
     (* 3. Place value of temporary register in destination register Rt *)
     val bir_block_rt = if is_arm8_zeroreg rt then [] else [bassign (bvar_rt, bexp_tmp)]
