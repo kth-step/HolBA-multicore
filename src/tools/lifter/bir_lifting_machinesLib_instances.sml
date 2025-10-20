@@ -260,12 +260,10 @@ end;
 
 (* ARMv8 multicore wrapper *)
 local
-(* TODO: Double-check usage of MEM_R *)
-(* TODO: Some instructions have special behaviour when an operand is the zero register,
- *       in particular zero register as Xn (address) is interpreted as the SP. *)
+(* TODO: MEM_R usage may not be permissive enough - current implementation seemingly allows to reserve only one address at a time *)
 
 (* BARRIERS *)
-(* Includes dmb.sy, dmb.ld and dmb.st *)
+(* Includes dmb sy, dmb ld and dmb st *)
 
 (* Parses the hex-format barrier instruction into its fields. *)
 fun parse_barrier hex_code =
@@ -302,11 +300,11 @@ fun get_barrier_bstmts hex_code =
     val (_, crm, op2, _) = parse_barrier hex_code
   in
     if (op2 = "101") (* DMB *)
-    then if crm = "1111" (* DMB.SY *)
+    then if crm = "1111" (* DMB SY *)
      then [mk_BStmt_Fence (BM_ReadWrite_tm, BM_ReadWrite_tm)]
-     else if crm = "1110" (* DMB.ST *)
+     else if crm = "1110" (* DMB ST *)
      then [mk_BStmt_Fence (BM_Write_tm, BM_Write_tm)]
-     else if crm = "1101" (* DMB.LD *)
+     else if crm = "1101" (* DMB LD *)
      then [mk_BStmt_Fence (BM_Read_tm, BM_ReadWrite_tm)]
      else raise ERR "get_barrier_bstmts" ("Barrier instruction "^hex_code^" has unsupported crm bits: "^crm)
     else if (op2 = "110") (* ISB *)
@@ -447,7 +445,7 @@ fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
     (* Rt is the register loaded to or stored from *)
     val bvar_rt = bvarimm64 $ mk_xreg_var_name rt
     (* Rn holds the address *)
-    val bexp_rn = if is_arm8_zeroreg rn then bconstii 64 0 else bden $ bvarimm64 $ mk_xreg_var_name rn
+    val bexp_rn = if is_arm8_zeroreg rn then bden $ bvarimm64 "SP_EL0" else bden $ bvarimm64 $ mk_xreg_var_name rn
     (* Rs holds the success flag (for store-exclusive) *)
     val bvar_rs = bvarimm64 $ mk_xreg_var_name rs
     (* Temporary register for compare-and-swap *)
@@ -490,7 +488,7 @@ fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
 	  then []
 	  else
 	    [bassign (bvar_rs,
-                      bite (beq (res_load_exp mem_reserved bexp_rn, ones), bconst64 0, ones_64))])
+                      bite (beq (res_load_exp mem_reserved bexp_rn, ones), bconst64 0, bconst64 1))])
        @(if is_excl
          then
 	  [(* 3. Reset reservation of memory *)
@@ -610,7 +608,7 @@ fun get_atomic_bstmts mu_b mu_e hex_code =
      else ()
 
     val bvar_rt = bvarimm64 $ mk_xreg_var_name rt
-    val bexp_rn = if is_arm8_zeroreg rn then bconstii 64 0 else bden $ bvarimm64 $ mk_xreg_var_name rn
+    val bexp_rn = if is_arm8_zeroreg rn then bden $ bvarimm64 "SP_EL0" else bden $ bvarimm64 $ mk_xreg_var_name rn
     val bexp_rs = if is_arm8_zeroreg rs then bconstii 64 0 else bden $ bvarimm64 $ mk_xreg_var_name rs
     val bvar_tmp = bvarimm64 "tmp"
     val bexp_tmp = bden $ bvar_tmp

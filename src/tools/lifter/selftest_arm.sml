@@ -29,7 +29,6 @@ val _ = Parse.current_backend := (if (raw_output) then PPBackEnd.raw_terminal el
 val _ = Feedback.set_trace "Unicode" (if unicode then 1 else 0)
 
 
-
 (* TODO: Any other way to supply this to the functor? *)
 structure log_name =
 struct
@@ -96,12 +95,6 @@ structure test_m0_mod_be_main = test_bmr(structure MD = bmil_m0_mod_BigEnd_Main;
                                      structure log_name_str = log_name
 );
 
-
-
-(**************************)
-(* SOME MANUAL TESTS ARM8 *)
-(**************************)
-
 fun arm8_hex_code_of_asm asm = hd (arm8AssemblerLib.arm8_code [QUOTE asm])
 fun arm8_lift_instr_asm mu_b mu_e pc asm =
   test_ARM8.lift_instr mu_b mu_e pc (arm8_hex_code_of_asm asm) (SOME asm);
@@ -110,8 +103,29 @@ fun arm8_lift_instr_asm mu_b mu_e pc asm =
 val mu_b = Arbnum.fromInt 0;
 val mu_e = Arbnum.fromInt 0x1000000;
 val pc =   Arbnum.fromInt 0x10030;
-val arm8_test_asm = arm8_lift_instr_asm mu_b mu_e pc
 fun arm8_test_hex hex = test_ARM8.lift_instr mu_b mu_e pc hex NONE
+fun arm8_test_hex_mc hex = test_ARM8.lift_instr_mc mu_b mu_e pc hex NONE
+
+val arm8_test_asm = arm8_lift_instr_asm mu_b mu_e pc
+fun arm8_test_hex_print_asm_gen is_multicore asm hex = 
+  let
+    val _ = test_ARM8.print_log true (asm^(": "))
+  in
+    if is_multicore
+    then arm8_test_hex_mc hex
+    else arm8_test_hex hex
+  end
+;
+val arm8_test_hex_print_asm = 
+  arm8_test_hex_print_asm_gen false
+;
+val arm8_test_hex_print_asm_mc = 
+  arm8_test_hex_print_asm_gen true
+;
+
+(**************************)
+(* SOME MANUAL TESTS ARM8 *)
+(**************************)
 
 val _ = if not test_arm8 then () else let
   val res = test_ARM8.print_log_with_style sty_HEADER true "\nMANUAL TESTS - ARMv8\n\n";
@@ -916,6 +930,31 @@ val _ = if (not test_arm8) then () else let
 in () end;
 
 
+(*************)
+(* Multicore *)
+(*************)
+
+(* Barriers *)
+val res = arm8_test_hex_print_asm_mc "dmb sy" "d5033fbf";
+val res = arm8_test_hex_print_asm_mc "dmb ld" "d5033dbf";
+val res = arm8_test_hex_print_asm_mc "dmb st" "d5033ebf";
+
+(* Exclusives and ordered *)
+val res = arm8_test_hex_print_asm_mc "ldar x6, [x7, #0]" "c8dffce6";
+val res = arm8_test_hex_print_asm_mc "stlr x6, [x7, #0]" "c89ffce6";
+val res = arm8_test_hex_print_asm_mc "stxr w5, x6, [x7, #0]" "c8057ce6";
+val res = arm8_test_hex_print_asm_mc "ldxr x6, [x7, #0]" "c85f7ce6";
+
+(* Atomics *)
+val res = arm8_test_hex_print_asm_mc "swp x5, x6, [x7]" "f82580e6";
+val res = arm8_test_hex_print_asm_mc "ldadd x5, x6, [x7]" "f82500e6";
+val res = arm8_test_hex_print_asm_mc "ldclr x5, x6, [x7]" "f82510e6";
+val res = arm8_test_hex_print_asm_mc "ldeor x5, x6, [x7]" "f82520e6";
+val res = arm8_test_hex_print_asm_mc "ldset x5, x6, [x7]" "f82530e6";
+val res = arm8_test_hex_print_asm_mc "ldsmax x5, x6, [x7]" "f82540e6";
+val res = arm8_test_hex_print_asm_mc "ldsmin x5, x6, [x7]" "f82550e6";
+val res = arm8_test_hex_print_asm_mc "ldumax x5, x6, [x7]" "f82560e6";
+val res = arm8_test_hex_print_asm_mc "ldumin x5, x6, [x7]" "f82570e6";
 
 
 (*****************)
