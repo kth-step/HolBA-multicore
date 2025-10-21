@@ -9,7 +9,7 @@ val _ = Datatype‘
         ’;
 
 val _ = Datatype‘
-         exec_mem_msg_t = <| loc:bir_val_t ; val:bir_val_t ; cid:num ; succ:bool ; n:num |>
+         exec_mem_msg_t = <| loc:bir_val_t ; val:bir_val_t ; cid:num ; succ:bool |>
         ’;
 
 (* Returns if all pairs (timestamp * message) satisfies P. *)
@@ -44,7 +44,7 @@ val mem_readable_def = Define‘
 ’;
 
 val emem_default_def = Define‘
-  emem_default l = <| loc := l ; val := BVal_Imm (Imm64 0w) ; succ := T ; n := 0 |>
+  emem_default l = <| loc := l ; val := BVal_Imm (Imm64 0w) ; succ := T |>
 ’;
 
 val emem_get_def = Define‘
@@ -147,7 +147,7 @@ val eval_clstep_xclfail_def = Define‘
     case (l_opt, v_opt) of
     | (SOME l, SOME v) =>
         let
-          msg = <| loc := l ; val := v ; cid := cid ; succ := F ; n := SUC s.bst_counter |>;
+          msg = <| loc := l ; val := v ; cid := cid ; succ := F |>;
           ts = FILTER (λt. emem_get M l t = SOME msg) s.bst_prom
         in
           LIST_BIND ts 
@@ -157,7 +157,6 @@ val eval_clstep_xclfail_def = Define‘
                            [s with <| bst_viewenv := new_viewenv;
                                       bst_environ := new_env;
                                       bst_xclb    := NONE;
-                                      bst_counter updated_by SUC;
                                       bst_prom    updated_by (FILTER (λp. p ≠ t));
                                       bst_pc updated_by (bir_pc_next o bir_pc_next o bir_pc_next) |>]
                        | _ => [])
@@ -192,7 +191,7 @@ val eval_clstep_amofulfil_def = Define‘
                                                ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
                                                ifView (acq /\ rel) s.bst_v_Rel
                                               ];
-                                msg = <| loc := l; val := v; cid := cid; succ := T; n := SUC s.bst_counter |>;
+                                msg = <| loc := l; val := v; cid := cid; succ := T |>;
                                 t_ws = FILTER (\t_w.
                                                  (emem_get M l t_w = SOME msg) /\
                                                  (MAX v_wPre (s.bst_coh l) < t_w) /\
@@ -213,7 +212,6 @@ val eval_clstep_amofulfil_def = Define‘
                                                                bst_v_CAP  updated_by (MAX v_addr);
                                                                bst_v_wOld updated_by (MAX v_wPost);
                                                                bst_pc     updated_by bir_pc_next o bir_pc_next;
-                                                               bst_counter updated_by SUC;
                                                      |> ])
                            )
                       )
@@ -237,7 +235,7 @@ val eval_clstep_fulfil_def = Define‘
                           ; ifView (xcl /\ acq /\ rel) s.bst_v_Rel
                           ; ifView xcl (get_xclb_view s.bst_xclb)
                           ];
-             msg = <| loc := l; val := v; cid := cid ; succ := T ; n := SUC s.bst_counter |>;
+             msg = <| loc := l; val := v; cid := cid ; succ := T  |>;
              ts = FILTER (\t. (emem_get M l t = SOME msg)
                               /\ (MAX v_pre (s.bst_coh l) < t)
                               /\ (xcl ==> ((s.bst_xclb <> NONE) /\
@@ -263,7 +261,6 @@ val eval_clstep_fulfil_def = Define‘
                                          bst_pc     updated_by if xcl
                                                                then (bir_pc_next o bir_pc_next o bir_pc_next)
                                                                else bir_pc_next;
-                                         bst_counter updated_by SUC;
                                          bst_xclb := if xcl then NONE else s.bst_xclb |>]
                           | _ => []))
       | (_, _) => []

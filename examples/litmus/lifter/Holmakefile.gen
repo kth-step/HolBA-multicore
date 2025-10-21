@@ -5,8 +5,8 @@ DEPENDENCIES   = ../../../src/tools/exec
 
 # configuration
 # ----------------------------------
-HOLHEAP        = ../../../src/HolBA-heap
-NEWHOLHEAP     = HolBAExamples_LitmusTools-heap
+HOLHEAP        = ../exec/HolBAExamples_LitmusExec-heap
+NEWHOLHEAP     = HolBAExamples_LitmusLifter-heap
 
 HEAPINC_EXTRA  = 
 

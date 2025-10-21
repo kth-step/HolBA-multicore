@@ -1,16 +1,16 @@
 # includes
 # ----------------------------------
-DEPENDENCIES   =
+DEPENDENCIES   = ../../../src/tools/exec
 
 
 # configuration
 # ----------------------------------
-HOLHEAP        = tools/HolBAExamples_LitmusLifter-heap
-NEWHOLHEAP     = HolBAExamples_Litmus-heap
+HOLHEAP        = ../../../src/HolBA-heap
+NEWHOLHEAP     = HolBAExamples_LitmusExec-heap
 
 HEAPINC_EXTRA  = 
 
 
 # included lines follow
 # ----------------------------------
-include ../../src/Holmakefile.inc
+include ../../../src/Holmakefile.inc

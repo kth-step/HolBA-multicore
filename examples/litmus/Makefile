@@ -1,5 +1,9 @@
-HOL=../../opt/hol_k14/bin/hol
-POLYC=../../opt/polyml_v5.8.1/bin/polyc
+include ../../config.env.sh
+
+export PATH := $(PATH):${HOLBA_HOL_DIR}/bin
+export RISCV_CC := ${HOLBA_GCC_RISCV_PREFIX}gcc
+export ARM_CC := ${HOLBA_GCC_ARM_PREFIX}gcc
+export ARM8_CC := ${HOLBA_GCC_ARM8_PREFIX}gcc
 
 SHELL=/bin/bash
 
@@ -10,13 +14,13 @@ clean:
 
 .PHONY: heap
 heap:
-	../../opt/hol_k14/bin/Holmake
+	Holmake
 
 %.o: %.sml heap
-	$(HOL) -q $< <<< "val _ = PolyML.export(\"$*\", main)" >/dev/null
+	hol -q $< <<< "val _ = PolyML.export(\"$*\", main)" >/dev/null
 
 lift_test: lift_test.o 
-	$(POLYC) $< -o $@
+	polyc $< -o $@
 
 run_test: run_test.o 
-	$(POLYC) $< -o $@
+	polyc $< -o $@
