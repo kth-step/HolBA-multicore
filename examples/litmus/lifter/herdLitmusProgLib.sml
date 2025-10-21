@@ -3,7 +3,7 @@ sig
     include Abbrev
     (* Argument: Program section
        Returns: List of BIR programs *)
-    val parse_prog : string -> term list
+    val parse_prog : string -> string -> term list
 end
 
 
@@ -19,9 +19,9 @@ open UtilLib;
 val SOURCE_DIR = valOf (Posix.ProcEnv.getenv ("PWD"))
 
 (* compile and disassemble the program, returns the filename of the .da file *)
-fun compile_and_disassemble prog =
+fun compile_and_disassemble arch prog =
     let
-	val proc = Unix.execute(SOURCE_DIR ^ "/compile_and_da.sh", [])
+	val proc = Unix.execute(SOURCE_DIR ^ "/compile_and_da.sh", [arch])
 	val (inStream, outStream) = Unix.streamsOf proc
     in
 	TextIO.output(outStream, prog) before TextIO.closeOut outStream;
@@ -31,9 +31,9 @@ fun compile_and_disassemble prog =
 (* Replace the nop with Halt *)
 fun patch_halt prog =
   let
-    val prog_l = bir_programSyntax.dest_BirProgram prog
+    val prog_l = bir_programSyntax.dest_BirProgram prog;
     val (blocks,ty) = dest_list prog_l;
-    val obs_ty = (hd o snd o dest_type) ty;
+    val obs_ty = (hd o snd o dest_type o hd o snd o dest_type) ty;
     val (lbl,_,_,_) = bir_programSyntax.dest_bir_block (List.last blocks);
     val new_last_block =  bir_programSyntax.mk_bir_block
               (lbl, bir_programSyntax.bir_mc_tags_NONE, mk_list ([], mk_type ("bir_stmt_basic_t", [obs_ty])),
@@ -44,16 +44,20 @@ fun patch_halt prog =
     bir_programSyntax.mk_BirProgram (mk_list (blocks',ty))
   end;
 
-fun lift_prog prog =
+fun lift_prog arch prog =
     let
 	(* Create a DA file, also put nop at end *)
-	val da_file = compile_and_disassemble (prog ^ "\nnop\n")
+	val da_file = compile_and_disassemble arch (prog ^ "\nnop\n")
 	(* Lift the DA file *)
-	val _ = lift_da_and_store_mc_riscv "litmus_tmp" da_file (Arbnum.fromInt 0, Arbnum.fromInt 1000)
+	val _ = case arch of
+		  "RISCV" => lift_da_and_store_mc_riscv "litmus_tmp" da_file (Arbnum.fromInt 0, Arbnum.fromInt 1000)
+		| "AArch64" => lift_da_and_store_mc "litmus_tmp" da_file (Arbnum.fromInt 0, Arbnum.fromInt 1000)
+		| _ => raise Fail ("Unsupported architecture: " ^ arch)
+	
 	(* Fetch the Program definition *)
 	val bir_litmus_tmp_prog_def = DB.fetch "scratch" "bir_litmus_tmp_prog_def"
     in (* Return the program term *)
-	(patch_halt o rhs o concl) bir_litmus_tmp_prog_def
+	(rhs o concl) bir_litmus_tmp_prog_def
     end
 	
 fun tokens p s = 
@@ -99,20 +103,22 @@ fun fix_atomic_aqrl s =
   then replaceSubstring ("aq.rl", "aqrl") s
   else s
 
-fun typed_prog p = inst [“:'observation_type” |-> Type`:string`] p;
 
-fun parse_prog prog_sec =
-    let
-	fun split c = tokens (eq c)
-	val stmts = transpose (map (split #"|") (tl (split #";" prog_sec))) ""
-	val stmts = map (map fix_atomic_aqrl) stmts
-	val progs = map (String.concatWith "\n") stmts
-	val bir_progs = map (typed_prog o lift_prog) progs
-    in bir_progs end
+fun parse_prog arch prog_sec =
+  let
+	  fun split c = tokens (eq c)
+	  val stmts = transpose (map (split #"|") (tl (split #";" prog_sec))) ""
+	  val stmts = map (map fix_atomic_aqrl) stmts
+	  val progs = map (String.concatWith "\n") stmts
+	  val bir_progs = map (lift_prog arch) progs
+  in 
+	  bir_progs 
+	end
+
 end
 
 (*
-open listSyntax bir_programSyntax;
+
 val prog_sec = 
  "P0          | P1            | P2          | P3             ;"^
  "sw x5,0(x6) | lw x5,0(x6)   | sw x5,0(x6) | lw x5,0(x6)    ;"^
@@ -121,6 +127,5 @@ val prog_sec =
  "            | sw x8,0(x10)  |             | fence.i        ;"^
  "            |               |             | sw x7,0(x8)    ;";
 
-val prog2 = last $ parse_prog example
-
+val prog = last $ herdLitmusProgLib.parse_prog prog_sec "RISCV";
 *)

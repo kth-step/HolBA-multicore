@@ -81,10 +81,3 @@ fun load_litmus (filename: string) =
     end
 end
 end
-
-(*
-open litmusInterfaceLib
-val x = lift_herd_litmus "example.litmus"
-val a = load_litmus "../tests/BASIC_2_THREAD/S.json"
-#inits a
-*) 

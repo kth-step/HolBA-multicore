@@ -87,7 +87,7 @@ end; (* local *)
 fun regs_of_prog prog =
     let
 	val term_EVAL = rhs o concl o EVAL
-	val bvars = strip_set $ term_EVAL “bir_varset_of_program ^prog”
+	val bvars = strip_set $ term_EVAL “bir_vars_of_program_as_setlist ^prog”
 	val regs = filter (is_BType_Imm o snd)$ map dest_BVar bvars
 	fun f (x,y) = (fromHOLstring x, size_of_bir_immtype_t $ dest_BType_Imm y)
     in map f regs end;
@@ -98,7 +98,7 @@ fun parse text =
 	val (arch, name, info_sec, init_sec, prog_sec, final_sec)
 	    = split_to_sections text
 	(* Parse the program section, create one bir_program per processes *)
-	val progs = parse_prog prog_sec
+	val progs = parse_prog arch prog_sec
 	(* Get registers used by each program *)
 	val progs_regs = map regs_of_prog progs
 	(* Parse init section, get initial bir memory and thread environments *)

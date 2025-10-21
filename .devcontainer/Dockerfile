@@ -1,4 +1,4 @@
-FROM debian:latest AS hol
+FROM hakarlsson/hol:t2
 
 ARG Z3_URL="https://github.com/Z3Prover/z3/releases/download/z3-4.8.4/z3-4.8.4.d6df51951f4c-x64-debian-8.11.zip"
 ARG GCC_ARM8_URL="https://developer.arm.com/-/media/Files/downloads/gnu-a/8.2-2018.08/gcc-arm-8.2-2018.08-x86_64-aarch64-elf.tar.xz"
@@ -9,17 +9,6 @@ ENV PATH="$PATH:/opt/hol_t2/bin"
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && apt install -y git build-essential gnupg2 python3 wget unzip
-
-RUN git clone https://github.com/polyml/polyml.git --depth=1 --branch v5.9.2 /polyml \
- && cd /polyml \
- && ./configure --prefix=/usr \
- && make \
- && make install \
- && rm -rf /polyml
-RUN git clone https://github.com/HOL-Theorem-Prover/HOL.git --depth=1 --branch trindemossen-2 /opt/hol_t2 \
- && cd /opt/hol_t2 \
- && poly < tools/smart-configure.sml \
- && ./bin/build
 
 RUN cd /opt/hol_t2/examples/l3-machine-code/common && Holmake
 RUN cd /opt/hol_t2/examples/l3-machine-code/arm8/model && Holmake
@@ -37,6 +26,9 @@ RUN mkdir /opt/embexp-logs \
 RUN mkdir /opt/embexp && cd /opt/embexp \
  && git clone https://github.com/kth-step/EmbExp-ProgPlatform.git \
  && GIT_URL_BOX_HTTPS=https://github.com/kth-step/EmbExp-Box.git
+
+RUN git clone https://github.com/litmus-tests/litmus-tests-armv8a-system.git /opt/litmus-tests-armv8
+RUN git clone https://github.com/litmus-tests/litmus-tests-riscv.git /opt/litmus-tests-riscv
 
 ENV HOLDIR="/opt/hol_t2"
 RUN apt install -y silversearcher-ag

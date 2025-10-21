@@ -430,5 +430,20 @@ SIMP_TAC std_ss [bir_exps_of_program_def,
   IN_BIGUNION, PULL_EXISTS, IN_IMAGE,LIST_TO_SET_THM] >>
 METIS_TAC[]);
 
+Definition flat_setlist_def:
+  flat_setlist l <=>
+  FOLDL (\acc x. x UNION acc) EMPTY l
+End
+
+Definition bir_vars_of_block_as_setlist_def:
+  bir_vars_of_block_as_setlist bl <=>
+  ((bir_vars_of_stmtE bl.bb_last_statement)::(MAP bir_vars_of_stmtB bl.bb_statements))
+End
+
+Definition bir_vars_of_program_as_setlist_def:
+  bir_vars_of_program_as_setlist (BirProgram p) <=>
+  (flat_setlist (FLAT (MAP bir_vars_of_block_as_setlist p)))
+End
+
 
 val _ = export_theory();

@@ -10,10 +10,6 @@ fun lift_test_and_save inputfile outputfile =
      OK)
     handle e => ERROR (exnMessage e);
 
-(* 
-val inputfile = "./tests/BASIC_2_THREAD/LB+fence.rw.rws.litmus";
-val outputfile = "./tests/BASIC_2_THREAD/LB+fence.rw.rws.json";
-*)
 						       
 fun main () =
     let
@@ -26,3 +22,5 @@ fun main () =
 	 of OK      => Unix.exit (Word8.fromInt 0)
 	  | ERROR s => (print s; Unix.exit (Word8.fromInt 1))
     end
+
+val () = PolyML.export ("lifter.o", main);

@@ -1,11 +1,11 @@
 # includes
 # ----------------------------------
-#DEPENDENCIES   = ../../../src/tools/exec
+DEPENDENCIES   = 
 
 
 # configuration
 # ----------------------------------
-HOLHEAP        = ../../../src/tools/lifter
+HOLHEAP        = ../../../src/HolBA-heap
 NEWHOLHEAP     = HolBAExamples_LitmusLifter-heap
 
 HEAPINC_EXTRA  = 

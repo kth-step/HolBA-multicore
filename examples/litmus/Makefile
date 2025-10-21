@@ -1,26 +1,28 @@
-include ../../config.env.sh
 
-export PATH := $(PATH):${HOLBA_HOL_DIR}/bin
-export RISCV_CC := ${HOLBA_GCC_RISCV_PREFIX}gcc
-export ARM_CC := ${HOLBA_GCC_ARM_PREFIX}gcc
-export ARM8_CC := ${HOLBA_GCC_ARM8_PREFIX}gcc
+RISCV_SOURCE=/opt/litmus-tests-riscv/tests/non-mixed-size
+ARMV8_SOURCE=/opt/litmus-tests-armv8/tests/ifetch
 
-SHELL=/bin/bash
+RISCV_LITMUS=$(wildcard ${RISCV_SOURCE}/BASIC_2_THREAD/*.litmus)
+RISCV_JSON=$(patsubst ${RISCV_SOURCE}/%.litmus,riscv/%.json,$(RISCV_LITMUS))
 
-.PHONY: all clean
-all: lift_test run_test
-clean:
-	rm -f lift_test run_test *.o
+ARMV8_LITMUS=$(wildcard ${ARMV8_SOURCE}/BASIC_2_THREAD/*.litmus)
+ARMV8_JSON=$(patsubst ${ARMV8_SOURCE}/%.litmus,armv8/%.json,$(ARMV8_LITMUS))
 
-.PHONY: heap
-heap:
-	Holmake
+LIFTER=./lifter/lifter.out
 
-%.o: %.sml heap
-	hol -q $< <<< "val _ = PolyML.export(\"$*\", main)" >/dev/null
+.PHONY: all lifter
 
-lift_test: lift_test.o 
-	polyc $< -o $@
+all: ${RISCV_JSON} ${ARMV8_JSON}
 
-run_test: run_test.o 
-	polyc $< -o $@
+lifter:
+	${MAKE} -C lifter
+
+${LIFTER}: lifter
+
+riscv/%.json: ${RISCV_SOURCE}/%.litmus ${LIFTER}
+	@mkdir -p $(dir $@)
+	ARCH=RISCV ${LIFTER} $< $@
+
+armv8/%.json: ${ARMV8_SOURCE}/%.litmus ${LIFTER}
+	@mkdir -p $(dir $@)
+	ARCH=AArch64 ${LIFTER} $< $@
