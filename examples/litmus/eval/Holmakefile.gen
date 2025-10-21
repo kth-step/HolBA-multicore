@@ -1,12 +1,12 @@
 # includes
 # ----------------------------------
-DEPENDENCIES   = ../../../src/tools/exec
+# DEPENDENCIES   = ../../../src/tools/exec
 
 
 # configuration
 # ----------------------------------
 HOLHEAP        = ../../../src/HolBA-heap
-NEWHOLHEAP     = HolBAExamples_LitmusExec-heap
+NEWHOLHEAP     = HolBAExamples_LitmusEval-heap
 
 HEAPINC_EXTRA  = 
 
