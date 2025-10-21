@@ -10,7 +10,7 @@ ARMV8_JSON=$(patsubst ${ARMV8_SOURCE}/%.litmus,armv8/%.json,$(ARMV8_LITMUS))
 
 LIFTER=./lifter/lifter.out
 
-.PHONY: all lifter
+.PHONY: all lifter riscv armv8
 
 all: ${RISCV_JSON} ${ARMV8_JSON}
 
@@ -21,8 +21,12 @@ ${LIFTER}: lifter
 
 riscv/%.json: ${RISCV_SOURCE}/%.litmus ${LIFTER}
 	@mkdir -p $(dir $@)
-	ARCH=RISCV ${LIFTER} $< $@
+	${LIFTER} $< $@
+
+riscv: ${RISCV_JSON}
+
+armv8: ${ARMV8_JSON}
 
 armv8/%.json: ${ARMV8_SOURCE}/%.litmus ${LIFTER}
 	@mkdir -p $(dir $@)
-	ARCH=AArch64 ${LIFTER} $< $@
+	${LIFTER} $< $@
