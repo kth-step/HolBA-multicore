@@ -232,7 +232,7 @@ local
    end;
 
 (* val thm = hd step_thms0  *)
-   fun process_arm8_thm vn pc_mem_thms thm = let
+   fun process_arm8_thm is_multicore vn pc_mem_thms thm = let
      val thm0 = bmr_normalise_step_thm next_state_tm vn thm
      val thm1 = instantiate_arm8_thm thm0
      val thm2 = foldl (fn (pre_thm, thm) => PROVE_HYP pre_thm thm) thm1
@@ -246,11 +246,11 @@ local
    end;
 
 in
-  fun arm8_step_hex' vn hex_code = let
+  fun arm8_step_hex' is_multicore vn hex_code = let
     val pc_mem_thms = prepare_mem_contains_thms vn hex_code;
 
     val step_thms0 = arm8_step_hex hex_code
-    val step_thms1 = List.map (process_arm8_thm vn pc_mem_thms) step_thms0;
+    val step_thms1 = List.map (process_arm8_thm is_multicore vn pc_mem_thms) step_thms0;
   in
     step_thms1
   end
@@ -654,8 +654,8 @@ val arm8_bmr_rec : bmr_rec = {
   bmr_label_thm            = arm8_bmr_label_thm,
   bmr_dest_mem             = arm8_dest_mem,
   bmr_extra_ss             = arm8_extra_ss,
-  bmr_step_hex             = arm8_step_hex',
-  bmr_mc_step_hex          = NONE,
+  bmr_step_hex             = arm8_step_hex' false,
+  bmr_mc_step_hex          = SOME (arm8_step_hex' true),
   bmr_mc_lift_instr        = SOME arm8_mc_lift_instr,
   bmr_mk_data_mm           = arm8_mk_data_mm,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
