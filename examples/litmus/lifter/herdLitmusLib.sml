@@ -89,7 +89,12 @@ fun regs_of_prog prog =
 	val term_EVAL = rhs o concl o EVAL
 	val bvars = strip_set $ term_EVAL “bir_vars_of_program_as_setlist ^prog”
 	val regs = filter (is_BType_Imm o snd)$ map dest_BVar bvars
-	fun f (x,y) = (fromHOLstring x, size_of_bir_immtype_t $ dest_BType_Imm y)
+	fun f (x,y) = 
+	  let 
+			val reg_name = fromHOLstring x
+			val reg_size = size_of_bir_immtype_t $ dest_BType_Imm y
+			(*val _ = print ((fromHOLstring x) ^ ": " ^ Int.toString reg_size ^ "\n")*)
+			in (reg_name, reg_size) end
     in map f regs end;
 
 fun parse text =
@@ -102,7 +107,7 @@ fun parse text =
 	(* Get registers used by each program *)
 	val progs_regs = map regs_of_prog progs
 	(* Parse init section, get initial bir memory and thread environments *)
-	val inits = parse_init init_sec progs_regs
+	val inits = parse_init arch init_sec progs_regs
 	(* Parse the constraint, returns a predicate for a set of bir states *)
 	val final = parse_final final_sec
     in

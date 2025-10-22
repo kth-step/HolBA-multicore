@@ -44,22 +44,28 @@ fun patch_halt prog =
     bir_programSyntax.mk_BirProgram (mk_list (blocks',ty))
   end;
 
+local
+	val i = ref 1
+in
 fun lift_prog arch prog =
     let
 	(* Create a DA file, also put nop at end *)
 	val da_file = compile_and_disassemble arch (prog ^ "\nnop\n")
 	(* Lift the DA file *)
+	val prog_name = "litmus" ^ Int.toString (!i)
+	val _ = i := !i + 1
 	val _ = case arch of
-		  "RISCV" => lift_da_and_store_mc_riscv "litmus_tmp" da_file (Arbnum.fromInt 0, Arbnum.fromInt 1000)
-		| "AArch64" => lift_da_and_store_mc "litmus_tmp" da_file (Arbnum.fromInt 0, Arbnum.fromInt 1000)
+		  "RISCV" => lift_da_and_store_mc_riscv prog_name da_file (Arbnum.fromInt 0, Arbnum.fromInt 1000)
+		| "AArch64" => lift_da_and_store_mc prog_name da_file (Arbnum.fromInt 0, Arbnum.fromInt 1000)
 		| _ => raise Fail ("Unsupported architecture: " ^ arch)
 	
 	(* Fetch the Program definition *)
-	val bir_litmus_tmp_prog_def = DB.fetch "scratch" "bir_litmus_tmp_prog_def"
+	val bir_litmus_tmp_prog_def = DB.fetch "-" ("bir_" ^ prog_name ^ "_prog_def")
     in (* Return the program term *)
 	(rhs o concl) bir_litmus_tmp_prog_def
     end
-	
+end	
+
 fun tokens p s = 
     let
 	val length = String.size s
@@ -106,11 +112,13 @@ fun fix_atomic_aqrl s =
 
 fun parse_prog arch prog_sec =
   let
+		val _ = print ("Lifting programs... \n")
 	  fun split c = tokens (eq c)
 	  val stmts = transpose (map (split #"|") (tl (split #";" prog_sec))) ""
 	  val stmts = map (map fix_atomic_aqrl) stmts
 	  val progs = map (String.concatWith "\n") stmts
 	  val bir_progs = map (lift_prog arch) progs
+		val _ = print ("Done!\n")
   in 
 	  bir_progs 
 	end

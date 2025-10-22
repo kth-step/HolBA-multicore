@@ -3,7 +3,7 @@ sig
     include Abbrev
     (* Arguments: Init section, registers used by each program
        Returns: BIR environments for memory and threads *)
-    val parse_init : string -> (string * int) list list -> term list
+    val parse_init : string -> string -> (string * int) list list -> term list
 end
 
 
@@ -31,10 +31,26 @@ fun tokenize init_sec =
 	val assigns = String.tokens f init_sec
     in map (trim Char.isSpace) assigns end
 
+local
+	fun aarch64 reg =
+		if String.isPrefix "W" reg orelse String.isPrefix "X" reg then
+			"R" ^ String.extract (reg, 1, NONE)
+		else
+			reg
+	fun riscv reg = reg;
+in
+
+fun normalize arch (r, sz) =
+	  case arch of
+	    "AArch64" => (aarch64 r, sz)
+	  | "RISCV" => (riscv r, sz)
+	  | _ => raise Fail ("Unsupported architecture: " ^ arch)
+end
+
 (* Split initial assignments of memory and thread *)
-fun partition assigns =
+fun partition arch assigns =
     let
-	fun mk_reg (t,r,v) = (valOf $ Int.fromString t,(r,v))
+	fun mk_reg (t,r,v) = (valOf $ Int.fromString t,normalize arch (r,v))
 	fun loop [] = ([], [])
 	  | loop (x::xs) =
 	    let val (mem, thds) = loop xs
@@ -47,6 +63,8 @@ fun partition assigns =
 		  | NONE => raise Fail "Expected assignment")
 	    end
     in loop assigns end
+
+(* Pad missing registers with default value 0 *)
 
 fun padd_regs regs prog_regs =
     let
@@ -79,26 +97,32 @@ fun mk_mem_env mem =
 fun mk_thd_env (regs, prog_regs) =
     let
 	fun f r v = 
-	    let 
+	  let 
 		val sz = snd $ valOf $ List.find (fn x => fst x = r) prog_regs
-	    in 
-		gen_mk_Imm $ word_of_string v sz
-	    end
+	  in 
+		gen_mk_Imm $ word_of_string v 64
+	  end
 	fun str2term (r,v) = (fromMLstring r, mk_some (mk_BVal_Imm(f r v)))
 	val list_mk_update = foldl (fn(r,e) => mk_comb(mk_update r, e))
 	val empty = “(K NONE) : string -> bir_val_t option”
 	val regs_hol = map str2term regs
-	val env = list_mk_update empty regs_hol
-    in env end
+	in list_mk_update empty regs_hol end
 	
-fun parse_init init_sec progs_regs =
+fun parse_init arch init_sec progs_regs =
     let
+	val _ = print ("Parsing init section... \n")
 	val assigns = tokenize init_sec
-	val (mem, regs) = partition assigns
+	val _ = print ("tokenizing...\n")
+	val (mem, regs) = partition arch assigns
+	val _ = print ("partitioning...\n")
 	val progs_regs_names = map (map fst) progs_regs
 	val grouped_regs = group_regs (padd_regs regs progs_regs_names)
-	val mem_env = mk_mem_env mem
+	val _ = print ("grouping registers...\n")
 	val thd_envs = map mk_thd_env (zip grouped_regs progs_regs)
+	val _ = print ("making thread environments...\n")
+	val mem_env = mk_mem_env mem
+	val _ = print ("making initial memory\n")
+	val _ = print ("Done!\n")
     in
 	thd_envs
     end
