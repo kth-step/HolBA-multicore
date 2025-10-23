@@ -35,17 +35,20 @@ Definition MAXL_def:
 End
 
 Definition eval_clstep_read:
-  eval_clstep_read s M t var a_e xcl acq rel =
+  eval_clstep_read s M t var a_e cast_opt xcl acq rel =
   let
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
     l = THE l_opt;
     v_addr = bir_eval_view_exp a_e s.bst_viewenv;
     v_opt = mem_read M l t;
-    v = THE v_opt;
     v_pre = MAXL [v_addr; s.bst_v_rNew; ifView (acq ∧ rel) s.bst_v_Rel;
                   ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
     is_latest = EVERY (λt'. ~mem_is_loc M t' l) [SUC t.. (MAX v_pre (s.bst_coh l))];
+    v_opt' = (case cast_opt of
+          NONE => v_opt
+        | SOME (ct,ty) => bir_eval_cast ct v_opt ty);
+    v = THE v_opt';
     v_post = MAX v_pre (mem_read_view (s.bst_fwdb l) t);
     new_environ_opt = update_environ s.bst_environ var v;
     new_environ = THE new_environ_opt;
@@ -60,7 +63,7 @@ Definition eval_clstep_read:
                    bst_xclb    := if xcl then SOME <| xclb_time := t; xclb_view := v_post |> else s.bst_xclb;
                    bst_pc      updated_by bir_pc_next |>
   in
-    if is_running ∧ IS_SOME l_opt ∧ IS_SOME v_opt ∧ IS_SOME new_environ_opt ∧ is_latest
+    if is_running ∧ IS_SOME l_opt ∧ IS_SOME v_opt' ∧ IS_SOME new_environ_opt ∧ is_latest
     then [s']
     else []
 End
@@ -169,7 +172,7 @@ Definition eval_clstep_def:
   (case bir_get_current_statement p s.bst_pc of
   | NONE => []
   | SOME (BStmtB (BMCStmt_Load var a_e cast_opt xcl acq rel)) =>
-      LIST_BIND [0..LENGTH M] (λt. eval_clstep_read s M t var a_e xcl acq rel)
+      LIST_BIND [0..LENGTH M] (λt. eval_clstep_read s M t var a_e cast_opt xcl acq rel)
   | SOME (BStmtB (BMCStmt_Store var_succ a_e v_e xcl acq rel)) =>
       eval_clstep_xclfail s var_succ xcl ++
       LIST_BIND s.bst_prom (λt. eval_clstep_fulfil cid s M t var_succ a_e v_e xcl acq rel)
@@ -215,7 +218,7 @@ Definition eval_cstep_seq_def:
   (case bir_get_current_statement p s.bst_pc of
   | NONE => []
   | SOME (BStmtB (BMCStmt_Load var a_e cast_opt xcl acq rel)) =>
-      MAP (λs'. (s',[])) (LIST_BIND [0..LENGTH M] (λt. eval_clstep_read s M t var a_e xcl acq rel))
+      MAP (λs'. (s',[])) (LIST_BIND [0..LENGTH M] (λt. eval_clstep_read s M t var a_e cast_opt xcl acq rel))
   | SOME (BStmtB (BMCStmt_Store var_succ a_e v_e xcl acq rel)) =>
       MAP (λs'. (s',[])) (eval_clstep_xclfail s var_succ xcl) ++
       MAP (λs'. (s',[])) (LIST_BIND s.bst_prom (λt. eval_clstep_fulfil cid s M t var_succ a_e v_e xcl acq rel)) ++
@@ -281,16 +284,19 @@ Definition eval_pstep_def:
 End
 
 Definition is_halted_def:
-  is_halted (BST_Halted _) = T
+  is_halted (BST_Running) = F
   ∧
-  is_halted _ = F
+  is_halted _ = T
 End 
         
 
 Definition eval_terminates_def:
-  (eval_terminates 0 M (cid, p, s) = (is_halted s.bst_status))
+  (eval_terminates 0 M (cid, p, s) = ((is_halted s.bst_status) ∧ s.bst_prom = []))
   ∧
-  (eval_terminates (SUC f) M (cid, p, s) = ((is_halted s.bst_status) ∨ (EXISTS (λs'. eval_terminates f M (cid, p, s')) (eval_clstep cid p M s))))
+  (eval_terminates (SUC f) M (cid, p, s) = 
+  if is_halted s.bst_status ∧ s.bst_prom = []
+  then T
+  else (EXISTS (λs'. eval_terminates f M (cid, p, s')) (eval_clstep cid p M s)))
 End
 
 Definition eval_pstep_rep_def:
@@ -301,5 +307,31 @@ Definition eval_pstep_rep_def:
    (if EVERY (eval_terminates f M) cores then [(cores,M)] else []) ++
    LIST_BIND (eval_pstep f (cores, M)) (eval_pstep_rep r f))
 End
-        
+
+Definition eval_promise_phase_def:
+  eval_promise_phase f (cores, M) = eval_pstep_rep f f (cores, M)
+End
+
+Definition cross_list_def:
+  cross_list [] = [[]]
+  ∧
+  cross_list (xs::xss) =
+  LIST_BIND (cross_list xss) (λys. MAP (λx. x::ys) xs)
+End
+
+Definition eval_local_step_def:
+  (eval_local_step 0 (cid, p, s) M =
+  if is_halted s.bst_status ∧ s.bst_prom = [] then [s] else [])
+  ∧ 
+  (eval_local_step (SUC f) (cid, p, s) M =
+  if is_halted s.bst_status ∧ s.bst_prom = [] 
+  then [s]
+  else LIST_BIND (eval_clstep cid p M s) (λs'. eval_local_step f (cid, p, s') M))
+End
+
+Definition eval_local_phase_def:
+  eval_local_phase f (cores, M) =
+  MAP (λcores. (cores,M))(cross_list (MAP (λcore. eval_local_step f core M) cores))
+End
+
 val _ = export_theory();

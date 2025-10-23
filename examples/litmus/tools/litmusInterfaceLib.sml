@@ -88,6 +88,6 @@ end
 open litmusInterfaceLib
 val file = "/opt/litmus-tests-riscv/tests/non-mixed-size/BASIC_2_THREAD/S.litmus"
 val x = lift_herd_litmus "../riscv/BASIC_2_THREAD/S.litmus"
-val a = load_litmus "../riscv/BASIC_2_THREAD/S.json"
+val a = load_litmus "../tests/riscv/BASIC_2_THREAD/S.json"
 #inits a
 *) 

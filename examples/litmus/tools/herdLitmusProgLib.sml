@@ -114,8 +114,8 @@ Definition bir2bmc_statements_def:
    bir2bmc_statements mc_tags [] = [] ∧ 
    bir2bmc_statements mc_tags (h::l) = 
    case h of
-   | BStmt_Assert expr => (BMCStmt_Assert expr)::(bir2bmc_statements mc_tags l)
-   | BStmt_Assume expr => (BMCStmt_Assume expr)::(bir2bmc_statements mc_tags l)
+   | BStmt_Assert expr => (bir2bmc_statements mc_tags l)
+   | BStmt_Assume expr => (bir2bmc_statements mc_tags l)
    | BStmt_Fence pre post => (BMCStmt_Fence pre post)::(bir2bmc_statements mc_tags l)
    | BStmt_Observe _ _ _ _ => bir2bmc_statements mc_tags l
    | BStmt_Assign var expr => 

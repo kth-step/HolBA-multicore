@@ -30,10 +30,10 @@ tests/armv8/%.json: ${ARMV8_SOURCE}/%.litmus ${LIFTER}
 
 results/%.res: tests/%.json
 	@mkdir -p $(dir $@)
-	${TESTER}
+	${TESTER} $< > $@
 
-riscv: ${RISCV_JSON}
+riscv: ${RISCV_RES}
 
-armv8: ${ARMV8_JSON}
+armv8: ${ARMV8_RES}
 
 .PHONY: all riscv armv8 tools
