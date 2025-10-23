@@ -13,9 +13,13 @@ RUN apt update && apt install -y git build-essential gnupg2 python3 wget unzip
 RUN cd /opt/hol_t2/examples/l3-machine-code/common && Holmake
 RUN cd /opt/hol_t2/examples/l3-machine-code/arm8/model && Holmake
 RUN cd /opt/hol_t2/examples/l3-machine-code/arm8/step && Holmake
+RUN cd /opt/hol_t2/examples/l3-machine-code/arm8/prog && Holmake
 RUN cd /opt/hol_t2/examples/l3-machine-code/m0/model && Holmake
 RUN cd /opt/hol_t2/examples/l3-machine-code/m0/step && Holmake
-
+RUN cd /opt/hol_t2/examples/l3-machine-code/m0/prog && Holmake
+RUN cd /opt/hol_t2/examples/l3-machine-code/riscv/model && Holmake
+RUN cd /opt/hol_t2/examples/l3-machine-code/riscv/step && Holmake
+RUN cd /opt/hol_t2/examples/l3-machine-code/riscv/prog && Holmake
 
 RUN wget $Z3_URL -O /tmp/z3.zip && unzip /tmp/z3.zip -d /opt && rm /tmp/z3.zip
 RUN mkdir /opt/gcc-arm-none-eabi-7-2018-q2u && wget -qO- $GCC_ARM_URL | tar -xj -C "/opt/gcc-arm-none-eabi-7-2018-q2u" --strip-components=1
