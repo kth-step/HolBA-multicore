@@ -111,6 +111,7 @@ val bir_get_stmt_def = Define‘
 *)
 
 Definition bir2bmc_statements_def:
+   bir2bmc_statements mc_tags [] = [] ∧ 
    bir2bmc_statements mc_tags (h::l) = 
    case h of
    | BStmt_Assert expr => (BMCStmt_Assert expr)::(bir2bmc_statements mc_tags l)
@@ -168,6 +169,28 @@ fun compile_and_disassemble arch prog =
 	TextIO.inputAll(inStream) before TextIO.closeIn inStream
     end
 
+fun remove_mc_tags_arb prog =
+    let 
+	    val (blocks, ty) = dest_list (dest_BirProgram prog)
+	    fun f tm =
+	    let
+  		  val (ty, l) = TypeBase.dest_record tm
+  		  val lbl = Lib.assoc "bb_label" l
+  		  val mc_tags_opt = 
+          (case (Lib.assoc1 "bb_mc_tags" l) of
+           SOME (_, mc_tags) => mc_tags
+          | NONE => bir_mc_tags_NONE);
+  		  val stmts = Lib.assoc "bb_statements" l
+  		  val last_stmt = Lib.assoc "bb_last_statement" l
+		    val l' = [("bb_label", lbl),
+			    ("bb_mc_tags", mc_tags_opt),
+			    ("bb_statements", stmts),
+			    ("bb_last_statement", last_stmt)]
+	    in TypeBase.mk_record (ty, l') end
+    in
+	  mk_BirProgram (mk_list (map f blocks, ty))
+    end
+
 local 
 	val i = ref 0
 in
@@ -175,20 +198,20 @@ fun lift_prog arch prog =
     let
 	(* Create a DA file, also put nop at end *)
 	val da_file = compile_and_disassemble arch (prog ^ "\nnop\n")
-	val name = "litmus_" ^ Int.toString (!i)
+	val name = "litmus" ^ Int.toString (!i)
 	val _ = i := !i + 1
 	(* Lift the DA file *)
-	val _ = 
+	val (_, bir_litmus_prog_def, _) = 
 	case arch of
 	    "RISCV" => lift_da_and_store_mc_riscv name da_file (Arbnum.fromInt 0, Arbnum.fromInt 1000)
 	  | "AArch64" => lift_da_and_store_mc name da_file (Arbnum.fromInt 0, Arbnum.fromInt 1000)
-	  | _ => raise Fail ("Unsupported architecture: " ^ arch)
+	  | _ => raise Fail ("Unsupported architecture: " ^ arch);
 	(* Fetch the Program definition *)
-	val bir_litmus_prog_def = DB.fetch "-" ("bir_" ^ name ^ "_prog_def")
-	val bir_litmus_prog = (rhs o concl) bir_litmus_prog_def
-	val bmc_litmus_prog = (rhs o concl) (EVAL ``bir2bmc_prog ^bir_litmus_prog``)
+	val bir_litmus_prog = (rhs o concl) bir_litmus_prog_def;
+  val bir_litmus_prog = remove_mc_tags_arb bir_litmus_prog
+	val bmc_litmus_prog = (rhs o concl) (EVAL ``bir2bmc_prog ^bir_litmus_prog``);
     in (* Return the program term *)
-	bmc_litmus_prog
+	  bmc_litmus_prog
     end
 end
 	
@@ -201,33 +224,10 @@ fun parse_prog arch prog_list =
 end
 
 (*
-val bir_vars_of_label_exp_def = Define `
-  (bir_vars_of_label_exp (BLE_Label l) = {}) /\
-  (bir_vars_of_label_exp (BLE_Exp e) = bir_vars_of_exp e)`;
-
-val bir_vars_of_stmtE_def = Define `
-  (bir_vars_of_stmtE (BStmt_Jmp l) = bir_vars_of_label_exp l) /\
-  (bir_vars_of_stmtE (BStmt_CJmp e l1 l2) =
-    (bir_vars_of_exp e UNION (bir_vars_of_label_exp l1) UNION (bir_vars_of_label_exp l2))) /\
-  (bir_vars_of_stmtE (BStmt_Halt ex) = bir_vars_of_exp ex)`;
-
-val bir_vars_of_stmt_def = Define `
-  (bir_vars_of_stmt (BStmtE s) = bir_vars_of_stmtE s) /\
-  (bir_vars_of_stmt (BStmtB s) = bir_vars_of_stmtB s)`;
-
-val bir_vars_of_block_def = Define `bir_vars_of_block bl <=>
-  ((BIGUNION (IMAGE bir_vars_of_stmtB (LIST2SET bl.bb_statements))) UNION
-   (bir_vars_of_stmtE bl.bb_last_statement))`;
-
-val bmc_vars_of_block_def = Define `bmc_vars_of_block bl <=>
-  ((BIGUNION (IMAGE bmc_vars_of_stmtB (LIST2SET bl.bb_statements))) UNION
-   (bir_vars_of_stmtE bl.bb_last_statement))`;
-
-val bir_vars_of_program_def = Define `bir_vars_of_program (BirProgram p) <=>
-  (BIGUNION (IMAGE bir_vars_of_block (LIST2SET p)))`;
 open herdLitmusProgLib
 open listSyntax bir_programSyntax;
-val prog_list = ["amoadd.w.aqrl x5,x5,(x4)"]
-val prog1 = last $ parse_prog prog_list
-val x = EVAL ``bir_vars_of_program ^prog1``
+val arch = "RISCV"
+val prog_list = ["amoadd.w.aqrl x5,x5,(x4)\nld x5,(x5)"]
+val prog = last $ parse_prog arch prog_list
+val x = EVAL ``bir_vars_of_program ^prog``
 *)

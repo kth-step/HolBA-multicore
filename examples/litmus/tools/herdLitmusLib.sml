@@ -127,7 +127,7 @@ fun parse text =
 	(* Parse init section, get initial bir memory and thread environments *)
 	val regs = parse_regs arch regs progs_regs
 	(* Parse the constraint, returns a predicate for a set of bir states *)
-	val final = parse_final final decl
+	val final = parse_final arch final decl
 	val mem = parse_mem mem decl
     in
 	{arch=arch,
@@ -149,6 +149,7 @@ val json = Json.parse jsontext
 val (arch, name, regs, decl, mem, progs, final) = get_json_data json
 (* Parse the program section, create one bir_program per processes *)
 val prog = hd (parse_prog arch progs)
-
+open pred_setLib listSyntax listLib
+val term_EVAL = rhs o concl o EVAL
 val bvars = strip_set $ term_EVAL “bmc_varset_of_program ^prog”
 *)

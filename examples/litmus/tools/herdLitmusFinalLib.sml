@@ -3,7 +3,7 @@ sig
     include Abbrev
     (* Argument: Final/Constraint section
        Returns: Predicate on bir_environments *)
-    val parse_final : string -> (string list) -> term
+    val parse_final : string -> string -> (string list) -> term
 end
 
 structure herdLitmusFinalLib : herdLitmusFinalLib =
@@ -15,6 +15,8 @@ open stringSyntax numSyntax wordsSyntax listSyntax;
 open bir_immSyntax bir_envSyntax bir_valuesSyntax;
 
 open UtilLib herdLitmusValuesLib;
+
+val arch = ref "";
 
 (* The tokenizer and parser is based on the functional parser
    from 'ML for the Working Programmer, Chapter 9'. *)
@@ -128,9 +130,8 @@ fun reader ph a =
      of (x, []) => x
       | (_, l) => raise SyntaxErr "Extra characters in phrase"
 
-fun norm_reg r =
-    let 
-	val translate = [("x1","ra"), ("x2","sp"), ("x3","gp"), ("x4","tp"), ("x5","t0"), 
+local
+			val riscv = [("x1","ra"), ("x2","sp"), ("x3","gp"), ("x4","tp"), ("x5","t0"), 
 			 ("x6","t1"), ("x7","t2"), ("x8","s0"), ("x7","fp"), ("x9","s1"), 
 			 ("x10","a0"), ("x11","a1"), ("x12","a2"), ("x13","a3"), 
 			 ("x14","a4"), ("x15","a5"), ("x16","a6"), ("x17","a7"), 
@@ -138,10 +139,23 @@ fun norm_reg r =
 			 ("x22","s6"), ("x23","s7"), ("x24","s8"), ("x25","s9"), 
 			 ("x26","s10"), ("x27","s11"), ("x28","t3"), ("x29","t4"), 
 			 ("x30","t5"), ("x31","t6")]
-    in case (List.find (fn (_,y) => y = r) translate)
-	of SOME (x,_) => x
-	 | NONE => r
-    end
+	fun riscv_trans r =
+	    case List.find (fn (_, reg) => reg = r) riscv of
+				SOME (r, name) => r
+	      | NONE => r
+	fun aarch64_trans r =
+	if String.isPrefix "X" r orelse String.isPrefix "W" r then
+		"R" ^ String.extract (r, 1, NONE)
+	else
+	    r
+		
+in
+fun norm_reg r =
+	case !arch of
+	    "RISCV" => riscv_trans r
+	  | "AArch64" => aarch64_trans r
+		| _ => raise Fail ("Unsupported architecture: " ^ !arch)
+end
 
 (* FORALL || EXISTS *)
 fun quant xs = ("!" $-- expr >> FORALL || 
@@ -226,8 +240,10 @@ fun find_var_size decl =
 			      
 
 (* Parse the final expression *)
-fun parse_final final_sec decl =
-    let val t = reader quant final_sec
+fun parse_final a final_sec decl =
+    let 
+				val _ = arch := a
+				val t = reader quant final_sec
         val var_size = find_var_size decl
     in (rhs o concl o EVAL) (parse_tree_to_term t var_size) end
 end
