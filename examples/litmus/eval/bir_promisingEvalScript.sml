@@ -21,7 +21,8 @@ Definition bir_eval_view_exp_def:
 End
 
 Definition update_environ_def:
-  update_environ env var val = bir_env_update (bir_var_name var) val (bir_var_type var) env
+  update_environ env var (BVal_Imm v) = 
+     bir_env_update (bir_var_name var) (BVal_Imm (n2bs (b2n v) Bit64)) (bir_var_type var) env
 End 
 
 Definition ifView_def:
@@ -45,10 +46,7 @@ Definition eval_clstep_read:
     v_pre = MAXL [v_addr; s.bst_v_rNew; ifView (acq ∧ rel) s.bst_v_Rel;
                   ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
     is_latest = EVERY (λt'. ~mem_is_loc M t' l) [SUC t.. (MAX v_pre (s.bst_coh l))];
-    v_opt' = (case cast_opt of
-          NONE => v_opt
-        | SOME (ct,ty) => bir_eval_cast ct v_opt ty);
-    v = THE v_opt';
+    v = THE v_opt;
     v_post = MAX v_pre (mem_read_view (s.bst_fwdb l) t);
     new_environ_opt = update_environ s.bst_environ var v;
     new_environ = THE new_environ_opt;
@@ -63,7 +61,7 @@ Definition eval_clstep_read:
                    bst_xclb    := if xcl then SOME <| xclb_time := t; xclb_view := v_post |> else s.bst_xclb;
                    bst_pc      updated_by bir_pc_next |>
   in
-    if is_running ∧ IS_SOME l_opt ∧ IS_SOME v_opt' ∧ IS_SOME new_environ_opt ∧ is_latest
+    if is_running ∧ IS_SOME l_opt ∧ IS_SOME v_opt ∧ IS_SOME new_environ_opt ∧ is_latest
     then [s']
     else []
 End

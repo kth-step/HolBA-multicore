@@ -35,4 +35,5 @@ RUN git clone https://github.com/herd/herdtools7.git /opt/herdtools7
 RUN git clone https://github.com/litmus-tests/litmus-tests-riscv.git /opt/litmus-tests-riscv
 
 ENV HOLDIR="/opt/hol_t2"
-RUN apt install -y silversearcher-ag
+RUN apt install -y silversearcher-ag parallel
+ENV LC_ALL=C

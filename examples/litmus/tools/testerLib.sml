@@ -45,16 +45,20 @@ fun promiseRun fuelTerm coresAndInitMemory =
     in newCoresAndMemory end;
 
 fun localRun fuelTerm coresAndMemory = 
-    term_EVAL “MAP (eval_local_phase ^fuelTerm) ^coresAndMemory”
+    term_EVAL “LIST_BIND (^coresAndMemory) (eval_local_phase ^fuelTerm)”
+
+
+Definition get_regs_and_mem:
+    (get_regs_and_mem (ss,M) =
+    let
+        default = (K (SOME (BVal_Imm (Imm32 0w))));
+        mem = FOLDL (λt m. t (|m.loc |-> SOME m.val|)) default M;
+        regs = MAP (λs. case s.bst_environ of BEnv f => f) ss
+    in (mem, regs))
+End
 
 fun getRegistersAndMemory coresAndMemory =
-    let
-	val (cores, memory) = dest_pair coresAndMemory
-	val regs = “MAP (\t. case t of (ExecCore _ _ s _) => case s.bst_environ of BEnv f => f) ^cores”
-	val default_mem = “SOME (BVal_Imm (Imm32 0w))”;
-	val memory_filtered = “FILTER (\m. m.succ) ^memory”;
-	val memory' = “FOLDL (\t m. t (|m.loc |-> SOME m.val|)) (K ^default_mem) ^memory_filtered”;
-    in term_EVAL $ mk_pair (memory', regs) end;
+    term_EVAL “MAP get_regs_and_mem ^coresAndMemory”
 
 fun to_exec_mem_msg_t mem =
     “MAP (\m. <| val:=m.val; cid:=1024; loc:=m.loc |>)^mem”
@@ -82,12 +86,17 @@ fun run_litmus fuel (litmus:litmus) =
        val promisedState = promiseRun fuelTerm initialState;
        (* Make local run *)
        val finalState = localRun fuelTerm promisedState;
+       (* Get registers and memory *)
+       val regsMemory = getRegistersAndMemory finalState;
+       (* Get final check *)
+       val finalCheck = #final litmus;
+       (* Result *)
+       val result = term_EVAL “^finalCheck ^regsMemory”;
     in 
-	    finalState
+	    fromHOLstring $ term_EVAL “if ^result then "Ok" else "No"”
     end;
 
 
-(*
 fun main () =
     let
 	val arguments = CommandLine.arguments ();
@@ -99,7 +108,6 @@ fun main () =
     end;
 
 val () = PolyML.export ("tester.o", main);
-*)
 (* 
 val filename = "../tests/riscv/BASIC_2_THREAD/LB.json";
 val litmus = get_litmus filename

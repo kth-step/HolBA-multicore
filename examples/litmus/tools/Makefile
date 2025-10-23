@@ -6,7 +6,7 @@ SHELL=/bin/bash
 
 HEAP := HolBAExamples_LitmusTools-heap
 
-.PHONY: all clean ${HEAP} lifter.o
+.PHONY: all clean ${HEAP} lifter.o tester.o
 all: lifter.out tester.out
 clean:
 	rm -f lift_test.out *.o
