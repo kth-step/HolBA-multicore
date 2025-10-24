@@ -35,5 +35,11 @@ RUN git clone https://github.com/herd/herdtools7.git /opt/herdtools7
 RUN git clone https://github.com/litmus-tests/litmus-tests-riscv.git /opt/litmus-tests-riscv
 
 ENV HOLDIR="/opt/hol_t2"
-RUN apt install -y silversearcher-ag parallel
 ENV LC_ALL=C
+RUN apt install -y silversearcher-ag parallel opam libgmp-dev pkg-config
+
+RUN opam init --disable-sandboxing -y --auto-setup \
+ && eval $(opam env) \
+ && opam install herdtools7 -y
+
+RUN echo 'eval $(opam env)' >> ~/.bashrc
