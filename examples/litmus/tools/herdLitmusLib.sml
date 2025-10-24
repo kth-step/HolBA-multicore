@@ -26,42 +26,6 @@ open herdLitmusProgLib herdLitmusInitLib herdLitmusFinalLib;
 open UtilLib;
 open JsonUtil;
 
-Definition bmc_varset_of_basic_stmt_def:
-   bmc_varset_of_basic_stmt (BMCStmt_Assign var exp) = { var } UNION bir_varset_of_exp exp
-/\ bmc_varset_of_basic_stmt (BMCStmt_Assert exp) = bir_varset_of_exp exp
-/\ bmc_varset_of_basic_stmt (BMCStmt_Assume exp) = bir_varset_of_exp exp
-/\ bmc_varset_of_basic_stmt (BMCStmt_Load var exp _ _ _ _) =  { var } UNION bir_varset_of_exp exp
-/\ bmc_varset_of_basic_stmt (BMCStmt_Store var exp exp' _ _ _) =  { var } UNION bir_varset_of_exp exp UNION bir_varset_of_exp exp'
-/\ bmc_varset_of_basic_stmt (BMCStmt_Amo var exp exp' _ _) =  { var } UNION bir_varset_of_exp exp UNION bir_varset_of_exp exp'
-/\ bmc_varset_of_basic_stmt _ = {}
-End
-
-Definition bmc_varset_of_label_exp_def:
-   bmc_varset_of_label_exp (BLE_Label _) = {}
-/\ bmc_varset_of_label_exp (BLE_Exp exp) = bir_varset_of_exp exp
-End
-
-Definition bmc_varset_of_end_stmt_def:
-   bmc_varset_of_end_stmt (BStmt_Jmp lexp) = bir_varset_of_label_exp lexp
-/\ bmc_varset_of_end_stmt (BStmt_CJmp cond exp1 exp2) = bir_varset_of_exp cond UNION bmc_varset_of_label_exp exp1 UNION bmc_varset_of_label_exp exp2
-/\ bmc_varset_of_end_stmt (BStmt_Halt exp) = bir_varset_of_exp exp
-End
-
-Definition bmc_varset_of_stmt_def:
-   bmc_varset_of_stmt (BStmtB bstmt) = bmc_varset_of_basic_stmt bstmt
-/\ bmc_varset_of_stmt (BStmtE estmt) = bmc_varset_of_end_stmt estmt
-End
-
-Definition bmc_varset_of_program_def:
-bmc_varset_of_program (BirProgram blocks) =
-	FOLDR (\a b. a UNION b)
-		{}
-		(MAP (\bl. FOLDR (\a b. a UNION b)
-							(bmc_varset_of_end_stmt bl.bb_last_statement)
-							(MAP bmc_varset_of_basic_stmt bl.bb_statements))
-				 blocks)
-End
-
 
 type litmus = {arch:string,
 	       name:string,
