@@ -2,6 +2,8 @@ include ../../../config.env.sh
 
 PATH := $(PATH):${HOLBA_HOL_DIR}/bin
 
+HOL_FILES=$(wildcard *Lib.sml)
+
 SHELL=/bin/bash
 
 HEAP := HolBAExamples_LitmusTools-heap
@@ -11,8 +13,8 @@ all: lifter.out tester.out
 clean:
 	rm -f *.out *.o
 
-${HEAP}: 
+${HEAP}: $(HOL_FILES)
 	Holmake
 
-%.out: %.sml
+%.out: %.sml ${HEAP}
 	hol -q -b ${HEAP} $< >/dev/null

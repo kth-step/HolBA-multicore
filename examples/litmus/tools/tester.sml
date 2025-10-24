@@ -72,6 +72,12 @@ fun get_litmus filename =
     then lift_herd_litmus filename
     else raise LoadLitmusError;
 
+fun final_check check regsMem =
+    fromHOLstring $ term_EVAL 
+    “if ^regsMem = [] then "Error"
+     else if ^check ^regsMem
+     then "Ok" else "No"”;
+
 fun run_litmus fuel (litmus:litmus) =
    let 
        (* Fuel used for promise and non-promise execution *)
@@ -88,12 +94,8 @@ fun run_litmus fuel (litmus:litmus) =
        val finalState = localRun fuelTerm promisedState;
        (* Get registers and memory *)
        val regsMemory = getRegistersAndMemory finalState;
-       (* Get final check *)
-       val finalCheck = #final litmus;
-       (* Result *)
-       val result = term_EVAL “^finalCheck ^regsMemory”;
     in 
-	    fromHOLstring $ term_EVAL “if ^result then "Ok" else "No"”
+        final_check (#final litmus) regsMemory
     end;
 
 
