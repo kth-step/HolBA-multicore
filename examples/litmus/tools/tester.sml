@@ -107,7 +107,11 @@ fun main () =
 	print $ filename ^ "\t" ^ result ^ "\n" 
     end;
 
-val () = PolyML.export ("tester.o", main);
+val () = (
+    PolyML.export ("tester.o", main);
+    Unix.execute ("./polyc.sh", ["tester.o", "-o", "tester.out"]);
+    Unix.exit (Word8.fromInt 0)
+);
 (* 
 val filename = "../tests/riscv/BASIC_2_THREAD/LB.json";
 val litmus = get_litmus filename

@@ -81,6 +81,7 @@ def fix_form(p):
     p = re.sub(r"forall ?", "!", p)
     p = re.sub(r"not ?", "~", p)
     p = re.sub(r"\s*\\/\s*", "|", p)
+    p = re.sub(r"\[(\w+)\]", r"\1", p)
     return re.sub(r"\s*/\\\s*", "&", p)
 
 def process_final(final, filter=None):

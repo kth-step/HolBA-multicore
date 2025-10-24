@@ -23,4 +23,8 @@ fun main () =
 	  | ERROR s => (print s; Unix.exit (Word8.fromInt 1))
     end
 
-val () = PolyML.export ("lifter.o", main);
+val () = (
+    PolyML.export ("lifter.o", main);
+    Unix.execute ("./polyc.sh", ["lifter.o", "-o", "lifter.out"]);
+    Unix.exit (Word8.fromInt 0)
+);

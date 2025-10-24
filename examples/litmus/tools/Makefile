@@ -6,16 +6,13 @@ SHELL=/bin/bash
 
 HEAP := HolBAExamples_LitmusTools-heap
 
-.PHONY: all clean ${HEAP} lifter.o tester.o
+.PHONY: all clean
 all: lifter.out tester.out
 clean:
-	rm -f lift_test.out *.o
+	rm -f *.out *.o
 
-tester.o lifter.o ${HEAP}: 
+${HEAP}: 
 	Holmake
 
-lifter.out: lifter.o 
-	polyc $< -o $@
-
-tester.out: tester.o
-	polyc $< -o $@
+%.out: %.sml
+	hol -q -b ${HEAP} $< >/dev/null
