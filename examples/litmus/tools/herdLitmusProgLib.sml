@@ -51,10 +51,13 @@ Definition is_xcl_read_def:
 End
 
 Definition is_xcl_write_def:
-  (is_xcl_write (h::h'::l) =
-    case h' of
-      BStmt_Assign (BVar "MEM8_W" (BType_Mem Bit64 Bit8))
-                     (BExp_Den (BVar "MEM8_Z" (BType_Mem Bit64 Bit8))) => SOME l
+  (is_xcl_write (h::l) =
+    case LAST (h::l) of
+      BStmt_Assign (BVar "MEM8_R" (BType_Mem Bit64 Bit8))
+                     (BExp_Den (BVar "MEM8_Z" (BType_Mem Bit64 Bit8))) => 
+      (case h of
+        BStmt_Assign (BVar varname (BType_Imm Bit64)) _ => SOME (BVar varname (BType_Imm Bit64))
+      | _ => SOME (BVar "tmp" (BType_Imm Bit64)))
      | _ => NONE
   )  /\
   (is_xcl_write _ = NONE)
@@ -98,8 +101,8 @@ Definition bir2bmc_statements_def:
 		| NONE => [BMCStmt_Load var a_e cast_opt F acq rel])
 	| (NONE, SOME (a_e, v_e)) => 
 		(case (is_xcl_write l) of
-		| SOME l' => [BMCStmt_Store var a_e v_e T acq rel]
-		| NONE => [BMCStmt_Store var a_e v_e F acq rel])
+		| SOME var => [BMCStmt_Store var a_e v_e T acq rel]
+		| NONE => [BMCStmt_Store (BVar "tmp" (BType_Imm Bit64)) a_e v_e F acq rel])
 	| (NONE, NONE) => [BMCStmt_Assign var expr]
 	| _ => []))
 End
