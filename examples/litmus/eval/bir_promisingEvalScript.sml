@@ -192,7 +192,7 @@ Definition eval_clstep_def:
 End
 
 Definition eval_cstep_seq_store_def:
-  eval_cstep_seq_store cid s M t_max var_succ a_e v_e xcl acq rel =
+  eval_cstep_seq_store cid s M var_succ a_e v_e xcl acq rel =
   let
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
@@ -209,15 +209,15 @@ Definition eval_cstep_seq_store_def:
                   ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
                   ifView (xcl ∧ acq ∧ rel) s.bst_v_Rel;
                   ifView xcl (THE s.bst_xclb).xclb_view];
-    view_check = (MAX v_pre (s.bst_coh l) ≤ t_max);
+    v = MAX v_pre (s.bst_coh l);
   in
     if is_running ∧ IS_SOME l_opt ∧ IS_SOME v_opt
-    then MAP (λs'. (s', msg)) (eval_clstep_fulfil cid s' M' t var_succ a_e v_e xcl acq rel)
+    then MAP (λs'. (s', msg, v)) (eval_clstep_fulfil cid s' M' t var_succ a_e v_e xcl acq rel)
     else []
 End
 
 Definition eval_cstep_seq_def:
-  eval_cstep_seq cid p t_max (s,M) =
+  eval_cstep_seq cid p (s,M) =
   (case bir_get_current_statement p s.bst_pc of
   | NONE => []
   | SOME (BStmtB (BMCStmt_Load var a_e cast_opt xcl acq rel)) =>
@@ -225,7 +225,7 @@ Definition eval_cstep_seq_def:
   | SOME (BStmtB (BMCStmt_Store var_succ a_e v_e xcl acq rel)) =>
       MAP (λs'. (s',[])) (eval_clstep_xclfail s var_succ xcl) ++
       MAP (λs'. (s',[])) (LIST_BIND s.bst_prom (λt. eval_clstep_fulfil cid s M t var_succ a_e v_e xcl acq rel)) ++
-      MAP (λ(s',msg). (s', [msg])) (eval_cstep_seq_store cid s M t_max var_succ a_e v_e xcl acq rel)
+      MAP (λ(s', msg, v). (s', [(msg, v)])) (eval_cstep_seq_store cid s M var_succ a_e v_e xcl acq rel)
   | SOME (BStmtB (BMCStmt_Fence K1 K2)) =>
       MAP (λs'. (s',[])) (eval_clstep_fence s K1 K2)
   | SOME (BStmtB (BMCStmt_Assign var e)) =>
@@ -244,18 +244,18 @@ Definition eval_cstep_seq_def:
 End 
 
 Definition eval_certify_def:
-  (eval_certify 0 cid p t_max (s,M) =
+  (eval_certify 0 cid p (s,M) =
    (s.bst_prom = []))
   ∧
-  (eval_certify (SUC f) cid p t_max (s,M) =
-   ((s.bst_prom = []) ∨ EXISTS (λ(s',ml). eval_certify f cid p t_max (s',M ++ ml)) (eval_cstep_seq cid p t_max (s,M))))
+  (eval_certify (SUC f) cid p (s,M) =
+   ((s.bst_prom = []) ∨ EXISTS (λ(s',ml). eval_certify f cid p (s',M ++ (MAP FST ml))) (eval_cstep_seq cid p (s,M))))
 End
 
 Definition eval_pfind_def:
-  eval_pfind 0 cid p t_max (s,M) = []
+  eval_pfind 0 cid p (s,M) = []
   ∧
-  eval_pfind (SUC f) cid p t_max (s,M) =
-  LIST_BIND (eval_cstep_seq cid p t_max (s,M)) (λ(s',ml). ml ++ eval_pfind f cid p t_max (s', M ++ ml))
+  eval_pfind (SUC f) cid p (s,M) =
+  LIST_BIND (eval_cstep_seq cid p (s,M)) (λ(s',ml). ml ++ eval_pfind f cid p (s', M ++ (MAP FST ml)))
 End
 
 Definition UNIQ_def:
@@ -266,9 +266,12 @@ End
 
 Definition eval_pstep'_def:
   eval_pstep' f cid p (s, M) =
-  FILTER (λ(cid, s', M'). eval_certify f cid p (LENGTH M') (s',M'))
+  let
+    msgs = MAP FST (FILTER (λ(msg, v). v ≤ LENGTH M) (eval_pfind f cid p (s,M))) 
+  in
+  FILTER (λ(cid, s', M'). eval_certify f cid p (s',M'))
          (MAP (λmsg. (cid, s with bst_prom updated_by (CONS (LENGTH M + 1)), M ++ [msg]))
-              (UNIQ (eval_pfind f cid p (LENGTH M) (s,M))))
+              (UNIQ msgs))
 End        
 
 Definition eval_update_cores_def:
