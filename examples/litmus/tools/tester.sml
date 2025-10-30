@@ -94,8 +94,9 @@ fun run_litmus fuel (litmus:litmus) =
        val finalState = localRun fuelTerm promisedState;
        (* Get registers and memory *)
        val regsMemory = getRegistersAndMemory finalState;
+       val expected = #expected litmus
     in 
-        final_check (#final litmus) regsMemory
+        (final_check (#final litmus) regsMemory, expected)
     end;
 
 
@@ -104,9 +105,9 @@ fun main () =
 	val arguments = CommandLine.arguments ();
 	val filename  = List.last arguments;
 	val litmus    = get_litmus filename
-	val result    = run_litmus 64 litmus
+	val (result, expected) = run_litmus 64 litmus
     in 
-	print $ filename ^ "\t" ^ result ^ "\n" 
+	print $ filename ^ "\t" ^ result ^ "\t" ^ expected ^ "\n" 
     end;
 
 val () = (

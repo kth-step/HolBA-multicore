@@ -6,6 +6,7 @@ sig
 		   regs: term list,
 		   mem: term,
 		   progs: term list,
+			 expected: string,
 		   final: term}
 
     (* Argument: path to herdtools litmus test
@@ -32,6 +33,7 @@ type litmus = {arch:string,
 	       regs: term list,
 	       mem: term,
 	       progs: term list,
+			   expected: string,
 	       final: term}
 		  
 exception CouldNotParseJsonFile
@@ -57,6 +59,14 @@ fun compile_and_disassemble prog =
 	TextIO.output(outStream, prog) before TextIO.closeOut outStream;
 	TextIO.inputAll(inStream) before TextIO.closeIn inStream
     end
+
+fun run_herd filename =
+		let
+	val proc = Unix.execute(SOURCE_DIR ^ "/herd.sh", [filename])
+	val (inStream, outStream) = Unix.streamsOf proc
+		in
+	TextIO.inputAll(inStream) before TextIO.closeIn inStream
+		end
 		  
 fun get_json_data (Json.OK json) = 
     let
@@ -78,8 +88,10 @@ fun regs_of_prog prog =
 	fun f (x,y) = (fromHOLstring x, size_of_bir_immtype_t $ dest_BType_Imm y)
     in map f regs end;
 
-fun parse text =
+fun parse filename =
     let
+	val text = bir_fileLib.read_from_file filename	
+	val herd_res = run_herd filename
 	val jsontext = parse_litmus text
 	(* Split text into sections *)
 	val json = Json.parse jsontext
@@ -99,6 +111,7 @@ fun parse text =
 	 regs=regs,
 	 mem=mem,
 	 progs=progs,
+	 expected=herd_res,
 	 final=final}
     end
 end (* herdLitmusLib *)

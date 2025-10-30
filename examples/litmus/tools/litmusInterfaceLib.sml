@@ -28,7 +28,7 @@ val ERR = Feedback.mk_HOL_ERR "litmusInterfaceLib"
 
 type litmus = herdLitmusLib.litmus
 
-val lift_herd_litmus = herdLitmusLib.parse o bir_fileLib.read_from_file
+val lift_herd_litmus = herdLitmusLib.parse
 
 fun save_litmus (filename, l:litmus) =
     let
@@ -41,6 +41,7 @@ fun save_litmus (filename, l:litmus) =
 		("regs", ARRAY (map (STRING o term_to_string) (#regs l))),
 		("mem", (STRING o term_to_string) (#mem l)),
 		("progs", ARRAY (map (STRING o term_to_string) (#progs l))),
+		("expected", STRING (#expected l)),
 		("final", (STRING o term_to_string) (#final l))]
 	val _ = Globals.linewidth := tmp
 	val serialised = Json.serialise json
@@ -70,6 +71,7 @@ fun load_litmus (filename: string) =
 	val progs = arrayMap (prog_of_string o asString) (lookup "progs")
 	val mem = (mem_of_string o asString) (lookup "mem")
 		  handle _ => mem_of_string "[]"
+	val expected = asString (lookup "expected")
 	val final = (final_of_string o asString) (lookup "final")
     in
 	{
@@ -78,6 +80,7 @@ fun load_litmus (filename: string) =
 	  regs=regs,
 	  mem=mem,
 	  progs=progs,
+		expected=expected,
 	  final=final
 	} : litmus
     end
