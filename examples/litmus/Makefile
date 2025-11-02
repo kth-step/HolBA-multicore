@@ -12,6 +12,7 @@ LIFTER=./tools/lifter.out
 TESTER=./tools/tester.out
 
 sample: ${SAMPLE_RES}
+sample-json: ${SAMPLE_JSON}
 all: ${ALL_RES}
 
 
