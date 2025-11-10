@@ -1399,6 +1399,12 @@ fun get_patched_step_hex ms_v hex_code is_multicore =
   let
      (* call step lib to generate step theorems, compute mm and label *)
      val (next_thms, mm_tm, label_tm) = mk_inst_lifting_theorems hex_code hex_code_desc is_multicore
+    val next_thms' =
+     if is_multicore
+     then if isSome (#bmr_mc_rewrite mr)
+          then (valOf (#bmr_mc_rewrite mr)) next_thms hex_code
+          else raise (bir_inst_liftingAuxExn (BILED_msg "trying to use multicore rewriting without implementation current bmr_rec"))
+     else next_thms
 
      (* instantiate inst theorem *)
      val inst_lift_thm0 =
@@ -1427,7 +1433,7 @@ fun get_patched_step_hex ms_v hex_code is_multicore =
 
      (* preprocess next-theorems. Merge some, order them, derive conditions,
         assign auxiliary labels, ... *)
-     val sub_block_work_list = preprocess_next_thms label_tm next_thms
+     val sub_block_work_list = preprocess_next_thms label_tm next_thms'
        handle HOL_ERR _ =>
          raise bir_inst_liftingAuxExn (BILED_msg ("preprocessing next theorems failed"));
 

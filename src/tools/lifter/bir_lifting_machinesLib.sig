@@ -157,10 +157,14 @@ sig
          a set of step theorems. *)
       bmr_step_hex           : term -> string -> thm list,
 
-      (* Function evaluationg an instruction given as a hex string and returns
+      (* Function evaluating an instruction given as a hex string and returns
          a set of step theorems, taking care not to simplify away syntactic
          dependencies relevant in a multicore setting. *)
       bmr_mc_step_hex           : (term -> string -> thm list) option,
+      
+      (* Additional rewriting of the initial step theorem to  ensure syntactic dependencies
+       * are not simplified away for the promising semantics *)
+      bmr_mc_rewrite           : (thm list -> string -> thm list) option,
 
       (* To add data blocks, a function that encode a memory address and a hex-code
          as a memory-contains tuple *)
