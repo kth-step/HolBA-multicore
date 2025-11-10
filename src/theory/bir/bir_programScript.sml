@@ -27,8 +27,10 @@ Datatype:
   | BLE_Exp bir_exp_t
 End
 
+(* TODO: More combinations? Encode as set of C,R,W? *)
 Datatype:
   bir_memop_t =
+  | BM_Control
   | BM_Read
   | BM_Write
   | BM_ReadWrite

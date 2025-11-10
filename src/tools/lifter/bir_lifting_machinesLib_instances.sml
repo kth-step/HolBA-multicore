@@ -308,7 +308,7 @@ fun get_barrier_bstmts hex_code =
      then [mk_BStmt_Fence (BM_Read_tm, BM_ReadWrite_tm)]
      else raise ERR "get_barrier_bstmts" ("Barrier instruction "^hex_code^" has unsupported crm bits: "^crm)
     else if (op2 = "110") (* ISB *)
-    then raise ERR "get_barrier_bstmts" ("Instruction synchronization barriers not yet supported (hexcode: "^hex_code^").")
+    then [mk_BStmt_Fence (BM_Control_tm, BM_Read_tm)]
     else raise ERR "get_barrier_bstmts" ("Barrier instruction "^hex_code^" has unsupported op2 bits: "^op2)
   end
 
