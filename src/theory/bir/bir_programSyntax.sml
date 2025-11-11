@@ -74,6 +74,7 @@ val (BLE_Exp_tm,  mk_BLE_Exp, dest_BLE_Exp, is_BLE_Exp)  = syntax_fns1 "BLE_Exp"
 
 val bir_memop_t_ty = mk_type ("bir_memop_t", []);
 
+val (BM_Control_tm,  is_BM_Control)  = syntax_fns0 "BM_Control";
 val (BM_Read_tm,  is_BM_Read)  = syntax_fns0 "BM_Read";
 val (BM_Write_tm,  is_BM_Write)  = syntax_fns0 "BM_Write";
 val (BM_ReadWrite_tm,  is_BM_ReadWrite)  = syntax_fns0 "BM_ReadWrite";

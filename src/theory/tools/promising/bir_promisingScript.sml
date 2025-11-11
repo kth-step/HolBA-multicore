@@ -195,6 +195,12 @@ val is_write_def = Define`
   is_write _ = F
 `;
 
+Definition is_control_def:
+  is_control BM_Control = T
+  /\
+  is_control _ = F
+End
+
 (* Note that this currently does not take into account ARM *)
 val mem_read_view_def = Define‘
   mem_read_view (f:fwdb_t) t = if f.fwdb_time = t ∧ ~f.fwdb_xcl then f.fwdb_view else t
@@ -517,7 +523,7 @@ clstep p cid s M [] s')
    bir_get_current_statement p s.bst_pc
     = SOME $ BStmtB $ BMCStmt_Fence K1 K2
    /\ s.bst_status = BST_Running
-   /\ v = MAX (if is_read K1 then s.bst_v_rOld else 0) (if is_write K1 then s.bst_v_wOld else 0)
+   /\ v = MAX (MAX (if is_read K1 then s.bst_v_rOld else 0) (if is_write K1 then s.bst_v_wOld else 0)) (if is_control K1 then s.bst_v_CAP else 0)
    /\ s' = s with <| bst_v_rNew := MAX s.bst_v_rNew (if is_read K2 then v else 0);
                      bst_v_wNew := MAX s.bst_v_wNew (if is_write K2 then v else 0);
                      bst_pc updated_by bir_pc_next |>

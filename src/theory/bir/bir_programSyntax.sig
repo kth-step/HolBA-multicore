@@ -45,6 +45,9 @@ sig
 
    val bir_memop_t_ty : hol_type
 
+   val BM_Control_tm   : term
+   val is_BM_Control   : term -> bool
+
    val BM_Read_tm   : term
    val is_BM_Read   : term -> bool
 

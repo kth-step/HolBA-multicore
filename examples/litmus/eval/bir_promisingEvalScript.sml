@@ -124,7 +124,7 @@ Definition eval_clstep_fence_def:
   eval_clstep_fence s K1 K2 =
   let
     is_running = (s.bst_status = BST_Running);
-    v = MAX (ifView (is_read K1) s.bst_v_rOld) (ifView (is_write K1) s.bst_v_wOld);
+    v = MAX (MAX (ifView (is_read K1) s.bst_v_rOld) (ifView (is_write K1) s.bst_v_wOld)) (ifView (is_control K1) s.bst_v_CAP);
     s' = s with <| bst_v_rNew updated_by MAX (ifView (is_read K2) v);
                    bst_v_wNew updated_by MAX (ifView (is_write K2) v);
                    bst_pc updated_by bir_pc_next |>;
