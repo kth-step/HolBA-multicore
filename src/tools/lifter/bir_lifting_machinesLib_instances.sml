@@ -23,6 +23,9 @@ open arm8_stepLib m0_stepLib riscv_stepLib;
 
 val ERR = mk_HOL_ERR "bir_lifting_machinesLib_instances"
 
+(* TODO: Move more centrally *)
+val eval_rhs = rhs o concl o EVAL
+
 (* Takes a hex-format string instruction and returns a representation of it using
  * a list with 4 bytes. *)
 val word8_tm = wordsSyntax.mk_word_type (fcpSyntax.mk_numeric_type (Arbnum.fromInt 8))
@@ -657,6 +660,7 @@ val arm8_bmr_rec : bmr_rec = {
   bmr_step_hex             = arm8_step_hex' false,
   bmr_mc_step_hex          = SOME (arm8_step_hex' true),
   bmr_mc_lift_instr        = SOME arm8_mc_lift_instr,
+  bmr_mc_rewrite           = NONE,
   bmr_mk_data_mm           = arm8_mk_data_mm,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
   bmr_ihex_param           = SOME (4, true)
@@ -867,7 +871,8 @@ in
   bmr_extra_ss             = m0_extra_ss,
   bmr_step_hex             = m0_step_hex' (endian_fl, sel_fl),
   bmr_mc_step_hex          = NONE,
-  bmr_mc_lift_instr           = NONE,
+  bmr_mc_lift_instr        = NONE,
+  bmr_mc_rewrite           = NONE,
   bmr_mk_data_mm           = m0_mk_data_mm endian_fl,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
   bmr_ihex_param           = NONE
@@ -1039,6 +1044,7 @@ in
   bmr_step_hex             = m0_mod_step_hex' (endian_fl, sel_fl),
   bmr_mc_step_hex          = NONE,
   bmr_mc_lift_instr        = NONE,
+  bmr_mc_rewrite           = NONE,
   bmr_mk_data_mm           = m0_mod_mk_data_mm endian_fl,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
   bmr_ihex_param           = NONE
@@ -1531,6 +1537,40 @@ end
 ;
 
 local
+ fun get_riscv_r_type_fields bin_code =
+  let
+   val funct7 = substring (bin_code, 0, 7)
+   val rs2 = substring (bin_code, 7, 5)
+   val rs1 = substring (bin_code, 12, 5)
+   val funct3 = substring (bin_code, 17, 3)
+   val rd = substring (bin_code, 20, 5)
+   val opcode = substring (bin_code, 25, 7)
+  in
+   (funct7, rs2, rs1, funct3, rd, opcode)
+  end
+ ;
+in
+(* This function restores expressions that were simplified to 0, use to capture syntactic
+ * dependencies in the multicore version of BIR *)
+fun riscv_rewrite_step_thms next_thms hex_code =
+ let
+  val bin_code = hex_to_bin_pad_zero 32 hex_code
+  val (funct7, rs2, rs1, funct3, _, opcode) = get_riscv_r_type_fields bin_code
+ in
+  if funct7 = "0000000" andalso funct3 = "100" andalso opcode = "0110011" andalso rs2 = rs1
+  then
+   let
+    val rs_word = wordsSyntax.mk_n2w (optionSyntax.dest_some $ eval_rhs $ ASCIInumbersSyntax.mk_fromBinString $ stringLib.fromMLstring rs1, “:5”)
+    val xor_rewrite_thm = prove(“(0w:word64) = word_xor (ms.c_gpr ms.procID ^rs_word) (ms.c_gpr ms.procID ^rs_word)”, blastLib.BBLAST_TAC)
+   in
+    map (REWRITE_RULE [xor_rewrite_thm]) next_thms
+   end
+  else next_thms
+ end
+;
+end
+
+local
   (* M0 has address type 32, where this is 64. *)
   val addr_ty = fcpLib.index_type (Arbnum.fromInt 64);
   val val_ty = fcpLib.index_type (Arbnum.fromInt 8);
@@ -1574,6 +1614,7 @@ val riscv_bmr_rec : bmr_rec = {
   bmr_step_hex             = (riscv_step_hex' false),
   bmr_mc_step_hex          = SOME (riscv_step_hex' true),
   bmr_mc_lift_instr        = SOME riscv_mc_lift_instr,
+  bmr_mc_rewrite           = SOME riscv_rewrite_step_thms,
   bmr_mk_data_mm           = riscv_mk_data_mm,
   bmr_hex_code_size        =
     (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
