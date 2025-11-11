@@ -46,22 +46,22 @@ def fix_stmt(stmt):
     # Fixes acquire release
     stmt = re.sub(r"aq.rl","aqrl", stmt)
     stmt = stmt.strip()
-    if stmt.startswith(r"lw.aq"):
-        # Fix lw.aq
-        m = re.search(r"^lw\.aq (?P<rd>\w+),0?\((?P<rs1>\w+)\)$", stmt)
-        stmt = f"amoor.w.aq {m.group('rd')},zero,({m.group('rs1')})"
-    elif stmt.startswith("sw.rl"):
-        # Fix sw.rl
-        m = re.search(r"^sw\.rl (?P<rs2>\w+),0?\((?P<rs1>\w+)\)$", stmt)
-        stmt = f"amoswap.w.rl zero,{m.group('rs2')},({m.group('rs1')})"
-    elif stmt.startswith("ld.aq"):
-        # Fix ld.aq
-        m = re.search(r"^ld\.aq (?P<rd>\w+),0?\((?P<rs1>\w+)\)$", stmt)
-        stmt = f"amoor.d.aq {m.group('rd')},zero,({m.group('rs1')})"
-    elif stmt.startswith("sd.rl"):
-        # Fix sd.rl
-        m = re.search(r"^sd\.rl (?P<rs2>\w+),0?\((?P<rs1>\w+)\)$", stmt)
-        stmt = f"amoswap.d.rl zero,{m.group('rs2')},({m.group('rs1')})"
+#    if stmt.startswith(r"lw.aq"):
+#        # Fix lw.aq
+#        m = re.search(r"^lw\.aq (?P<rd>\w+),0?\((?P<rs1>\w+)\)$", stmt)
+#        stmt = f"amoor.w.aq {m.group('rd')},zero,({m.group('rs1')})"
+#    elif stmt.startswith("sw.rl"):
+#        # Fix sw.rl
+#        m = re.search(r"^sw\.rl (?P<rs2>\w+),0?\((?P<rs1>\w+)\)$", stmt)
+#        stmt = f"amoswap.w.rl zero,{m.group('rs2')},({m.group('rs1')})"
+#    elif stmt.startswith("ld.aq"):
+#        # Fix ld.aq
+#        m = re.search(r"^ld\.aq (?P<rd>\w+),0?\((?P<rs1>\w+)\)$", stmt)
+#        stmt = f"amoor.d.aq {m.group('rd')},zero,({m.group('rs1')})"
+#    elif stmt.startswith("sd.rl"):
+#        # Fix sd.rl
+#        m = re.search(r"^sd\.rl (?P<rs2>\w+),0?\((?P<rs1>\w+)\)$", stmt)
+#        stmt = f"amoswap.d.rl zero,{m.group('rs2')},({m.group('rs1')})"
     return stmt
 
 def process_prog(prog):

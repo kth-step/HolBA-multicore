@@ -35,6 +35,13 @@ Definition MAXL_def:
   MAXL (x::xs) = MAX x (MAXL xs)
 End
 
+Definition last_t_def:
+  last_t l M t =
+    let 
+      t' = LAST (FILTER (\t'. mem_is_loc M t' l) [0 ..< t])
+    in (t', THE (mem_read M l t'))
+End
+
 Definition eval_clstep_read:
   eval_clstep_read s M t var a_e cast_opt xcl acq rel =
   let
@@ -119,6 +126,55 @@ Definition eval_clstep_fulfil_def:
     then [s']
     else []
 End
+
+Definition eval_clstep_amo_def:
+  eval_clstep_amo cid s M t_w var a_e v_e acq rel =
+  let
+    is_running = (s.bst_status = BST_Running);
+    l_opt = bir_eval_exp a_e s.bst_environ;
+    l = THE l_opt;
+    v_addr = bir_eval_view_exp a_e s.bst_viewenv;
+
+    (t_r, v_r) = last_t l M t_w;
+    v_rPre = MAXL [v_addr; s.bst_v_rNew; 
+                  ifView (acq ∧ rel) s.bst_v_Rel;
+                  ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
+    v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
+
+    new_environ_opt = update_environ s.bst_environ var v_r;
+    new_environ = THE new_environ_opt;
+    new_viewenv = s.bst_viewenv |+ (var, v_rPost);
+
+    v_w_opt = bir_eval_exp v_e new_environ;
+    v_w = THE v_w_opt;
+    v_data = bir_eval_view_exp v_e new_viewenv;
+    mem_check = (mem_get M l t_w = SOME <| loc := l; val := v_w; cid := cid |>);
+
+    v_wPre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
+              ifView (acq ∧ rel) s.bst_v_Rel;
+              ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
+    v_wPost = t_w;
+    view_check = (MAX v_wPre (s.bst_coh l) < t_w);
+
+    s' = s with <| 
+      bst_environ := new_environ;
+      bst_viewenv := new_viewenv;
+      bst_prom    updated_by FILTER ($≠ t_w);
+      bst_coh     updated_by (l =+ t_w);
+      bst_v_Rel   updated_by (MAX $ ifView (rel ∧ acq) v_wPost);
+      bst_v_rOld  updated_by (MAX v_rPost);
+      bst_v_rNew  updated_by (MAX $ ifView acq (if rel then v_wPost else v_rPost));
+      bst_v_wNew  updated_by (MAX $ ifView acq (if rel then v_wPost else v_rPost));
+      bst_v_CAP   updated_by MAX v_addr;
+      bst_v_wOld  updated_by MAX v_wPost;
+      bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := F |>);
+      bst_pc updated_by bir_pc_next;
+      |>
+  in
+    if is_running ∧ IS_SOME l_opt ∧ IS_SOME new_environ_opt ∧ IS_SOME v_w_opt ∧ mem_check ∧ view_check
+    then [s']
+    else []
+End
         
 Definition eval_clstep_fence_def:
   eval_clstep_fence s K1 K2 =
@@ -174,6 +230,9 @@ Definition eval_clstep_def:
   | SOME (BStmtB (BMCStmt_Store var_succ a_e v_e xcl acq rel)) =>
       eval_clstep_xclfail s var_succ xcl ++
       LIST_BIND s.bst_prom (λt. eval_clstep_fulfil cid s M t var_succ a_e v_e xcl acq rel)
+  | SOME (BStmtB (BMCStmt_Amo var a_e v_e acq rel)) =>
+      LIST_BIND s.bst_prom (λt_w.
+          eval_clstep_amo cid s M t_w var a_e v_e acq rel)
   | SOME (BStmtB (BMCStmt_Fence K1 K2)) =>
       eval_clstep_fence s K1 K2
   | SOME (BStmtB (BMCStmt_Assign var e)) =>
@@ -187,8 +246,7 @@ Definition eval_clstep_def:
   | SOME (BStmtE (BStmt_Jmp e)) =>
       [bir_exec_stmtE p (BStmt_Jmp e) s]
   | SOME (BStmtE (BStmt_Halt e)) =>
-      [bir_exec_stmtE p (BStmt_Halt e) s]
-  | _ => [])
+      [bir_exec_stmtE p (BStmt_Halt e) s])
 End
 
 Definition eval_cstep_seq_store_def:
@@ -216,6 +274,59 @@ Definition eval_cstep_seq_store_def:
     else []
 End
 
+Definition eval_cstep_seq_amo_def:
+  eval_cstep_seq_amo cid s M var a_e v_e acq rel =
+  let
+    is_running = (s.bst_status = BST_Running);
+    l_opt = bir_eval_exp a_e s.bst_environ;
+    l = THE l_opt;
+    v_addr = bir_eval_view_exp a_e s.bst_viewenv;
+
+    (t_r, v_r) = last_t l M (SUC (LENGTH M));
+    v_rPre = MAXL [v_addr; s.bst_v_rNew; 
+                  ifView (acq ∧ rel) s.bst_v_Rel;
+                  ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
+    v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
+
+    new_environ_opt = update_environ s.bst_environ var v_r;
+    new_environ = THE new_environ_opt;
+    new_viewenv = s.bst_viewenv |+ (var, v_rPost);
+
+    v_w_opt = bir_eval_exp v_e new_environ;
+    v_w = THE v_w_opt;
+    v_data = bir_eval_view_exp v_e new_viewenv;
+
+    msg = <| loc := l; val := v_w; cid := cid |>;
+    M' = SNOC msg M;
+    t_w = LENGTH M';
+
+    v_wPre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
+              ifView (acq ∧ rel) s.bst_v_Rel;
+              ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
+    v_wPost = t_w;
+    v = MAX v_wPre (s.bst_coh l);
+    view_check = (v < t_w);
+
+    s' = s with <| 
+      bst_environ := new_environ;
+      bst_viewenv := new_viewenv;
+      bst_prom    updated_by FILTER ($≠ t_w);
+      bst_coh     updated_by (l =+ t_w);
+      bst_v_Rel   updated_by (MAX $ ifView (rel ∧ acq) v_wPost);
+      bst_v_rOld  updated_by (MAX v_rPost);
+      bst_v_rNew  updated_by (MAX $ ifView acq (if rel then v_wPost else v_rPost));
+      bst_v_wNew  updated_by (MAX $ ifView acq (if rel then v_wPost else v_rPost));
+      bst_v_CAP   updated_by MAX v_addr;
+      bst_v_wOld  updated_by MAX v_wPost;
+      bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := F |>);
+      bst_pc updated_by bir_pc_next;
+      |>
+  in
+    if is_running ∧ IS_SOME l_opt ∧ IS_SOME new_environ_opt ∧ IS_SOME v_w_opt ∧ view_check
+    then [(s', msg, v)]
+    else []
+End
+
 Definition eval_cstep_seq_def:
   eval_cstep_seq cid p (s,M) =
   (case bir_get_current_statement p s.bst_pc of
@@ -226,6 +337,11 @@ Definition eval_cstep_seq_def:
       MAP (λs'. (s',[])) (eval_clstep_xclfail s var_succ xcl) ++
       MAP (λs'. (s',[])) (LIST_BIND s.bst_prom (λt. eval_clstep_fulfil cid s M t var_succ a_e v_e xcl acq rel)) ++
       MAP (λ(s', msg, v). (s', [(msg, v)])) (eval_cstep_seq_store cid s M var_succ a_e v_e xcl acq rel)
+  | SOME (BStmtB (BMCStmt_Amo var a_e v_e acq rel)) =>
+      MAP (λs'. (s',[])) (LIST_BIND s.bst_prom (λt_w.
+          eval_clstep_amo cid s M t_w var a_e v_e acq rel)) ++
+      MAP (λ(s', msg, v). (s', [(msg, v)])) (
+        eval_cstep_seq_amo cid s M var a_e v_e acq rel)
   | SOME (BStmtB (BMCStmt_Fence K1 K2)) =>
       MAP (λs'. (s',[])) (eval_clstep_fence s K1 K2)
   | SOME (BStmtB (BMCStmt_Assign var e)) =>
@@ -239,8 +355,7 @@ Definition eval_cstep_seq_def:
   | SOME (BStmtE (BStmt_Jmp e)) =>
       [(bir_exec_stmtE p (BStmt_Jmp e) s, [])]
   | SOME (BStmtE (BStmt_Halt e)) =>
-      [(bir_exec_stmtE p (BStmt_Halt e) s, [])]
-  | _ => [])
+      [(bir_exec_stmtE p (BStmt_Halt e) s, [])])
 End 
 
 Definition eval_certify_def:
