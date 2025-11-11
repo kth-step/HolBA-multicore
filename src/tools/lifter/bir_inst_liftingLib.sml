@@ -1403,7 +1403,7 @@ fun get_patched_step_hex ms_v hex_code is_multicore =
      if is_multicore
      then if isSome (#bmr_mc_rewrite mr)
           then (valOf (#bmr_mc_rewrite mr)) next_thms hex_code
-          else raise (bir_inst_liftingAuxExn (BILED_msg "trying to use multicore rewriting without implementation current bmr_rec"))
+          else raise (bir_inst_liftingAuxExn (BILED_msg "trying to do multicore lifting without implementation of bmr_mc_rewrite in current bmr_rec"))
      else next_thms
 
      (* instantiate inst theorem *)

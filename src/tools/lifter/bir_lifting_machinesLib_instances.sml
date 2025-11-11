@@ -618,6 +618,47 @@ end
 ;
 
 local
+ (* TODO: What is this class of instructions called? *)
+ fun get_arm8_eor_fields bin_code =
+  let
+   val sf = substring (bin_code, 0, 1)
+   val opc = substring (bin_code, 1, 7)
+   val shift = substring (bin_code, 8, 2)
+   val n = substring (bin_code, 10, 1)
+   val rm = substring (bin_code, 11, 5)
+   val imm6 = substring (bin_code, 16, 6)
+   val rn = substring (bin_code, 22, 5)
+   val rd = substring (bin_code, 27, 5)
+  in
+   (sf, opc, shift, n, rm, imm6, rn, rd)
+  end
+ ;
+in
+(* This function restores expressions that were simplified to 0, use to capture syntactic
+ * dependencies in the multicore version of BIR *)
+fun arm8_rewrite_step_thms next_thms hex_code =
+ let
+  val bin_code = hex_to_bin_pad_zero 32 hex_code
+  val (sf, opc, shift, n, rm, imm6, rn, rd) = get_arm8_eor_fields bin_code
+ in
+  if opc = "1001010" andalso n = "0" andalso rn = rm
+  then
+   let
+    val rn_word = wordsSyntax.mk_n2w (optionSyntax.dest_some $ eval_rhs $ ASCIInumbersSyntax.mk_fromBinString $ stringLib.fromMLstring rn, “:5”)
+    val xor_rewrite_thm =
+     if sf = "1"
+     then prove(“(0w:word64) = word_xor (ms.REG ^rn_word) (ms.REG ^rn_word)”, blastLib.BBLAST_TAC)
+     else prove(“w2w (0w:word32) = (w2w:word32->word64) $ word_xor (w2w $ ms.REG ^rn_word) (w2w $ ms.REG ^rn_word)”, blastLib.BBLAST_TAC)
+   in
+    map (REWRITE_RULE [xor_rewrite_thm]) next_thms
+   end
+  else next_thms
+ end
+;
+end
+
+
+local
   val addr_ty = fcpLib.index_type (Arbnum.fromInt 64);
   val val_ty = fcpLib.index_type (Arbnum.fromInt 8);
   val val_word_ty = wordsSyntax.mk_word_type val_ty
@@ -660,7 +701,7 @@ val arm8_bmr_rec : bmr_rec = {
   bmr_step_hex             = arm8_step_hex' false,
   bmr_mc_step_hex          = SOME (arm8_step_hex' true),
   bmr_mc_lift_instr        = SOME arm8_mc_lift_instr,
-  bmr_mc_rewrite           = NONE,
+  bmr_mc_rewrite           = SOME arm8_rewrite_step_thms,
   bmr_mk_data_mm           = arm8_mk_data_mm,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
   bmr_ihex_param           = SOME (4, true)
