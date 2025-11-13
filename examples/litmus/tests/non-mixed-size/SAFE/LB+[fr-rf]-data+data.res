@@ -1,2 +1,2 @@
-tests/non-mixed-size/SAFE/LB+[fr-rf]-data+data.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/SAFE/LB+[fr-rf]-data+data.litmus	No	No
 

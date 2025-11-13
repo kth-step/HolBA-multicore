@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+IRWIW+fence.r.rw+data.json	No	No
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+IRWIW+fence.r.rw+data.litmus	No	No
 

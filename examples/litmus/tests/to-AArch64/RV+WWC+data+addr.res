@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+WWC+data+addr.json	No	No
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+WWC+data+addr.litmus	No	No
 

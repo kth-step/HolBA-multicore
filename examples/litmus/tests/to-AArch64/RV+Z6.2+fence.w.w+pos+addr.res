@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+Z6.2+fence.w.w+pos+addr.json	No	No
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+Z6.2+fence.w.w+pos+addr.litmus	No	No
 

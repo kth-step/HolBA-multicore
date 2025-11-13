@@ -1,2 +1,2 @@
-tests/non-mixed-size/HAND/ISA01.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/HAND/ISA01.litmus	Ok	Ok
 

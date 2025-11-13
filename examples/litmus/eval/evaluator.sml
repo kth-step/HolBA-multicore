@@ -106,8 +106,9 @@ fun main () =
 	val inputfile  = List.nth (arguments, length-2);
 	val outputfile = List.nth (arguments, length-1);
 	val litmus    = get_litmus inputfile;
+    val filename  = #filename litmus;
 	val (result, expected) = run_litmus 64 litmus;
-    val res_string = (inputfile ^ "\t" ^ result ^ "\t" ^ expected ^ "\n")
+    val res_string = (filename ^ "\t" ^ result ^ "\t" ^ expected ^ "\n")
     in 
 	    bir_fileLib.write_to_file outputfile res_string
     end;

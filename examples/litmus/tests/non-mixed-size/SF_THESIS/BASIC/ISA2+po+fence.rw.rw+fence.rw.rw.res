@@ -1,2 +1,2 @@
-tests/non-mixed-size/SF_THESIS/BASIC/ISA2+po+fence.rw.rw+fence.rw.rw.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/SF_THESIS/BASIC/ISA2+po+fence.rw.rw+fence.rw.rw.litmus	Ok	Ok
 

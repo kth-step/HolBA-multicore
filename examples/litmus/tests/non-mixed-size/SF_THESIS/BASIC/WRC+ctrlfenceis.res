@@ -1,2 +1,2 @@
-tests/non-mixed-size/SF_THESIS/BASIC/WRC+ctrlfenceis.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/SF_THESIS/BASIC/WRC+ctrlfenceis.litmus	Ok	Ok
 

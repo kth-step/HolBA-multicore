@@ -1,2 +1,2 @@
-tests/non-mixed-size/RELAX/PodWR/SB+fence.rw.rw+po-addr.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/RELAX/PodWR/SB+fence.rw.rw+po-addr.litmus	Ok	Ok
 

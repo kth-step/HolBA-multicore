@@ -12,6 +12,7 @@ open HolKernel Parse bossLib boolLib
 open listSyntax;
 
 open bir_lifter_interfaceLib
+open litmus_lifterTheory;
 open bslSyntax;
 open UtilLib;
 
@@ -67,4 +68,9 @@ val prog_list = ["amoswap.d.aqrl x2,x5,(x4)\nld x5,(x5)"]
 val prog = last $ parse_prog arch prog_list
 val x = EVAL ``bir_vars_of_program ^prog``
 val filename = "/tmp/hZEOwW.s.da"
+
+val arch = "AArch64"
+val prog = "LDXR W1,[X0]\n STXR W2,W1,[X0]"
+
+
 *)

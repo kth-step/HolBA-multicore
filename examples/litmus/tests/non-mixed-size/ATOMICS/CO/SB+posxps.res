@@ -1,2 +1,2 @@
-tests/non-mixed-size/ATOMICS/CO/SB+posxps.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/ATOMICS/CO/SB+posxps.litmus	No	No
 

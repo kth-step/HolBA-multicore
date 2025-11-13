@@ -1,2 +1,2 @@
-tests/non-mixed-size/RELAX/Rfi/S+fence.rw.rw+addr-rfi-addr.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/RELAX/Rfi/S+fence.rw.rw+addr-rfi-addr.litmus	No	No
 

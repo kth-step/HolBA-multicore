@@ -1,2 +1,2 @@
-tests/non-mixed-size/SAFE/Z6.3+fence.w.w+fence.w.w+addr.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/SAFE/Z6.3+fence.w.w+fence.w.w+addr.litmus	No	No
 

@@ -1,2 +1,2 @@
-tests/non-mixed-size/RELAX/Fri-Rfi/LB+addr+ctrl-fri-rfi-ctrl.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/RELAX/Fri-Rfi/LB+addr+ctrl-fri-rfi-ctrl.litmus	No	No
 

@@ -1,2 +1,2 @@
-tests/non-mixed-size/SAFE/LB+[fr-rf]-ctrlfencei+ctrl.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/SAFE/LB+[fr-rf]-ctrlfencei+ctrl.litmus	No	No
 

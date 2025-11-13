@@ -37,6 +37,7 @@ fun save_litmus (filename, l:litmus) =
 	val _ = Globals.linewidth := 99999999
 	val json = OBJECT [
 		("arch", STRING (#arch l)),
+		("filename", STRING (#filename l)),
 		("name", STRING (#name l)),
 		("regs", ARRAY (map (STRING o term_to_string) (#regs l))),
 		("mem", (STRING o term_to_string) (#mem l)),
@@ -66,6 +67,7 @@ fun load_litmus (filename: string) =
 		     | ERROR e => raise ERR "load_litmus" e
 	val lookup = lookupField json
 	val arch = asString (lookup "arch")
+	val filename = asString (lookup "filename")
 	val name = asString (lookup "name")
 	val regs = arrayMap (regs_of_string o asString) (lookup "regs")
 	val progs = arrayMap (prog_of_string o asString) (lookup "progs")
@@ -77,6 +79,7 @@ fun load_litmus (filename: string) =
 	{
 	  arch=arch,
 	  name=name,
+		filename=filename,
 	  regs=regs,
 	  mem=mem,
 	  progs=progs,

@@ -1,2 +1,2 @@
-tests/non-mixed-size/SF_THESIS/BASIC/MP.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/SF_THESIS/BASIC/MP.litmus	Ok	Ok
 

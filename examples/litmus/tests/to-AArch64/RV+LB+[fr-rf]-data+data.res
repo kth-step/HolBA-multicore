@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+LB+[fr-rf]-data+data.json	No	No
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+LB+[fr-rf]-data+data.litmus	No	No
 

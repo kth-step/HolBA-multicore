@@ -1,2 +1,2 @@
-tests/non-mixed-size/RELAX/PosWR/SB+pos-ctrlfencei+pos-pos-ctrlfencei.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/RELAX/PosWR/SB+pos-ctrlfencei+pos-pos-ctrlfencei.litmus	Ok	Ok
 

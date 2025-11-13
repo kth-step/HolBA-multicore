@@ -1,2 +1,2 @@
-tests/non-mixed-size/RELAX/PodWR/SB+po+po-addrs.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/RELAX/PodWR/SB+po+po-addrs.litmus	Ok	Ok
 

@@ -30,6 +30,10 @@ Definition is_xcl_read_def:
 		     (BExp_Store (BExp_Den (BVar "MEM8_Z" (BType_Mem Bit64 Bit8)))
                        (BExp_Den (BVar varname (BType_Imm Bit64))) BEnd_LittleEndian
 		       (BExp_Const (Imm32 0x1010101w))) => SOME l
+     | BStmt_Assign (BVar "MEM_R" (BType_Mem Bit64 Bit8))
+		     (BExp_Store (BExp_Den (BVar "MEM_Z" (BType_Mem Bit64 Bit8)))
+                       (BExp_Den (BVar varname (BType_Imm Bit64))) BEnd_LittleEndian
+		       (BExp_Const (Imm32 0x1010101w))) => SOME l
      | _ => NONE
   )  /\
   (is_xcl_read _ = NONE) 
@@ -38,12 +42,17 @@ End
 Definition is_xcl_write_def:
   (is_xcl_write (h::l) =
     case LAST (h::l) of
-      BStmt_Assign (BVar "MEM8_R" (BType_Mem Bit64 Bit8))
+    | BStmt_Assign (BVar "MEM8_R" (BType_Mem Bit64 Bit8))
                      (BExp_Den (BVar "MEM8_Z" (BType_Mem Bit64 Bit8))) => 
       (case h of
         BStmt_Assign (BVar varname (BType_Imm Bit64)) _ => SOME (BVar varname (BType_Imm Bit64))
       | _ => SOME (BVar "tmp" (BType_Imm Bit64)))
-     | _ => NONE
+    | BStmt_Assign (BVar "MEM_R" (BType_Mem Bit64 Bit8))
+                     (BExp_Den (BVar "MEM_Z" (BType_Mem Bit64 Bit8))) => 
+      (case h of
+        BStmt_Assign (BVar varname (BType_Imm Bit64)) _ => SOME (BVar varname (BType_Imm Bit64))
+      | _ => SOME (BVar "tmp" (BType_Imm Bit64)))
+    | _ => NONE
   )  /\
   (is_xcl_write _ = NONE)
 End

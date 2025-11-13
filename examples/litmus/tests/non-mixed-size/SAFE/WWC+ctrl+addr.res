@@ -1,2 +1,2 @@
-tests/non-mixed-size/SAFE/WWC+ctrl+addr.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/SAFE/WWC+ctrl+addr.litmus	No	No
 

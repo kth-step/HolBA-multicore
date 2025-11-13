@@ -1,2 +1,2 @@
-tests/non-mixed-size/RELAX/Rfi/SB+rfi-addr+rfi-ctrlfencei.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/RELAX/Rfi/SB+rfi-addr+rfi-ctrlfencei.litmus	Ok	Ok
 

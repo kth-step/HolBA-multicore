@@ -1,2 +1,2 @@
-tests/non-mixed-size/ATOMICS/CO/RWC+fence.rw.rws+pospx+X.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/ATOMICS/CO/RWC+fence.rw.rws+pospx+X.litmus	No	No
 

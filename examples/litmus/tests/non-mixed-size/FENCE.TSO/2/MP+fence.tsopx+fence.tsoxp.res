@@ -1,2 +1,2 @@
-tests/non-mixed-size/FENCE.TSO/2/MP+fence.tsopx+fence.tsoxp.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/FENCE.TSO/2/MP+fence.tsopx+fence.tsoxp.litmus	No	No
 

@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+ISA2+fence.rw.rw+data+ctrlfenceis.json	No	No
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+ISA2+fence.rw.rw+data+ctrlfenceis.litmus	No	No
 

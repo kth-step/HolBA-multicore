@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+LB+ctrl+popx.json	No	Ok
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+LB+ctrl+popx.litmus	Ok	Ok
 

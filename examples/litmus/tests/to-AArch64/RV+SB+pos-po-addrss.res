@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+SB+pos-po-addrss.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+SB+pos-po-addrss.litmus	Ok	Ok
 

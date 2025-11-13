@@ -1,2 +1,2 @@
-tests/non-mixed-size/SAFE/Z6.3+fence.rw.rw+fence.rw.w+ctrlfencei.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/SAFE/Z6.3+fence.rw.rw+fence.rw.w+ctrlfencei.litmus	Ok	Ok
 

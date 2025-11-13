@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+MP+pos-rfi-addr+data-rfi-ctrlfencei.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+MP+pos-rfi-addr+data-rfi-ctrlfencei.litmus	Ok	Ok
 

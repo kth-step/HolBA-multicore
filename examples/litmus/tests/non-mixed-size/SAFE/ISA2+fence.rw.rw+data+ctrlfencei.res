@@ -1,2 +1,2 @@
-tests/non-mixed-size/SAFE/ISA2+fence.rw.rw+data+ctrlfencei.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/SAFE/ISA2+fence.rw.rw+data+ctrlfencei.litmus	Ok	Ok
 

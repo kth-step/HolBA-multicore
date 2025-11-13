@@ -3,6 +3,7 @@ sig
     include Abbrev
     type litmus = {arch:string,
 		   name:string,
+			 filename: string,
 		   regs: term list,
 		   mem: term,
 		   progs: term list,
@@ -29,6 +30,7 @@ open JsonUtil;
 
 
 type litmus = {arch:string,
+			   filename: string,
 	       name:string,
 	       regs: term list,
 	       mem: term,
@@ -107,6 +109,7 @@ fun parse filename =
 	val mem = parse_mem mem decl
     in
 	{arch=arch,
+	 filename=filename,
 	 name=name,
 	 regs=regs,
 	 mem=mem,

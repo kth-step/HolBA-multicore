@@ -1,2 +1,2 @@
-tests/non-mixed-size/RELAX/Fence.idRW/LB+fence.is.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/non-mixed-size/RELAX/Fence.idRW/LB+fence.is.litmus	Ok	Ok
 

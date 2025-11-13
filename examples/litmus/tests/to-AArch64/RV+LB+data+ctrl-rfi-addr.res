@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+LB+data+ctrl-rfi-addr.json	Ok	No
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+LB+data+ctrl-rfi-addr.litmus	No	No
 

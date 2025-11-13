@@ -1,2 +1,2 @@
-tests/to-AArch64/RV+S+fence.r.rw+ctrl.json	Ok	Ok
+/opt/litmus-tests-riscv/tests/to-AArch64/RV+S+fence.r.rw+ctrl.litmus	Ok	Ok
 

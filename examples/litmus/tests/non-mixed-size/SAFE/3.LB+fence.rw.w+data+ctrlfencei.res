@@ -1,2 +1,2 @@
-tests/non-mixed-size/SAFE/3.LB+fence.rw.w+data+ctrlfencei.json	No	No
+/opt/litmus-tests-riscv/tests/non-mixed-size/SAFE/3.LB+fence.rw.w+data+ctrlfencei.litmus	No	No
 
