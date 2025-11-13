@@ -1,18 +1,68 @@
 open HolKernel boolLib Parse;
 
-open listRangeTheory;
-
 open bir_programTheory bir_promisingTheory;
 
-val _ = new_theory "bir_promisingEval";
+val () = new_theory "bir_promisingEval";
 
 Datatype:
   bmc_arch = RISCV | ARMv8
 End
 
+Datatype:
+  OrdR = OrdR_PLN | OrdR_ACQ_PC | OrdR_ACQ 
+End
+
+Datatype:
+  OrdW = OrdW_PLN | OrdW_REL_PC | OrdW_REL
+End
+
+Definition OrdR_mk_def:
+  (OrdR_mk T T = OrdR_ACQ)
+  ∧
+  (OrdR_mk T F = OrdR_ACQ_PC)
+  ∧ 
+  (OrdR_mk _ _ = OrdR_PLN)
+End
+
+Definition OrdW_mk_def:
+  (OrdW_mk T T = OrdW_REL)
+  ∧
+  (OrdW_mk F T = OrdW_REL_PC)
+  ∧ 
+  (OrdW_mk _ _ = OrdW_PLN)
+End
+
+Definition OrdR_ge_def:
+  (OrdR_ge OrdR_ACQ _ = T)
+  ∧
+  (OrdR_ge _ OrdR_ACQ = F)
+  ∧
+  (OrdR_ge OrdR_ACQ_PC _ = T)
+  ∧
+  (OrdR_ge _ OrdR_ACQ_PC = F)
+  ∧ 
+  (OrdR_ge _ _ = T)
+End
+
+Definition OrdW_ge_def:
+  (OrdW_ge OrdW_REL _ = T)
+  ∧
+  (OrdW_ge _ OrdW_REL = F)
+  ∧
+  (OrdW_ge OrdW_REL_PC _ = T)
+  ∧
+  (OrdW_ge _ OrdW_REL_PC = F)
+  ∧
+  (OrdW_ge _ _ = T)
+End
+
+(*
+    if andb (fwd.(ts) == tsx) (negb (andb fwd.(ex) (orb (arch == riscv) (OrdR.ge ord OrdR.acquire_pc))))
+*)
+
 Definition eval_read_view_def:
-  eval_read_view arch rk f t =
-  if f.fwdb_time = t ∧ (f.fwdb_xcl ⇒ (arch = ARMv8 ∧ ¬rk)) 
+  eval_read_view arch ord f t =
+  if f.fwdb_time = t ∧ ¬(f.fwdb_xcl ∧ (arch = RISCV ∨ (OrdR_ge ord OrdR_ACQ_PC))) 
   then f.fwdb_view else t
 End
                  
@@ -55,25 +105,26 @@ End
 Definition eval_clstep_read:
   eval_clstep_read arch s M t var a_e cast_opt xcl acq rel =
   let
+    ord = OrdR_mk acq rel;
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
     l = THE l_opt;
     v_addr = bir_eval_view_exp a_e s.bst_viewenv;
     v_opt = mem_read M l t;
-    v_pre = MAXL [v_addr; s.bst_v_rNew; ifView (acq ∧ rel) s.bst_v_Rel;
-                  ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
+    v_pre = MAXL [v_addr; 
+                 s.bst_v_rNew; 
+                 ifView (OrdR_ge ord OrdR_ACQ) s.bst_v_Rel];
     is_latest = EVERY (λt'. ~mem_is_loc M t' l) [SUC t.. (MAX v_pre (s.bst_coh l))];
     v = THE v_opt;
-    v_post = MAX v_pre (eval_read_view arch (acq ∨ rel) (s.bst_fwdb l) t);
+    v_post = MAX v_pre (eval_read_view arch ord (s.bst_fwdb l) t);
     new_environ_opt = update_environ s.bst_environ var v;
     new_environ = THE new_environ_opt;
     s' = s with <| bst_environ := new_environ;
                    bst_viewenv := (s.bst_viewenv |+ (var,v_post));
                    bst_coh     updated_by (l =+ MAX (s.bst_coh l) v_post);
                    bst_v_rOld  updated_by MAX v_post;
-                   bst_v_rNew  updated_by MAX $ ifView acq v_post;
-                   bst_v_wNew  updated_by MAX $ ifView acq v_post;
-                   bst_v_Rel   updated_by MAX $ ifView (rel ∧ acq) v_post;
+                   bst_v_rNew  updated_by MAX $ ifView (OrdR_ge ord OrdR_ACQ_PC) v_post;
+                   bst_v_wNew  updated_by MAX $ ifView (OrdR_ge ord OrdR_ACQ_PC) v_post;
                    bst_v_CAP   updated_by MAX v_addr;
                    bst_xclb    := if xcl then SOME <| xclb_time := t; xclb_view := v_post |> else s.bst_xclb;
                    bst_pc      updated_by bir_pc_next |>
@@ -99,9 +150,10 @@ Definition eval_clstep_xclfail:
     else []
 End
 
-Definition eval_clstep_fulfil_def:
-  eval_clstep_fulfil arch cid s M t var a_e v_e xcl acq rel =
+Definition eval_clstep_fulfil_aux_def:
+  eval_clstep_fulfil_aux arch cid s M t var a_e v_e xcl acq rel =
   let
+    ord = OrdW_mk acq rel;
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
     l = THE l_opt;
@@ -112,8 +164,8 @@ Definition eval_clstep_fulfil_def:
     xcl_check = (xcl ⇒ IS_SOME s.bst_xclb ∧ EVERY (λt'. mem_is_loc M t' l ⇒ mem_is_cid M cid t') [SUC ((THE s.bst_xclb).xclb_time)..< t]);
     mem_check = (mem_get M l t = SOME <| loc := l; val := v; cid := cid |>);
     v_pre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
-                  ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
-                  ifView (xcl ∧ acq ∧ rel) s.bst_v_Rel;
+                  ifView (OrdW_ge ord OrdW_REL_PC) s.bst_v_rOld;
+                  ifView (OrdW_ge ord OrdW_REL_PC) s.bst_v_wOld;
                   ifView (xcl ∧ arch = RISCV) (THE s.bst_xclb).xclb_view];
     view_check = (MAX v_pre (s.bst_coh l) < t);
     new_environ_opt = if xcl then update_environ s.bst_environ var (BVal_Imm $ Imm64 0w) else SOME s.bst_environ;
@@ -125,9 +177,7 @@ Definition eval_clstep_fulfil_def:
                    bst_coh     updated_by (l =+ t);
                    bst_v_wOld  updated_by (MAX t);
                    bst_v_CAP   updated_by (MAX v_addr);
-                   bst_v_Rel   updated_by (MAX $ ifView (rel ∧ acq) t);
-                   bst_v_rNew  updated_by (MAX $ ifView (rel ∧ acq ∧ xcl) t);
-                   bst_v_wNew  updated_by (MAX $ ifView (rel ∧ acq ∧ xcl) t);
+                   bst_v_Rel   updated_by (MAX $ ifView (OrdW_ge ord OrdW_REL) t);
                    bst_fwdb    updated_by (l =+ <| fwdb_time := t; fwdb_view := MAX v_addr v_data; fwdb_xcl := xcl |>);
                    bst_xclb    := if xcl then NONE else s.bst_xclb;
                    bst_pc      updated_by bir_pc_next |>
@@ -137,9 +187,18 @@ Definition eval_clstep_fulfil_def:
     else []
 End
 
-Definition eval_clstep_amo_def:
-  eval_clstep_amo arch cid s M t_w var a_e v_e acq rel =
+Definition eval_clstep_fulfil_def:
+  eval_clstep_fulfil arch cid s M var a_e v_e xcl acq rel =
+  case LIST_BIND (s.bst_prom) (λt. eval_clstep_fulfil_aux arch cid s M t var a_e v_e xcl acq rel) of
+    | [] => []
+    | s::_ => [s]
+End
+
+Definition eval_clstep_amo_aux_def:
+  eval_clstep_amo_aux arch cid s M t_w var a_e v_e acq rel =
   let
+    ordR = OrdR_mk acq rel;
+    ordW = OrdW_mk acq rel;
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
     l = THE l_opt;
@@ -147,9 +206,8 @@ Definition eval_clstep_amo_def:
 
     (t_r, v_r) = last_t l M t_w;
     v_rPre = MAXL [v_addr; s.bst_v_rNew; 
-                  ifView (acq ∧ rel) s.bst_v_Rel;
-                  ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
-    v_rPost = MAX v_rPre (eval_read_view arch (acq ∧ rel) (s.bst_fwdb l) t_r);
+                  ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel];
+    v_rPost = MAX v_rPre (eval_read_view arch ordR (s.bst_fwdb l) t_r);
 
     new_environ_opt = update_environ s.bst_environ var v_r;
     new_environ = THE new_environ_opt;
@@ -161,8 +219,8 @@ Definition eval_clstep_amo_def:
     mem_check = (mem_get M l t_w = SOME <| loc := l; val := v_w; cid := cid |>);
 
     v_wPre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
-              ifView (acq ∧ rel) s.bst_v_Rel;
-              ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
+              ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_rOld;
+              ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_wOld];
     v_wPost = t_w;
     view_check = (MAX v_wPre (s.bst_coh l) < t_w);
 
@@ -171,12 +229,12 @@ Definition eval_clstep_amo_def:
       bst_viewenv := new_viewenv;
       bst_prom    updated_by FILTER ($≠ t_w);
       bst_coh     updated_by (l =+ t_w);
-      bst_v_Rel   updated_by (MAX $ ifView (rel ∧ acq) v_wPost);
-      bst_v_rOld  updated_by (MAX v_rPost);
-      bst_v_rNew  updated_by (MAX $ ifView acq (if rel then v_wPost else v_rPost));
-      bst_v_wNew  updated_by (MAX $ ifView acq (if rel then v_wPost else v_rPost));
-      bst_v_CAP   updated_by MAX v_addr;
+      bst_v_Rel   updated_by (MAX $ ifView (OrdW_ge ordW OrdW_REL_PC) v_wPost);
+      bst_v_rOld  updated_by MAX v_rPost;
       bst_v_wOld  updated_by MAX v_wPost;
+      bst_v_CAP   updated_by MAX v_addr;
+      bst_v_rNew  updated_by MAX (ifView (OrdR_ge ordR OrdR_ACQ_PC) v_rPost);
+      bst_v_wNew  updated_by MAX (ifView (OrdR_ge ordR OrdR_ACQ_PC) v_rPost);
       bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := F |>);
       bst_pc updated_by bir_pc_next;
       |>
@@ -184,6 +242,13 @@ Definition eval_clstep_amo_def:
     if is_running ∧ IS_SOME l_opt ∧ IS_SOME new_environ_opt ∧ IS_SOME v_w_opt ∧ mem_check ∧ view_check
     then [s']
     else []
+End
+
+Definition eval_clstep_amo_def:
+  eval_clstep_amo arch cid s M var a_e v_e acq rel =
+  case LIST_BIND (s.bst_prom) (λt. eval_clstep_amo_aux arch cid s M t var a_e v_e acq rel) of
+    | [] => []
+    | s::_ => [s]
 End
         
 Definition eval_clstep_fence_def:
@@ -238,14 +303,10 @@ Definition eval_clstep_def:
   | SOME (BStmtB (BMCStmt_Load var a_e cast_opt xcl acq rel)) =>
       LIST_BIND [0..LENGTH M] (λt. eval_clstep_read arch s M t var a_e cast_opt xcl acq rel)
   | SOME (BStmtB (BMCStmt_Store var_succ a_e v_e xcl acq rel)) =>
-    let 
-      ss = LIST_BIND s.bst_prom (λt. eval_clstep_fulfil arch cid s M t var_succ a_e v_e xcl acq rel)
-    in
-      eval_clstep_xclfail s var_succ xcl ++ (TAKE 1 ss)
+    (eval_clstep_fulfil arch cid s M var_succ a_e v_e xcl acq rel) ++
+    (eval_clstep_xclfail s var_succ xcl)
   | SOME (BStmtB (BMCStmt_Amo var a_e v_e acq rel)) =>
-    let 
-      ss = LIST_BIND s.bst_prom (λt_w.  eval_clstep_amo arch cid s M t_w var a_e v_e acq rel)
-    in (TAKE 1 ss)
+    (eval_clstep_amo arch cid s M var a_e v_e acq rel)
   | SOME (BStmtB (BMCStmt_Fence K1 K2)) =>
       eval_clstep_fence s K1 K2
   | SOME (BStmtB (BMCStmt_Assign var e)) =>
@@ -265,41 +326,57 @@ End
 Definition eval_cstep_seq_store_def:
   eval_cstep_seq_store arch cid s M var_succ a_e v_e xcl acq rel =
   let
+    ord = OrdW_mk acq rel;
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
     l = THE l_opt;
     v_addr = bir_eval_view_exp a_e s.bst_viewenv;
     v_opt = bir_eval_exp v_e s.bst_environ;
     v = THE v_opt;
-    v_data = bir_eval_view_exp v_e s.bst_viewenv;
     msg = <| loc := l; val := v; cid := cid |>;
-    M' = SNOC msg M;
-    t = LENGTH M';
-    s' = s with <| bst_prom updated_by (SNOC t) |>;
+    t = LENGTH (SNOC msg M);
+    v_data = bir_eval_view_exp v_e s.bst_viewenv;
+    xcl_check = (xcl ⇒ IS_SOME s.bst_xclb ∧ EVERY (λt'. mem_is_loc M t' l ⇒ mem_is_cid M cid t') [SUC ((THE s.bst_xclb).xclb_time)..< t]);
     v_pre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
-                  ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
-                  ifView (xcl ∧ acq ∧ rel) s.bst_v_Rel;
+                  ifView (OrdW_ge ord OrdW_REL_PC) s.bst_v_rOld;
+                  ifView (OrdW_ge ord OrdW_REL_PC) s.bst_v_wOld;
                   ifView (xcl ∧ arch = RISCV) (THE s.bst_xclb).xclb_view];
-    v = MAX v_pre (s.bst_coh l);
+    view_check = (MAX v_pre (s.bst_coh l) < t);
+    new_environ_opt = if xcl then update_environ s.bst_environ var_succ (BVal_Imm $ Imm64 0w) else SOME s.bst_environ;
+    new_environ = THE new_environ_opt;
+    new_viewenv = if xcl then s.bst_viewenv |+ (var_succ, ifView (arch = RISCV) t) else s.bst_viewenv;
+    s' = s with <| bst_environ := new_environ;
+                   bst_viewenv := new_viewenv;
+                   bst_prom    updated_by FILTER ($≠ t);
+                   bst_coh     updated_by (l =+ t);
+                   bst_v_wOld  updated_by (MAX t);
+                   bst_v_CAP   updated_by (MAX v_addr);
+                   bst_v_Rel   updated_by (MAX $ ifView (OrdW_ge ord OrdW_REL) t);
+                   bst_fwdb    updated_by (l =+ <| fwdb_time := t; fwdb_view := MAX v_addr v_data; fwdb_xcl := xcl |>);
+                   bst_xclb    := if xcl then NONE else s.bst_xclb;
+                   bst_pc      updated_by bir_pc_next |>
   in
-    if is_running ∧ IS_SOME l_opt ∧ IS_SOME v_opt
-    then MAP (λs'. (s', msg, v)) (eval_clstep_fulfil arch cid s' M' t var_succ a_e v_e xcl acq rel)
+    if is_running ∧ IS_SOME l_opt ∧ IS_SOME v_opt ∧ xcl_check ∧ view_check ∧ IS_SOME new_environ_opt
+    then [(s', [msg, MAX v_pre (s.bst_coh l)])]
     else []
 End
 
 Definition eval_cstep_seq_amo_def:
   eval_cstep_seq_amo arch cid s M var a_e v_e acq rel =
   let
+    ordR = OrdR_mk acq rel;
+    ordW = OrdW_mk acq rel;
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
     l = THE l_opt;
     v_addr = bir_eval_view_exp a_e s.bst_viewenv;
 
-    (t_r, v_r) = last_t l M (SUC (LENGTH M));
+    t_w = LENGTH M + 1;
+
+    (t_r, v_r) = last_t l M t_w;
     v_rPre = MAXL [v_addr; s.bst_v_rNew; 
-                  ifView (acq ∧ rel) s.bst_v_Rel;
-                  ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
-    v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
+                  ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel];
+    v_rPost = MAX v_rPre (eval_read_view arch ordR (s.bst_fwdb l) t_r);
 
     new_environ_opt = update_environ s.bst_environ var v_r;
     new_environ = THE new_environ_opt;
@@ -310,33 +387,30 @@ Definition eval_cstep_seq_amo_def:
     v_data = bir_eval_view_exp v_e new_viewenv;
 
     msg = <| loc := l; val := v_w; cid := cid |>;
-    M' = SNOC msg M;
-    t_w = LENGTH M';
 
     v_wPre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
-              ifView (acq ∧ rel) s.bst_v_Rel;
-              ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
+              ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_rOld;
+              ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_wOld];
     v_wPost = t_w;
-    v = MAX v_wPre (s.bst_coh l);
-    view_check = (v < t_w);
+    view_check = (MAX v_wPre (s.bst_coh l) < t_w);
 
     s' = s with <| 
       bst_environ := new_environ;
       bst_viewenv := new_viewenv;
       bst_prom    updated_by FILTER ($≠ t_w);
       bst_coh     updated_by (l =+ t_w);
-      bst_v_Rel   updated_by (MAX $ ifView (rel ∧ acq) v_wPost);
-      bst_v_rOld  updated_by (MAX v_rPost);
-      bst_v_rNew  updated_by (MAX $ ifView acq (if rel then v_wPost else v_rPost));
-      bst_v_wNew  updated_by (MAX $ ifView acq (if rel then v_wPost else v_rPost));
-      bst_v_CAP   updated_by MAX v_addr;
+      bst_v_Rel   updated_by (MAX $ ifView (OrdW_ge ordW OrdW_REL_PC) v_wPost);
+      bst_v_rOld  updated_by MAX v_rPost;
       bst_v_wOld  updated_by MAX v_wPost;
+      bst_v_CAP   updated_by MAX v_addr;
+      bst_v_rNew  updated_by MAX (ifView (OrdR_ge ordR OrdR_ACQ_PC) v_rPost);
+      bst_v_wNew  updated_by MAX (ifView (OrdR_ge ordR OrdR_ACQ_PC) v_rPost);
       bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := F |>);
       bst_pc updated_by bir_pc_next;
       |>
   in
     if is_running ∧ IS_SOME l_opt ∧ IS_SOME new_environ_opt ∧ IS_SOME v_w_opt ∧ view_check
-    then [(s', msg, v)]
+    then [(s', [msg, MAX v_wPre (s.bst_coh l)])]
     else []
 End
 
@@ -348,13 +422,13 @@ Definition eval_cstep_seq_def:
       MAP (λs'. (s',[])) (LIST_BIND [0..LENGTH M] (λt. eval_clstep_read arch s M t var a_e cast_opt xcl acq rel))
   | SOME (BStmtB (BMCStmt_Store var_succ a_e v_e xcl acq rel)) =>
       MAP (λs'. (s',[])) (eval_clstep_xclfail s var_succ xcl) ++
-      MAP (λs'. (s',[])) (LIST_BIND s.bst_prom (λt. eval_clstep_fulfil arch cid s M t var_succ a_e v_e xcl acq rel)) ++
-      MAP (λ(s', msg, v). (s', [(msg, v)])) (eval_cstep_seq_store arch cid s M var_succ a_e v_e xcl acq rel)
+      (case eval_clstep_fulfil arch cid s M var_succ a_e v_e xcl acq rel of
+      | [] => eval_cstep_seq_store arch cid s M var_succ a_e v_e xcl acq rel
+      | l => MAP (λs'. (s',[])) l)
   | SOME (BStmtB (BMCStmt_Amo var a_e v_e acq rel)) =>
-      MAP (λs'. (s',[])) (LIST_BIND s.bst_prom (λt_w.
-          eval_clstep_amo arch cid s M t_w var a_e v_e acq rel)) ++
-      MAP (λ(s', msg, v). (s', [(msg, v)])) (
-        eval_cstep_seq_amo arch cid s M var a_e v_e acq rel)
+      (case eval_clstep_amo arch cid s M var a_e v_e acq rel of
+      | [] => eval_cstep_seq_amo arch cid s M var a_e v_e acq rel
+      | l => MAP (λs'. (s',[])) l)
   | SOME (BStmtB (BMCStmt_Fence K1 K2)) =>
       MAP (λs'. (s',[])) (eval_clstep_fence s K1 K2)
   | SOME (BStmtB (BMCStmt_Assign var e)) =>
@@ -468,4 +542,4 @@ Definition eval_local_phase_def:
   MAP (λcores. (cores,M))(cross_list (MAP (λcore. eval_local_step arch f core M) cores))
 End
 
-val _ = export_theory();
+val () = export_theory();

@@ -1,8 +1,6 @@
 open HolKernel bossLib boolLib Parse Drule;
 
 open wordsTheory
-open bir_promisingTheory;
-
 open bir_promisingEvalTheory;
 
 open bslSyntax pairSyntax numSyntax listSyntax
@@ -14,7 +12,7 @@ open litmusInterfaceLib
 	 
 open wordsLib stringLib;
 
-
+val LITMUS_CONSTANT_THM = DB.fetch "litmus_lifter" "LitmusConstants"
 
 val _ = add_thms (CONJUNCTS LITMUS_CONSTANT_THM) the_compset;
 val _ = add_words_compset true the_compset;
@@ -115,10 +113,12 @@ fun main () =
     end;
 
 val () = (
-    PolyML.export ("tester.o", main);
-    Unix.execute ("./polyc.sh", ["tester.o", "-o", "tester.out"]);
+    PolyML.export ("evaluator.o", main);
+    Unix.execute ("./polyc.sh", ["evaluator.o", "-o", "evaluator.out"]);
     Unix.exit (Word8.fromInt 0)
 );
+
+
 (* 
 val filename = "../tests/riscv/BASIC_2_THREAD/LB.json";
 val litmus = get_litmus filename

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-find -wholename "./tests/riscv/*.json" | parallel ./tools/tester.out
+find -wholename "./tests/non-mixed-size/*.json" | parallel ./tools/tester.out

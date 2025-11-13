@@ -6,10 +6,10 @@ HOL_FILES=$(wildcard *Lib.sml)
 
 SHELL=/bin/bash
 
-HEAP := HolBAExamples_LitmusTools-heap
+HEAP := HolBAExamples_LitmusEval-heap
 
 .PHONY: all clean
-all: lifter.out
+all: evaluator.out
 clean:
 	rm -f *.out *.o
 
