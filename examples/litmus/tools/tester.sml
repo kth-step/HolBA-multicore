@@ -39,13 +39,13 @@ fun mk_cores programs environs t =
     in mk_list (cores, type_of (hd cores)) end;
 
 (* Promise mode execution *)
-fun promiseRun fuelTerm coresAndInitMemory =
+fun promiseRun arch fuelTerm coresAndInitMemory =
     let
-	    val newCoresAndMemory = term_EVAL “eval_pstep_rep ^fuelTerm ^fuelTerm ^coresAndInitMemory”;
+	    val newCoresAndMemory = term_EVAL “eval_pstep_rep ^arch ^fuelTerm ^fuelTerm ^coresAndInitMemory”;
     in newCoresAndMemory end;
 
-fun localRun fuelTerm coresAndMemory = 
-    term_EVAL “LIST_BIND (^coresAndMemory) (eval_local_phase ^fuelTerm)”
+fun localRun arch fuelTerm coresAndMemory = 
+    term_EVAL “LIST_BIND (^coresAndMemory) (eval_local_phase ^arch ^fuelTerm)”
 
 
 Definition get_regs_and_mem:
@@ -80,6 +80,7 @@ fun final_check check regsMem =
 
 fun run_litmus fuel (litmus:litmus) =
    let 
+       val arch = if #arch litmus = "RISCV" then ``RISCV`` else ``ARMv8``;
        (* Fuel used for promise and non-promise execution *)
        val fuelTerm = term_of_int fuel;
        (* Get the initial memory *)
@@ -89,9 +90,9 @@ fun run_litmus fuel (litmus:litmus) =
        (* Initial State *)
        val initialState = mk_pair (cores, initMemory);
        (* Make promise run *)
-       val promisedState = promiseRun fuelTerm initialState;
+       val promisedState = promiseRun arch fuelTerm initialState;
        (* Make local run *)
-       val finalState = localRun fuelTerm promisedState;
+       val finalState = localRun arch fuelTerm promisedState;
        (* Get registers and memory *)
        val regsMemory = getRegistersAndMemory finalState;
        val expected = #expected litmus
@@ -103,11 +104,14 @@ fun run_litmus fuel (litmus:litmus) =
 fun main () =
     let
 	val arguments = CommandLine.arguments ();
-	val filename  = List.last arguments;
-	val litmus    = get_litmus filename
-	val (result, expected) = run_litmus 64 litmus
+	val length     = List.length arguments;
+	val inputfile  = List.nth (arguments, length-2);
+	val outputfile = List.nth (arguments, length-1);
+	val litmus    = get_litmus inputfile;
+	val (result, expected) = run_litmus 64 litmus;
+    val res_string = (inputfile ^ "\t" ^ result ^ "\t" ^ expected ^ "\n")
     in 
-	print $ filename ^ "\t" ^ result ^ "\t" ^ expected ^ "\n" 
+	    bir_fileLib.write_to_file outputfile res_string
     end;
 
 val () = (

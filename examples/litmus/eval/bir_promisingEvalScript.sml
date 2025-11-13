@@ -5,6 +5,16 @@ open listRangeTheory;
 open bir_programTheory bir_promisingTheory;
 
 val _ = new_theory "bir_promisingEval";
+
+Datatype:
+  bmc_arch = RISCV | ARMv8
+End
+
+Definition eval_read_view_def:
+  eval_read_view arch rk f t =
+  if f.fwdb_time = t ∧ (f.fwdb_xcl ⇒ (arch = ARMv8 ∧ ¬rk)) 
+  then f.fwdb_view else t
+End
                  
 Definition bir_eval_view_exp_def:
   (bir_eval_view_exp (BExp_BinExp op e1 e2) viewenv =
@@ -43,7 +53,7 @@ Definition last_t_def:
 End
 
 Definition eval_clstep_read:
-  eval_clstep_read s M t var a_e cast_opt xcl acq rel =
+  eval_clstep_read arch s M t var a_e cast_opt xcl acq rel =
   let
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
@@ -54,7 +64,7 @@ Definition eval_clstep_read:
                   ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
     is_latest = EVERY (λt'. ~mem_is_loc M t' l) [SUC t.. (MAX v_pre (s.bst_coh l))];
     v = THE v_opt;
-    v_post = MAX v_pre (mem_read_view (s.bst_fwdb l) t);
+    v_post = MAX v_pre (eval_read_view arch (acq ∨ rel) (s.bst_fwdb l) t);
     new_environ_opt = update_environ s.bst_environ var v;
     new_environ = THE new_environ_opt;
     s' = s with <| bst_environ := new_environ;
@@ -90,7 +100,7 @@ Definition eval_clstep_xclfail:
 End
 
 Definition eval_clstep_fulfil_def:
-  eval_clstep_fulfil cid s M t var a_e v_e xcl acq rel =
+  eval_clstep_fulfil arch cid s M t var a_e v_e xcl acq rel =
   let
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
@@ -104,11 +114,11 @@ Definition eval_clstep_fulfil_def:
     v_pre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
                   ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
                   ifView (xcl ∧ acq ∧ rel) s.bst_v_Rel;
-                  ifView xcl (THE s.bst_xclb).xclb_view];
+                  ifView (xcl ∧ arch = RISCV) (THE s.bst_xclb).xclb_view];
     view_check = (MAX v_pre (s.bst_coh l) < t);
     new_environ_opt = if xcl then update_environ s.bst_environ var (BVal_Imm $ Imm64 0w) else SOME s.bst_environ;
     new_environ = THE new_environ_opt;
-    new_viewenv = if xcl then s.bst_viewenv |+ (var, t) else s.bst_viewenv;
+    new_viewenv = if xcl then s.bst_viewenv |+ (var, ifView (arch = RISCV) t) else s.bst_viewenv;
     s' = s with <| bst_environ := new_environ;
                    bst_viewenv := new_viewenv;
                    bst_prom    updated_by FILTER ($≠ t);
@@ -128,7 +138,7 @@ Definition eval_clstep_fulfil_def:
 End
 
 Definition eval_clstep_amo_def:
-  eval_clstep_amo cid s M t_w var a_e v_e acq rel =
+  eval_clstep_amo arch cid s M t_w var a_e v_e acq rel =
   let
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
@@ -139,7 +149,7 @@ Definition eval_clstep_amo_def:
     v_rPre = MAXL [v_addr; s.bst_v_rNew; 
                   ifView (acq ∧ rel) s.bst_v_Rel;
                   ifView (acq ∧ rel) (MAX s.bst_v_rOld s.bst_v_wOld)];
-    v_rPost = MAX v_rPre (mem_read_view (s.bst_fwdb l) t_r);
+    v_rPost = MAX v_rPre (eval_read_view arch (acq ∧ rel) (s.bst_fwdb l) t_r);
 
     new_environ_opt = update_environ s.bst_environ var v_r;
     new_environ = THE new_environ_opt;
@@ -222,17 +232,20 @@ Definition eval_clstep_branch_def:
 End
 
 Definition eval_clstep_def:
-  eval_clstep cid p M s =
+  eval_clstep arch cid p M s =
   (case bir_get_current_statement p s.bst_pc of
   | NONE => []
   | SOME (BStmtB (BMCStmt_Load var a_e cast_opt xcl acq rel)) =>
-      LIST_BIND [0..LENGTH M] (λt. eval_clstep_read s M t var a_e cast_opt xcl acq rel)
+      LIST_BIND [0..LENGTH M] (λt. eval_clstep_read arch s M t var a_e cast_opt xcl acq rel)
   | SOME (BStmtB (BMCStmt_Store var_succ a_e v_e xcl acq rel)) =>
-      eval_clstep_xclfail s var_succ xcl ++
-      LIST_BIND s.bst_prom (λt. eval_clstep_fulfil cid s M t var_succ a_e v_e xcl acq rel)
+    let 
+      ss = LIST_BIND s.bst_prom (λt. eval_clstep_fulfil arch cid s M t var_succ a_e v_e xcl acq rel)
+    in
+      eval_clstep_xclfail s var_succ xcl ++ (TAKE 1 ss)
   | SOME (BStmtB (BMCStmt_Amo var a_e v_e acq rel)) =>
-      LIST_BIND s.bst_prom (λt_w.
-          eval_clstep_amo cid s M t_w var a_e v_e acq rel)
+    let 
+      ss = LIST_BIND s.bst_prom (λt_w.  eval_clstep_amo arch cid s M t_w var a_e v_e acq rel)
+    in (TAKE 1 ss)
   | SOME (BStmtB (BMCStmt_Fence K1 K2)) =>
       eval_clstep_fence s K1 K2
   | SOME (BStmtB (BMCStmt_Assign var e)) =>
@@ -250,7 +263,7 @@ Definition eval_clstep_def:
 End
 
 Definition eval_cstep_seq_store_def:
-  eval_cstep_seq_store cid s M var_succ a_e v_e xcl acq rel =
+  eval_cstep_seq_store arch cid s M var_succ a_e v_e xcl acq rel =
   let
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
@@ -266,16 +279,16 @@ Definition eval_cstep_seq_store_def:
     v_pre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
                   ifView rel (MAX s.bst_v_rOld s.bst_v_wOld);
                   ifView (xcl ∧ acq ∧ rel) s.bst_v_Rel;
-                  ifView xcl (THE s.bst_xclb).xclb_view];
+                  ifView (xcl ∧ arch = RISCV) (THE s.bst_xclb).xclb_view];
     v = MAX v_pre (s.bst_coh l);
   in
     if is_running ∧ IS_SOME l_opt ∧ IS_SOME v_opt
-    then MAP (λs'. (s', msg, v)) (eval_clstep_fulfil cid s' M' t var_succ a_e v_e xcl acq rel)
+    then MAP (λs'. (s', msg, v)) (eval_clstep_fulfil arch cid s' M' t var_succ a_e v_e xcl acq rel)
     else []
 End
 
 Definition eval_cstep_seq_amo_def:
-  eval_cstep_seq_amo cid s M var a_e v_e acq rel =
+  eval_cstep_seq_amo arch cid s M var a_e v_e acq rel =
   let
     is_running = (s.bst_status = BST_Running);
     l_opt = bir_eval_exp a_e s.bst_environ;
@@ -328,20 +341,20 @@ Definition eval_cstep_seq_amo_def:
 End
 
 Definition eval_cstep_seq_def:
-  eval_cstep_seq cid p (s,M) =
+  eval_cstep_seq arch cid p (s,M) =
   (case bir_get_current_statement p s.bst_pc of
   | NONE => []
   | SOME (BStmtB (BMCStmt_Load var a_e cast_opt xcl acq rel)) =>
-      MAP (λs'. (s',[])) (LIST_BIND [0..LENGTH M] (λt. eval_clstep_read s M t var a_e cast_opt xcl acq rel))
+      MAP (λs'. (s',[])) (LIST_BIND [0..LENGTH M] (λt. eval_clstep_read arch s M t var a_e cast_opt xcl acq rel))
   | SOME (BStmtB (BMCStmt_Store var_succ a_e v_e xcl acq rel)) =>
       MAP (λs'. (s',[])) (eval_clstep_xclfail s var_succ xcl) ++
-      MAP (λs'. (s',[])) (LIST_BIND s.bst_prom (λt. eval_clstep_fulfil cid s M t var_succ a_e v_e xcl acq rel)) ++
-      MAP (λ(s', msg, v). (s', [(msg, v)])) (eval_cstep_seq_store cid s M var_succ a_e v_e xcl acq rel)
+      MAP (λs'. (s',[])) (LIST_BIND s.bst_prom (λt. eval_clstep_fulfil arch cid s M t var_succ a_e v_e xcl acq rel)) ++
+      MAP (λ(s', msg, v). (s', [(msg, v)])) (eval_cstep_seq_store arch cid s M var_succ a_e v_e xcl acq rel)
   | SOME (BStmtB (BMCStmt_Amo var a_e v_e acq rel)) =>
       MAP (λs'. (s',[])) (LIST_BIND s.bst_prom (λt_w.
-          eval_clstep_amo cid s M t_w var a_e v_e acq rel)) ++
+          eval_clstep_amo arch cid s M t_w var a_e v_e acq rel)) ++
       MAP (λ(s', msg, v). (s', [(msg, v)])) (
-        eval_cstep_seq_amo cid s M var a_e v_e acq rel)
+        eval_cstep_seq_amo arch cid s M var a_e v_e acq rel)
   | SOME (BStmtB (BMCStmt_Fence K1 K2)) =>
       MAP (λs'. (s',[])) (eval_clstep_fence s K1 K2)
   | SOME (BStmtB (BMCStmt_Assign var e)) =>
@@ -359,18 +372,18 @@ Definition eval_cstep_seq_def:
 End 
 
 Definition eval_certify_def:
-  (eval_certify 0 cid p (s,M) =
+  (eval_certify arch 0 cid p (s,M) =
    (s.bst_prom = []))
   ∧
-  (eval_certify (SUC f) cid p (s,M) =
-   ((s.bst_prom = []) ∨ EXISTS (λ(s',ml). eval_certify f cid p (s',M ++ (MAP FST ml))) (eval_cstep_seq cid p (s,M))))
+  (eval_certify arch (SUC f) cid p (s,M) =
+   ((s.bst_prom = []) ∨ EXISTS (λ(s',ml). eval_certify arch f cid p (s',M ++ (MAP FST ml))) (eval_cstep_seq arch cid p (s,M))))
 End
 
 Definition eval_pfind_def:
-  eval_pfind 0 cid p (s,M) = []
+  eval_pfind arch 0 cid p (s,M) = []
   ∧
-  eval_pfind (SUC f) cid p (s,M) =
-  LIST_BIND (eval_cstep_seq cid p (s,M)) (λ(s',ml). ml ++ eval_pfind f cid p (s', M ++ (MAP FST ml)))
+  eval_pfind arch (SUC f) cid p (s,M) =
+  LIST_BIND (eval_cstep_seq arch cid p (s,M)) (λ(s',ml). ml ++ eval_pfind arch f cid p (s', M ++ (MAP FST ml)))
 End
 
 Definition UNIQ_def:
@@ -380,11 +393,11 @@ Definition UNIQ_def:
 End
 
 Definition eval_pstep'_def:
-  eval_pstep' f cid p (s, M) =
+  eval_pstep' arch f cid p (s, M) =
   let
-    msgs = MAP FST (FILTER (λ(msg, v). v ≤ LENGTH M) (eval_pfind f cid p (s,M))) 
+    msgs = MAP FST (FILTER (λ(msg, v). v ≤ LENGTH M) (eval_pfind arch f cid p (s,M))) 
   in
-  FILTER (λ(cid, s', M'). eval_certify f cid p (s',M'))
+  FILTER (λ(cid, s', M'). eval_certify arch f cid p (s',M'))
          (MAP (λmsg. (cid, s with bst_prom updated_by (CONS (LENGTH M + 1)), M ++ [msg]))
               (UNIQ msgs))
 End        
@@ -399,9 +412,9 @@ Definition eval_update_cores_def:
 End
 
 Definition eval_pstep_def:
-  eval_pstep f (cores, M) =
+  eval_pstep arch f (cores, M) =
     MAP (λ(cid, s', M'). (eval_update_cores cores (cid,s'), M'))
-        (LIST_BIND cores (λ(cid,p,s). eval_pstep' f cid p (s, M)))
+        (LIST_BIND cores (λ(cid,p,s). eval_pstep' arch f cid p (s, M)))
 End
 
 Definition is_halted_def:
@@ -412,25 +425,25 @@ End
         
 
 Definition eval_terminates_def:
-  (eval_terminates 0 M (cid, p, s) = ((is_halted s.bst_status) ∧ s.bst_prom = []))
+  (eval_terminates arch 0 M (cid, p, s) = ((is_halted s.bst_status) ∧ s.bst_prom = []))
   ∧
-  (eval_terminates (SUC f) M (cid, p, s) = 
+  (eval_terminates arch (SUC f) M (cid, p, s) = 
   if is_halted s.bst_status ∧ s.bst_prom = []
   then T
-  else (EXISTS (λs'. eval_terminates f M (cid, p, s')) (eval_clstep cid p M s)))
+  else (EXISTS (λs'. eval_terminates arch f M (cid, p, s')) (eval_clstep arch cid p M s)))
 End
 
 Definition eval_pstep_rep_def:
-  (eval_pstep_rep 0 f (cores, M) =
-   (if EVERY (eval_terminates f M) cores then [(cores,M)] else []))
+  (eval_pstep_rep arch 0 f (cores, M) =
+   (if EVERY (eval_terminates arch f M) cores then [(cores,M)] else []))
   ∧
-  (eval_pstep_rep (SUC r) f (cores, M) =
-   (if EVERY (eval_terminates f M) cores then [(cores,M)] else []) ++
-   LIST_BIND (eval_pstep f (cores, M)) (eval_pstep_rep r f))
+  (eval_pstep_rep arch (SUC r) f (cores, M) =
+   (if EVERY (eval_terminates arch f M) cores then [(cores,M)] else []) ++
+   LIST_BIND (eval_pstep arch f (cores, M)) (eval_pstep_rep arch r f))
 End
 
 Definition eval_promise_phase_def:
-  eval_promise_phase f (cores, M) = eval_pstep_rep f f (cores, M)
+  eval_promise_phase arch f (cores, M) = eval_pstep_rep arch f f (cores, M)
 End
 
 Definition cross_list_def:
@@ -441,18 +454,18 @@ Definition cross_list_def:
 End
 
 Definition eval_local_step_def:
-  (eval_local_step 0 (cid, p, s) M =
+  (eval_local_step arch 0 (cid, p, s) M =
   if is_halted s.bst_status ∧ s.bst_prom = [] then [s] else [])
   ∧ 
-  (eval_local_step (SUC f) (cid, p, s) M =
+  (eval_local_step arch (SUC f) (cid, p, s) M =
   if is_halted s.bst_status ∧ s.bst_prom = [] 
   then [s]
-  else LIST_BIND (eval_clstep cid p M s) (λs'. eval_local_step f (cid, p, s') M))
+  else LIST_BIND (eval_clstep arch cid p M s) (λs'. eval_local_step arch f (cid, p, s') M))
 End
 
 Definition eval_local_phase_def:
-  eval_local_phase f (cores, M) =
-  MAP (λcores. (cores,M))(cross_list (MAP (λcore. eval_local_step f core M) cores))
+  eval_local_phase arch f (cores, M) =
+  MAP (λcores. (cores,M))(cross_list (MAP (λcore. eval_local_step arch f core M) cores))
 End
 
 val _ = export_theory();

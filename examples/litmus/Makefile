@@ -30,7 +30,7 @@ tests/%.json: /opt/litmus-tests-riscv/tests/%.litmus ${LIFTER}
 
 tests/%.res: tests/%.json ${TESTER}
 	@mkdir -p $(dir $@)
-	${TESTER} $< > $@
+	${TESTER} $< $@
 
 .PHONY: sample all tools
 .SECONDARY:
