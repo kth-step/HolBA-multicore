@@ -12,16 +12,17 @@ EVALUATOR=./eval/evaluator.out
 sample: ${SAMPLE_RES}
 sample-json: ${SAMPLE_JSON}
 all: ${ALL_RES}
+all-json: ${ALL_JSON}
 
 
 clean: 
 	@rm -f ${ALL_JSON} ${ALL_RES}
 
 
-${LIFTER}: tools
+${LIFTER}: FORCE
 	${MAKE} -C tools
 
-${EVALUATOR}: eval
+${EVALUATOR}: FORCE
 	${MAKE} -C eval
 
 tests/%.json: /opt/litmus-tests-riscv/tests/%.litmus ${LIFTER}
@@ -32,5 +33,7 @@ tests/%.res: tests/%.json ${EVALUATOR}
 	@mkdir -p $(@D)
 	${EVALUATOR} $< $@
 
-.PHONY: sample all tools eval
+FORCE: ;
+
+.PHONY: sample all sample-json all-json
 .SECONDARY:
