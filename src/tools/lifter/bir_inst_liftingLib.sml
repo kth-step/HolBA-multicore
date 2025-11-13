@@ -809,7 +809,41 @@ fun get_patched_step_hex ms_v hex_code is_multicore =
      val simpset = if is_multicore
                    then std_multicore_ss
                    else std_ss
-     val lf_ms'_thm = (lf_ms'_CONV simpset) lf_ms'_tm handle UNCHANGED => REFL lf_ms'_tm
+
+     (* This prevents control dependencies in the branch condition from being lost in the multicore case *)
+     (* TODO: Move out of compute_eup? *)
+     fun get_lf_ms'_thm_multicore lf_ms'_tm =
+      let
+       val prot_cond = snd $ dest_comb lf_ms'_tm
+
+       (* TODO: Declare in a better place *)
+       val (PROTECTED_COND_tm, mk_PROTECTED_COND, dest_PROTECTED_COND, is_PROTECTED_COND) = HolKernel.syntax_fns3 "bir_lifter_general_aux" "PROTECTED_COND";
+      in
+       (* Detect potential syntactic conditional jumps *)
+       if is_PROTECTED_COND prot_cond
+       then
+	let
+	 val (c, b1, b2) = dest_PROTECTED_COND prot_cond;
+	 val b1_pc_n2w = snd $ dest_comb $ snd $ dest_comb $ fst $ dest_comb b1;
+	 val b2_pc_n2w = snd $ dest_comb $ snd $ dest_comb $ fst $ dest_comb b2;
+	in
+         (* If the branches are equal, prove the theorem in a guided way that doesn't lose
+          * syntactic control dependencies *)
+	 if term_eq b1_pc_n2w b2_pc_n2w
+	 then prove(“bmr_pc_lf (^(fst $ dest_eq $ concl $ #bmr_eval_thm mr))
+		     (^prot_cond) = Imm64 (if (^c) then (^b1_pc_n2w) else (^b2_pc_n2w))”,
+		    SIMP_TAC std_ss [(lf_ms'_CONV simpset) lf_ms'_tm]
+	      )
+	 else lf_ms'_CONV simpset lf_ms'_tm
+	end
+       else lf_ms'_CONV simpset lf_ms'_tm
+      end
+
+     val lf_ms'_thm =
+      if is_multicore
+      then get_lf_ms'_thm_multicore lf_ms'_tm
+      else
+       (lf_ms'_CONV simpset) lf_ms'_tm handle UNCHANGED => REFL lf_ms'_tm
      val res_imm = rhs (concl lf_ms'_thm)
 
      (* There are 3 cases supported:
