@@ -64,8 +64,7 @@ end
 open herdLitmusProgLib
 open listSyntax bir_programSyntax;
 val arch = "RISCV"
-val prog_list = ["amoswap.d.aqrl x2,x5,(x4)\nld x5,(x5)"]
-val prog = last $ parse_prog arch prog_list
+val prog = "lr.w.rl x2,(x4)"
 val x = EVAL ``bir_vars_of_program ^prog``
 val filename = "/tmp/hZEOwW.s.da"
 

@@ -29,11 +29,11 @@ Definition is_xcl_read_def:
       BStmt_Assign (BVar "MEM8_R" (BType_Mem Bit64 Bit8))
 		     (BExp_Store (BExp_Den (BVar "MEM8_Z" (BType_Mem Bit64 Bit8)))
                        (BExp_Den (BVar varname (BType_Imm Bit64))) BEnd_LittleEndian
-		       (BExp_Const (Imm32 0x1010101w))) => SOME l
+		       (BExp_Const (_))) => SOME l
      | BStmt_Assign (BVar "MEM_R" (BType_Mem Bit64 Bit8))
 		     (BExp_Store (BExp_Den (BVar "MEM_Z" (BType_Mem Bit64 Bit8)))
                        (BExp_Den (BVar varname (BType_Imm Bit64))) BEnd_LittleEndian
-		       (BExp_Const (Imm32 0x1010101w))) => SOME l
+		       (BExp_Const (_))) => SOME l
      | _ => NONE
   )  /\
   (is_xcl_read _ = NONE) 
@@ -85,7 +85,7 @@ Definition bir2bmc_statements_def:
 ∧ (bir2bmc_statements T acq rel ((BStmt_Assign var expr)::(BStmt_Assign var' expr')::l) =
      (case (get_read_args expr, get_fulfil_args expr') of
      | (SOME (a_e, cast_opt), SOME (a_e', v_e)) =>
-          [BMCStmt_Amo var a_e v_e acq rel]
+          [BMCStmt_Amo var a_e v_e acq rel] ++ bir2bmc_statements F acq rel l
      | (NONE, NONE) => []))
 ∧ (bir2bmc_statements F acq rel ((BStmt_Assign var expr)::l) =
 	(case (get_read_args expr, get_fulfil_args expr) of

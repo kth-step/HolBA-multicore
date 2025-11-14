@@ -161,7 +161,10 @@ Definition eval_clstep_fulfil_aux_def:
     v_opt = bir_eval_exp v_e s.bst_environ;
     v = THE v_opt;
     v_data = bir_eval_view_exp v_e s.bst_viewenv;
-    xcl_check = (xcl ⇒ IS_SOME s.bst_xclb ∧ EVERY (λt'. mem_is_loc M t' l ⇒ mem_is_cid M cid t') [SUC ((THE s.bst_xclb).xclb_time)..< t]);
+    xcl_check = (xcl ⇒ (IS_SOME s.bst_xclb) ∧ 
+      mem_is_loc M ((THE s.bst_xclb).xclb_time) l ⇒ 
+      EVERY (λt'. mem_is_loc M t' l ⇒ mem_is_cid M cid t') 
+            [SUC ((THE s.bst_xclb).xclb_time)..< t]);
     mem_check = (mem_get M l t = SOME <| loc := l; val := v; cid := cid |>);
     v_pre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
                   ifView (OrdW_ge ord OrdW_REL_PC) s.bst_v_rOld;
