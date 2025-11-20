@@ -39,7 +39,7 @@ fun mk_cores programs environs t =
 (* Promise mode execution *)
 fun promiseRun arch fuelTerm coresAndInitMemory =
     let
-	    val newCoresAndMemory = term_EVAL “eval_pstep_rep ^arch ^fuelTerm ^fuelTerm ^coresAndInitMemory”;
+	    val newCoresAndMemory = term_EVAL “eval_promise_phase ^arch ^fuelTerm ^coresAndInitMemory”;
     in newCoresAndMemory end;
 
 fun localRun arch fuelTerm coresAndMemory = 

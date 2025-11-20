@@ -112,8 +112,7 @@ Definition eval_clstep_read:
     l = THE l_opt;
     v_addr = bir_eval_view_exp a_e s.bst_viewenv;
     v_opt = mem_read M l t;
-    v_pre = MAXL [v_addr; 
-                 s.bst_v_rNew; 
+    v_pre = MAXL [v_addr; s.bst_v_rNew; 
                  ifView (OrdW_ge ordW OrdW_REL_PC) (MAX s.bst_v_rOld s.bst_v_wOld);
                  ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel];
     is_latest = EVERY (λt'. ~mem_is_loc M t' l) [SUC t.. (MAX v_pre (s.bst_coh l))];
@@ -234,7 +233,8 @@ Definition eval_clstep_amo_aux_def:
 
     (t_r, v_r) = last_t l M t_w;
     v_rPre = MAXL [v_addr; s.bst_v_rNew; 
-                  ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel];
+                 ifView (OrdW_ge ordW OrdW_REL_PC) (MAX s.bst_v_rOld s.bst_v_wOld);
+                 ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel];
     v_rPost = MAX v_rPre (eval_read_view arch ordR (s.bst_fwdb l) t_r);
 
     new_environ_opt = update_environ s.bst_environ var v_r;
@@ -246,9 +246,10 @@ Definition eval_clstep_amo_aux_def:
     v_data = bir_eval_view_exp v_e new_viewenv;
     mem_check = (mem_get M l t_w = SOME <| loc := l; val := v_w; cid := cid |>);
 
-    v_wPre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
-              ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_rOld;
-              ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_wOld];
+    v_wPre = MAXL [v_rPre; v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
+                  ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_rOld;
+                  ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_wOld;
+                  ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel];
     v_wPost = t_w;
     view_check = (MAX v_wPre (s.bst_coh l) < t_w);
 
@@ -261,8 +262,8 @@ Definition eval_clstep_amo_aux_def:
       bst_v_rOld  updated_by MAX v_rPost;
       bst_v_wOld  updated_by MAX v_wPost;
       bst_v_CAP   updated_by MAX v_addr;
-      bst_v_rNew  updated_by MAX (ifView (OrdR_ge ordR OrdR_ACQ_PC) v_rPost);
-      bst_v_wNew  updated_by MAX (ifView (OrdR_ge ordR OrdR_ACQ_PC) v_rPost);
+      bst_v_wNew  updated_by MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) v_wPost;
+      bst_v_rNew  updated_by MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) v_wPost;
       bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := F |>);
       bst_pc updated_by bir_pc_next;
       |>
@@ -352,8 +353,9 @@ End
 Definition eval_cstep_seq_store_def:
   eval_cstep_seq_store arch cid s M var_succ a_e v_e xcl acq rel =
   let
-    ord = OrdW_mk acq rel;
     is_running = (s.bst_status = BST_Running);
+    ordW = OrdW_mk acq rel;
+    ordR = OrdR_mk acq rel;
     l_opt = bir_eval_exp a_e s.bst_environ;
     l = THE l_opt;
     promise_check = (EVERY (λt'. ¬mem_is_loc M t' l) s.bst_prom);
@@ -366,8 +368,9 @@ Definition eval_cstep_seq_store_def:
     xcl_check = (xcl ⇒ (IS_SOME s.bst_xclb) ∧ 
       (mem_is_loc M ((THE s.bst_xclb).xclb_time) l ⇒ EVERY (λt'. mem_is_loc M t' l ⇒ mem_is_cid M t' cid) [SUC ((THE s.bst_xclb).xclb_time)..< t]));
     v_pre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
-                  ifView (OrdW_ge ord OrdW_REL_PC) s.bst_v_rOld;
-                  ifView (OrdW_ge ord OrdW_REL_PC) s.bst_v_wOld;
+                  ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_rOld;
+                  ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_wOld;
+                  ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel;
                   ifView (xcl ∧ arch = RISCV) (THE s.bst_xclb).xclb_view];
     view_check = (MAX v_pre (s.bst_coh l) < t);
     new_environ_opt = if xcl then update_environ s.bst_environ var_succ (BVal_Imm $ Imm64 0w) else SOME s.bst_environ;
@@ -378,7 +381,9 @@ Definition eval_cstep_seq_store_def:
                    bst_coh     updated_by (l =+ t);
                    bst_v_wOld  updated_by (MAX t);
                    bst_v_CAP   updated_by (MAX v_addr);
-                   bst_v_Rel   updated_by (MAX $ ifView (OrdW_ge ord OrdW_REL) t);
+                   bst_v_Rel   updated_by (MAX $ ifView (OrdW_ge ordW OrdW_REL) t);
+                   bst_v_wNew  updated_by (MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) t);
+                   bst_v_rNew  updated_by (MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) t);
                    bst_fwdb    updated_by (l =+ <| fwdb_time := t; fwdb_view := MAX v_addr v_data; fwdb_xcl := xcl |>);
                    bst_xclb    := if xcl then NONE else s.bst_xclb;
                    bst_pc      updated_by bir_pc_next |>
@@ -403,7 +408,8 @@ Definition eval_cstep_seq_amo_def:
 
     (t_r, v_r) = last_t l M t_w;
     v_rPre = MAXL [v_addr; s.bst_v_rNew; 
-                  ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel];
+                 ifView (OrdW_ge ordW OrdW_REL_PC) (MAX s.bst_v_rOld s.bst_v_wOld);
+                 ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel];
     v_rPost = MAX v_rPre (eval_read_view arch ordR (s.bst_fwdb l) t_r);
 
     new_environ_opt = update_environ s.bst_environ var v_r;
@@ -416,10 +422,10 @@ Definition eval_cstep_seq_amo_def:
 
     msg = <| loc := l; val := v_w; cid := cid |>;
 
-    v_wPre = MAXL [v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
-              ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_rOld;
-              ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_wOld
-              ];
+    v_wPre = MAXL [v_rPre; v_addr; v_data; s.bst_v_wNew; s.bst_v_CAP;
+                  ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_rOld;
+                  ifView (OrdW_ge ordW OrdW_REL_PC) s.bst_v_wOld;
+                  ifView (OrdR_ge ordR OrdR_ACQ) s.bst_v_Rel];
     v_wPost = t_w;
     view_check = (MAX v_wPre (s.bst_coh l) < t_w);
 
@@ -431,8 +437,8 @@ Definition eval_cstep_seq_amo_def:
       bst_v_rOld  updated_by MAX v_rPost;
       bst_v_wOld  updated_by MAX v_wPost;
       bst_v_CAP   updated_by MAX v_addr;
-      bst_v_rNew  updated_by MAX (ifView (OrdR_ge ordR OrdR_ACQ_PC) v_rPost);
-      bst_v_wNew  updated_by MAX (ifView (OrdR_ge ordR OrdR_ACQ_PC) v_rPost);
+      bst_v_wNew  updated_by MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) v_wPost;
+      bst_v_rNew  updated_by MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) v_wPost;
       bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := F |>);
       bst_pc updated_by bir_pc_next;
       |>
