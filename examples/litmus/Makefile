@@ -19,10 +19,8 @@ clean:
 	@rm -f ${ALL_JSON} ${ALL_RES}
 
 
-${LIFTER}: FORCE
+${EVALUATOR} ${LIFTER}:
 	${MAKE} -C tools
-
-${EVALUATOR}: FORCE
 	${MAKE} -C eval
 
 tests/%.json: /opt/litmus-tests-riscv/tests/%.litmus ${LIFTER}
@@ -33,7 +31,5 @@ tests/%.res: tests/%.json ${EVALUATOR}
 	@mkdir -p $(@D)
 	${EVALUATOR} $< $@
 
-FORCE: ;
-
-.PHONY: sample all sample-json all-json
+.PHONY: sample all sample-json all-json ${LIFTER} ${EVALUATOR}
 .SECONDARY:
