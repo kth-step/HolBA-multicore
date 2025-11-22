@@ -229,8 +229,12 @@ Definition eval_clstep_amo_aux_def:
     l_opt = bir_eval_exp a_e s.bst_environ;
     l = THE l_opt;
     v_addr = bir_eval_view_exp a_e s.bst_viewenv;
+
+    (* Check if no earlier promises to the same location *)
     promise_check = (EVERY (λt'. t' < t_w ⇒ ¬mem_is_loc M t' l) s.bst_prom);
 
+    (* Get the latest read before t_w to the same location *)
+    (* Effectively finds t_r such that ∀t'. t_r < t' < t_w ⇒ M(t').loc ≠ l *)
     (t_r, v_r) = last_t l M t_w;
     v_rPre = MAXL [v_addr; s.bst_v_rNew; 
                  ifView (OrdW_ge ordW OrdW_REL_PC) (MAX s.bst_v_rOld s.bst_v_wOld);
