@@ -36,10 +36,9 @@ val bmr_REWRS = (
    (type_rws ``:'a bir_machine_lifted_pc_t``) @
    (type_rws ``:'a bir_machine_lifted_imm_t``) @
    (type_rws ``:('a, 'b, 'c) bir_machine_lifted_mem_t``)
-)
-;
+);
 
-val bmr_ss = rewrites bmr_REWRS
+val bmr_ss = rewrites bmr_REWRS;
 (* TODO: end of TODO todo above*)
 
 
@@ -1416,22 +1415,18 @@ SIMP_TAC list_ss [bir_is_lifted_inst_block_COMPUTE_updates_FULL_REL_def,
   LET_THM]);
 
 
-val bir_is_lifted_inst_block_COMPUTE_updates_FULL_REL___INTRO_MEM =
-store_thm ("bir_is_lifted_inst_block_COMPUTE_updates_FULL_REL___INTRO_MEM",
-``!r bs e mres.
+Theorem bir_is_lifted_inst_block_COMPUTE_updates_FULL_REL___INTRO_MEM:
+!r bs e mres.
    bir_is_lifted_exp bs.bst_environ e (BLV_Mem mres) ==>
      (bir_is_lifted_inst_block_COMPUTE_updates_FULL_REL r bs (SOME mres) [] (IMAGE bir_var_name (bir_vars_of_exp e)) []
-        (SOME (BUpdateDescB (bmr_mem_var r) e (bir_eval_exp e bs.bst_environ) F)))``,
-
+        (SOME (BUpdateDescB (bmr_mem_var r) e (bir_eval_exp e bs.bst_environ) F)))
+Proof
 SIMP_TAC list_ss [bir_is_lifted_inst_block_COMPUTE_updates_FULL_REL_def,
   LET_THM, bir_updateB_desc_exp_def, bir_updateB_desc_value_def,
   bir_updateB_desc_var_def, IN_IMAGE] >>
-REPEAT STRIP_TAC >- (
-  `i = 0` by DECIDE_TAC >>
-  FULL_SIMP_TAC std_ss []
-) >- (
-  METIS_TAC[]
-));
+REPEAT STRIP_TAC >>
+METIS_TAC []
+QED
 
 
 val bir_is_lifted_inst_block_COMPUTE_updates_FULL_REL___ADD_IMM_UP_NONE =

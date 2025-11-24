@@ -63,3 +63,9 @@ config.env.sh
 # generally all .da files
 *.da
 
+
+# HOL object files and more
+.hol
+
+# HOL VS code extension
+.hol-vscode

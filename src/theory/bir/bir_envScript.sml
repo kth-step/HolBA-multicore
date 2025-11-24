@@ -257,10 +257,10 @@ val bir_envty_includes_vs_IMP_vs_consistent = store_thm("bir_envty_includes_vs_I
   REV_FULL_SIMP_TAC std_ss []
 );
 
-val bir_vs_consistent_IMP_includes_envty_of_vs = store_thm("bir_vs_consistent_IMP_includes_envty_of_vs", ``
+Theorem bir_vs_consistent_IMP_includes_envty_of_vs:
   !envty vs. (bir_vs_consistent vs) ==>
              (bir_envty_includes_vs (bir_envty_of_vs vs) vs)
-``,
+Proof
   SIMP_TAC std_ss [bir_vs_consistent_def, bir_envty_of_vs_def, bir_envty_includes_vs_def, bir_envty_includes_v_def] >>
   REPEAT STRIP_TAC >>
   RW_TAC std_ss [] >>
@@ -292,14 +292,9 @@ val bir_vs_consistent_IMP_includes_envty_of_vs = store_thm("bir_vs_consistent_IM
     ) >>
     `~(vs x)` by METIS_TAC [IN_APP] >>
     ASM_SIMP_TAC (std_ss) []
-  ) >|
-  [
-    Q.EXISTS_TAC `v` >>
-    fs[]
-  ,
-    ASM_SIMP_TAC std_ss [CHOICE_SING]
-  ]
-);
+  ) >> 
+  ASM_SIMP_TAC std_ss [CHOICE_SING]
+QED
 
 val bir_envty_includes_vs_EMPTY = store_thm("bir_envty_includes_vs_EMPTY", ``
   !envty. (bir_envty_includes_vs envty EMPTY)

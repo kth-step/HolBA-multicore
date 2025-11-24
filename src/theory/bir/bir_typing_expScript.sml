@@ -468,16 +468,17 @@ Cases_on `x` >> Cases_on `x'` >> (
 )
 );
 
-val bir_type_of_bir_exp_NONE = store_thm("bir_type_of_bir_exp_NONE",
-  ``!ex env.
+Theorem bir_type_of_bir_exp_NONE:
+  !ex env.
     (type_of_bir_exp ex = NONE) ==>
-    (bir_eval_exp ex env = NONE)``,
-
+    (bir_eval_exp ex env = NONE)
+Proof
 REPEAT STRIP_TAC >>
 Induct_on `ex` >> (
   REPEAT STRIP_TAC >>
   FULL_SIMP_TAC pure_ss [type_of_bir_exp_EQ_NONE_REWRS, bir_eval_exp_def]
-) >| [
+) 
+>| [
   (* Cast *)
   IMP_RES_TAC type_of_bir_exp_NOT_SOME_Imm >> (
     FULL_SIMP_TAC std_ss [bir_eval_cast_REWRS]
@@ -488,7 +489,8 @@ Induct_on `ex` >> (
   FULL_SIMP_TAC std_ss [bir_eval_cast_REWRS] >>
   Cases_on `v` >> (
     FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_cast_REWRS, type_of_bir_val_def]
-  ),
+  )
+  ,
 
   (* UnaryExp *)
   IMP_RES_TAC type_of_bir_exp_NOT_SOME_Imm >> (
@@ -499,7 +501,8 @@ Induct_on `ex` >> (
   FULL_SIMP_TAC std_ss [bir_eval_unary_exp_REWRS] >>
   Cases_on `v` >> (
     FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_unary_exp_REWRS, type_of_bir_val_def]
-  ),
+  )
+  ,
 
   (* BinExp *)
   IMP_RES_TAC type_of_2bir_exp_NOT_SOME_Imm >> (
@@ -518,7 +521,8 @@ Induct_on `ex` >> (
   (* 3rd case requires looking at the other variable *)
   Cases_on `v'` >> (
     FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_bin_exp_REWRS, type_of_bir_val_def]
-  ),
+  )
+  ,
 
   (* BinPred *)
   IMP_RES_TAC type_of_2bir_exp_NOT_SOME_Imm >> (
@@ -535,7 +539,8 @@ Induct_on `ex` >> (
   ) >>
   Cases_on `v'` >> (
     FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_bin_pred_REWRS, type_of_bir_val_def]
-  ),
+  )
+  ,
 
   (* MemEq *)
   Cases_on `type_of_bir_exp ex` >> Cases_on `type_of_bir_exp ex'` >> (
@@ -553,7 +558,8 @@ Induct_on `ex` >> (
     Cases_on `v'` >> (
       FULL_SIMP_TAC (std_ss++bir_type_ss) [bir_eval_memeq_REWRS, type_of_bir_val_def]
     )
-  ),
+  )
+  ,
 
   (* IfThenElse condition *)
   FULL_SIMP_TAC std_ss [BType_Bool_def] >>
@@ -562,10 +568,12 @@ Induct_on `ex` >> (
   ) >>
   IMP_RES_TAC type_of_bir_exp_THM >>
   QSPECL_X_ASSUM ``!env. _`` [`env`] >>
-  FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS, bir_eval_ifthenelse_REWRS_NONE],
+  FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS, bir_eval_ifthenelse_REWRS_NONE]
+  ,
 
   (* IfThenElse second argument NONE *)
-  FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS],
+  FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS]
+  ,
 
   (* IfThenElse type mismatch *)
   Cases_on `type_of_bir_exp ex'` >> (
@@ -576,7 +584,8 @@ Induct_on `ex` >> (
   ) >>
   IMP_RES_TAC type_of_bir_exp_THM >>
   REPEAT (QSPECL_X_ASSUM ``!env. _`` [`env`]) >>
-  FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS, bir_eval_ifthenelse_REWRS_NONE],
+  FULL_SIMP_TAC std_ss [bir_eval_ifthenelse_REWRS, bir_eval_ifthenelse_REWRS_NONE]
+  ,
 
   (* Load *)
   Cases_on `type_of_bir_exp ex` >> Cases_on `type_of_bir_exp ex'` >> (
@@ -599,7 +608,10 @@ Induct_on `ex` >> (
   ) >>
   Cases_on `x''' = 1` >> (
     FULL_SIMP_TAC std_ss [bir_number_of_mem_splits_EQ_SOME1]
-  ),
+  ) >>
+  Cases_on `b'` >> gs [type_of_bir_imm_def] >>
+  Cases_on `b` >> gs []
+  ,
 
   (* Store *)
   Cases_on `type_of_bir_exp ex` >> Cases_on `type_of_bir_exp ex'` >>
@@ -623,16 +635,17 @@ Induct_on `ex` >> (
   ) >>
   Cases_on `x'''' = 1` >> (
     FULL_SIMP_TAC std_ss [bir_number_of_mem_splits_EQ_SOME1]
-  )
+  ) >>
+  Cases_on `b'` >> gs [type_of_bir_imm_def] >>
+  Cases_on `b` >> gs []
 ]
-);
-
+QED
 
 (* ------------------------------------------------------------------------- *)
 (*  Looking at  variables used somewhere in an expression                    *)
 (* ------------------------------------------------------------------------- *)
 
-val bir_vars_of_exp_def = Define `
+Definition bir_vars_of_exp_def:
   (bir_vars_of_exp (BExp_Const _) = {}) /\
   (bir_vars_of_exp (BExp_MemConst _ _ _) = {}) /\
   (bir_vars_of_exp (BExp_Den v) = {v}) /\
@@ -643,7 +656,8 @@ val bir_vars_of_exp_def = Define `
   (bir_vars_of_exp (BExp_MemEq e1 e2) = (bir_vars_of_exp e1 UNION bir_vars_of_exp e2)) /\
   (bir_vars_of_exp (BExp_IfThenElse ec e1 e2) = (bir_vars_of_exp ec UNION bir_vars_of_exp e1 UNION bir_vars_of_exp e2)) /\
   (bir_vars_of_exp (BExp_Load me ae _ _) = (bir_vars_of_exp me UNION bir_vars_of_exp ae)) /\
-  (bir_vars_of_exp (BExp_Store me ae _ ve) = (bir_vars_of_exp me UNION bir_vars_of_exp ae UNION bir_vars_of_exp ve))`;
+  (bir_vars_of_exp (BExp_Store me ae _ ve) = (bir_vars_of_exp me UNION bir_vars_of_exp ae UNION bir_vars_of_exp ve))
+End
 
 
 val bir_vars_of_exp_THM = store_thm ("bir_vars_of_exp_THM",

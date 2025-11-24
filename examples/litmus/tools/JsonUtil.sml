@@ -16,7 +16,7 @@ sig
     val lookupField : Json.json -> string -> Json.json
     val hasField : string -> Json.json -> bool
     val testField : string -> (Json.json -> bool) -> Json.json -> bool
-    val asArray : Json.json -> Json.json vector
+    val asArray : Json.json -> Json.json list
     val arrayMap : (Json.json -> 'a) -> Json.json -> 'a list
     datatype edge
       = SEL of string
@@ -74,7 +74,7 @@ fun testField key pred (OBJECT flds) =
        | NONE => false)
   | testField _ _ _ = false
 
-fun asArray (ARRAY lst) = Vector.fromList lst
+fun asArray (ARRAY lst) = lst
   | asArray jv = raise NotArray jv
 
 fun arrayMap f (ARRAY lst) = map f lst

@@ -19,7 +19,7 @@ struct
        ^ boldcyan " - Message: " ^ yellow (exnMessage exn) ^ "\n"
      );
 
-  fun pp_HOL_exn {origin_structure, origin_function, message} =
+  fun pp_HOL_exn {origin_structure, origin_function, source_location, message} =
     print (
       boldred "HOL_ERR:\n"
        ^ boldcyan " - Structure: " ^ yellow origin_structure ^ "\n"

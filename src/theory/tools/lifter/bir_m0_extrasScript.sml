@@ -332,11 +332,6 @@ val m0_LIFT_STORE_HALF_BE_CHANGE_INTERVAL = store_thm ("m0_LIFT_STORE_HALF_BE_CH
 SIMP_TAC (list_ss++wordsLib.WORD_ss) [m0_mem_store_half_BE_def, WI_MEM_WI_size, WI_ELEM_LIST_compute, w2n_n2w, updateTheory.APPLY_UPDATE_THM, FUNS_EQ_OUTSIDE_WI_size_def]);
 
 
-val m0_LIFT_STORE_HALF_LE_CHANGE_INTERVAL = store_thm ("m0_LIFT_STORE_HALF_LE_CHANGE_INTERVAL",
-``!va vv mem_f. FUNS_EQ_OUTSIDE_WI_size va 2 (m0_mem_store_half_LE va vv mem_f) mem_f``,
-SIMP_TAC (list_ss++wordsLib.WORD_ss) [m0_mem_store_half_LE_def, WI_MEM_WI_size, WI_ELEM_LIST_compute, w2n_n2w, updateTheory.APPLY_UPDATE_THM, FUNS_EQ_OUTSIDE_WI_size_def]);
-
-
 val m0_LIFT_STORE_BYTE_CHANGE_INTERVAL = store_thm ("m0_LIFT_STORE_BYTE_CHANGE_INTERVAL",
 ``!va vv mem_f. FUNS_EQ_OUTSIDE_WI_size va 1 (m0_mem_store_byte va vv mem_f) mem_f``,
 SIMP_TAC (list_ss++wordsLib.WORD_ss) [m0_mem_store_byte_def, WI_MEM_WI_size, WI_ELEM_LIST_compute, w2n_n2w, updateTheory.APPLY_UPDATE_THM, FUNS_EQ_OUTSIDE_WI_size_def]);

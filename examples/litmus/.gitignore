@@ -1,8 +1,6 @@
-lift_test
-run_test
 *.litmus
 *.o
+*.out
 *.ui
 *.ou
 Holmakefile
-

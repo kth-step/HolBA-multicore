@@ -610,9 +610,8 @@ end);
 (* ================= *)
 
 val bir_update_mmap_def = Define `
-    (!mmap aty a.      (bir_update_mmap aty mmap a [] = mmap)) /\
-    (!mmap aty a v vs. (bir_update_mmap aty mmap a (v::vs) =
-                        bir_update_mmap aty (FUPDATE mmap ((bir_mem_addr aty a), v2n v)) (SUC a) vs))`;
+    (bir_update_mmap aty mmap a [] = mmap) /\
+    (bir_update_mmap aty mmap a (v::vs) = bir_update_mmap aty (FUPDATE mmap ((bir_mem_addr aty a), v2n v)) (SUC a) vs)`;
 
 val bir_update_mmap_UNCHANGED = store_thm ("bir_update_mmap_UNCHANGED",
   ``!aty mmap a vs a'.
@@ -788,20 +787,33 @@ val bir_store_in_mem_used_addrs_def = Define `
   bir_load_from_mem_used_addrs vty (type_of_bir_imm v) aty en a`;
 
 
-val bir_store_in_mem_used_addrs_THM = store_thm ("bir_store_in_mem_used_addrs_THM",
-  ``!a en vty aty v mmap mmap'.
+Theorem bir_store_in_mem_used_addrs_THM:
+  !a en vty aty v mmap mmap'.
        (bir_store_in_mem vty aty v mmap en a = SOME mmap') ==>
        (!addr. ~(addr IN bir_store_in_mem_used_addrs vty v aty en a) ==>
-               (bir_load_mmap mmap' addr = bir_load_mmap mmap addr))``,
-
+               (bir_load_mmap mmap' addr = bir_load_mmap mmap addr))
+Proof
 SIMP_TAC std_ss [bir_store_in_mem_used_addrs_def, bir_load_from_mem_used_addrs_def,
   bir_store_in_mem_EQ_SOME, GSYM LEFT_FORALL_IMP_THM] >>
 SIMP_TAC (list_ss++bir_endian_ss) [DISJ_IMP_THM, LEFT_AND_OVER_OR, FORALL_AND_THM,
   listTheory.MEM_MAP, rich_listTheory.MEM_COUNT_LIST] >>
-REPEAT STRIP_TAC >> (
+REPEAT STRIP_TAC
+>- ( 
   MATCH_MP_TAC bir_update_mmap_UNCHANGED >>
   METIS_TAC[bitstring_split_LENGTHS_b2v, listTheory.LENGTH_REVERSE]
-));
+)
+>- ( 
+  MATCH_MP_TAC bir_update_mmap_UNCHANGED >>
+  rpt strip_tac >>
+  METIS_TAC[bitstring_split_LENGTHS_b2v, listTheory.LENGTH_REVERSE]
+)
+>- (
+  MATCH_MP_TAC bir_update_mmap_UNCHANGED >>
+  rpt strip_tac >>
+  imp_res_tac bitstring_split_LENGTHS_b2v >>
+  gs []
+)
+QED
 
 
 

@@ -788,8 +788,8 @@ val bir_is_lifted_imm_exp_LOAD_NO_ENDIAN = save_thm ("bir_is_lifted_imm_exp_LOAD
 (****************)
 
 val bir_update_mmap_words_def = Define `
-    (!mmap a.      (bir_update_mmap_words mmap a [] = mmap)) /\
-    (!mmap a v vs. (bir_update_mmap_words mmap a (v::vs) =
+    ((bir_update_mmap_words mmap a [] = mmap)) /\
+    ((bir_update_mmap_words mmap a (v::vs) =
                         bir_update_mmap_words ((a =+ v2w v) mmap) (a + 1w) vs))`;
 
 val bir_store_in_mem_words_def = Define `bir_store_in_mem_words

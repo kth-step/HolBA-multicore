@@ -129,6 +129,20 @@ Definition bmc_vars_of_stmtB_def:
   /\ bmc_vars_of_stmtB (BMCStmt_Assume exp) = bir_varset_of_exp exp
 End
 
+Definition LIST2SET_def:
+  LIST2SET [] = EMPTY
+  ∧
+  LIST2SET (h::t) = {h} UNION (LIST2SET t)
+End
+
+Theorem LIST_TO_SET_THM:
+  ∀l. LIST2SET l = LIST_TO_SET l
+Proof
+  Induct_on ‘l’ >>
+  rpt strip_tac >>
+  fs [LIST2SET_def, INSERT_DEF, UNION_DEF]
+QED
+
 val bir_vars_of_label_exp_def = Define `
   (bir_vars_of_label_exp (BLE_Label l) = {}) /\
   (bir_vars_of_label_exp (BLE_Exp e) = bir_vars_of_exp e)`;
@@ -144,18 +158,18 @@ val bir_vars_of_stmt_def = Define `
   (bir_vars_of_stmt (BStmtB s) = bir_vars_of_stmtB s)`;
 
 val bir_vars_of_block_def = Define `bir_vars_of_block bl <=>
-  ((BIGUNION (IMAGE bir_vars_of_stmtB (LIST_TO_SET bl.bb_statements))) UNION
+  ((BIGUNION (IMAGE bir_vars_of_stmtB (LIST2SET bl.bb_statements))) UNION
    (bir_vars_of_stmtE bl.bb_last_statement))`;
 
 val bmc_vars_of_block_def = Define `bmc_vars_of_block bl <=>
-  ((BIGUNION (IMAGE bmc_vars_of_stmtB (LIST_TO_SET bl.bb_statements))) UNION
+  ((BIGUNION (IMAGE bmc_vars_of_stmtB (LIST2SET bl.bb_statements))) UNION
    (bir_vars_of_stmtE bl.bb_last_statement))`;
 
 val bir_vars_of_program_def = Define `bir_vars_of_program (BirProgram p) <=>
-  (BIGUNION (IMAGE bir_vars_of_block (LIST_TO_SET p)))`;
+  (BIGUNION (IMAGE bir_vars_of_block (LIST2SET p)))`;
 
 val bmc_vars_of_program_def = Define `bmc_vars_of_program (BirProgram p) <=>
-  (BIGUNION (IMAGE bmc_vars_of_block (LIST_TO_SET p)))`;
+  (BIGUNION (IMAGE bmc_vars_of_block (LIST2SET p)))`;
 
 val bir_vars_of_block_ALT_DEF = store_thm ("bir_vars_of_block_ALT_DEF",
   ``!bl. bir_vars_of_block bl = BIGUNION (IMAGE bir_vars_of_stmt (bir_stmts_of_block bl))``,
@@ -163,7 +177,7 @@ val bir_vars_of_block_ALT_DEF = store_thm ("bir_vars_of_block_ALT_DEF",
 SIMP_TAC std_ss [EXTENSION] >>
 SIMP_TAC (std_ss++boolSimps.EQUIV_EXTRACT_ss) [bir_vars_of_block_def, bir_stmts_of_block_def,
   IN_BIGUNION, PULL_EXISTS, IN_UNION, bir_vars_of_stmt_def,
-  IN_IMAGE, IN_INSERT, LEFT_AND_OVER_OR, EXISTS_OR_THM]);
+  IN_IMAGE, IN_INSERT, LEFT_AND_OVER_OR, EXISTS_OR_THM, LIST_TO_SET_THM]);
 
 
 val bir_vars_of_program_ALT_DEF = store_thm ("bir_vars_of_program_ALT_DEF",
@@ -173,7 +187,7 @@ val bir_vars_of_program_ALT_DEF = store_thm ("bir_vars_of_program_ALT_DEF",
 Cases >>
 SIMP_TAC std_ss [EXTENSION] >>
 SIMP_TAC std_ss [bir_vars_of_program_def, bir_stmts_of_prog_def,
-  IN_BIGUNION, PULL_EXISTS, IN_IMAGE, bir_vars_of_block_ALT_DEF] >>
+  IN_BIGUNION, PULL_EXISTS, IN_IMAGE, bir_vars_of_block_ALT_DEF, LIST_TO_SET_THM] >>
 METIS_TAC[]);
 
 
@@ -241,7 +255,7 @@ val bir_changed_vars_of_block_SUBST_all_vars = store_thm (
 ``!bl. bir_changed_vars_of_block bl SUBSET bir_vars_of_block bl``,
 
 SIMP_TAC std_ss [bir_changed_vars_of_block_def, bir_vars_of_block_def,
-  SUBSET_DEF, IN_UNION, IN_BIGUNION, IN_IMAGE, PULL_EXISTS] >>
+  SUBSET_DEF, IN_UNION, IN_BIGUNION, IN_IMAGE, PULL_EXISTS,LIST_TO_SET_THM] >>
 METIS_TAC[SUBSET_DEF, bir_changed_vars_of_stmtB_SUBST_all_vars]);
 
 val bir_changed_vars_of_program_SUBST_all_vars = store_thm (
@@ -250,7 +264,7 @@ val bir_changed_vars_of_program_SUBST_all_vars = store_thm (
 
 Cases >>
 SIMP_TAC std_ss [bir_changed_vars_of_program_def, bir_vars_of_program_def,
-  SUBSET_DEF, IN_UNION, IN_BIGUNION, IN_IMAGE, PULL_EXISTS] >>
+  SUBSET_DEF, IN_UNION, IN_BIGUNION, IN_IMAGE, PULL_EXISTS,LIST_TO_SET_THM] >>
 METIS_TAC[SUBSET_DEF, bir_changed_vars_of_block_SUBST_all_vars]);
 
 
@@ -402,7 +416,7 @@ DISJ1_TAC >>
 rename1 `MEM stmt _` >>
 Q.EXISTS_TAC `stmt` >>
 MP_TAC (Q.SPECL [`stmt`] bir_exp_vars_of_stmtB) >>
-ASM_SIMP_TAC std_ss [SUBSET_DEF, IN_BIGUNION, IN_IMAGE, PULL_EXISTS] >>
+ASM_SIMP_TAC std_ss [SUBSET_DEF, IN_BIGUNION, IN_IMAGE, PULL_EXISTS,LIST_TO_SET_THM] >>
 METIS_TAC[]);
 
 
@@ -413,8 +427,58 @@ Cases >>
 MP_TAC bir_exp_vars_of_block >>
 SIMP_TAC std_ss [bir_exps_of_program_def,
   bir_vars_of_program_def, SUBSET_DEF, IN_UNION,
-  IN_BIGUNION, PULL_EXISTS, IN_IMAGE] >>
+  IN_BIGUNION, PULL_EXISTS, IN_IMAGE,LIST_TO_SET_THM] >>
 METIS_TAC[]);
 
+Definition flat_setlist_def:
+  flat_setlist l <=>
+  FOLDL (\acc x. x UNION acc) EMPTY l
+End
+
+Definition bir_vars_of_block_as_setlist_def:
+  bir_vars_of_block_as_setlist bl <=>
+  ((bir_vars_of_stmtE bl.bb_last_statement)::(MAP bir_vars_of_stmtB bl.bb_statements))
+End
+
+Definition bir_vars_of_program_as_setlist_def:
+  bir_vars_of_program_as_setlist (BirProgram p) <=>
+  (flat_setlist (FLAT (MAP bir_vars_of_block_as_setlist p)))
+End
+
+Definition bmc_varset_of_basic_stmt_def:
+   bmc_varset_of_basic_stmt (BMCStmt_Assign var exp) = { var } UNION bir_varset_of_exp exp
+/\ bmc_varset_of_basic_stmt (BMCStmt_Assert exp) = bir_varset_of_exp exp
+/\ bmc_varset_of_basic_stmt (BMCStmt_Assume exp) = bir_varset_of_exp exp
+/\ bmc_varset_of_basic_stmt (BMCStmt_Load var exp _ _ _ _) =  { var } UNION bir_varset_of_exp exp
+/\ bmc_varset_of_basic_stmt (BMCStmt_Store var exp exp' _ _ _) =  { var } UNION bir_varset_of_exp exp UNION bir_varset_of_exp exp'
+/\ bmc_varset_of_basic_stmt (BMCStmt_Amo var exp exp' _ _) =  { var } UNION bir_varset_of_exp exp UNION bir_varset_of_exp exp'
+/\ bmc_varset_of_basic_stmt _ = {}
+End
+
+Definition bmc_varset_of_label_exp_def:
+   bmc_varset_of_label_exp (BLE_Label _) = {}
+/\ bmc_varset_of_label_exp (BLE_Exp exp) = bir_varset_of_exp exp
+End
+
+Definition bmc_varset_of_end_stmt_def:
+   bmc_varset_of_end_stmt (BStmt_Jmp lexp) = bir_varset_of_label_exp lexp
+/\ bmc_varset_of_end_stmt (BStmt_CJmp cond exp1 exp2) = bir_varset_of_exp cond UNION bmc_varset_of_label_exp exp1 UNION bmc_varset_of_label_exp exp2
+/\ bmc_varset_of_end_stmt (BStmt_Halt exp) = bir_varset_of_exp exp
+End
+
+Definition bmc_varset_of_stmt_def:
+   bmc_varset_of_stmt (BStmtB bstmt) = bmc_varset_of_basic_stmt bstmt
+/\ bmc_varset_of_stmt (BStmtE estmt) = bmc_varset_of_end_stmt estmt
+End
+
+Definition bmc_varset_of_program_def:
+bmc_varset_of_program (BirProgram blocks) =
+	FOLDR (\a b. a UNION b)
+		{}
+		(MAP (\bl. FOLDR (\a b. a UNION b)
+							(bmc_varset_of_end_stmt bl.bb_last_statement)
+							(MAP bmc_varset_of_basic_stmt bl.bb_statements))
+				 blocks)
+End
 
 val _ = export_theory();

@@ -16,6 +16,11 @@ val bir_stmtB_is_not_assume_def = Define `
   (bir_stmtB_is_not_assume _ = T)
 `;
 
+val bir_state_t_bst_status_fupd = DB.fetch "bir_program" "bir_state_t_fn_updates";
+val bir_state_t_bst_environ_fupd = DB.fetch "bir_program" "bir_state_t_fn_updates";
+val bir_state_t_bst_status = DB.fetch "bir_program" "bir_state_t_accessors";
+val bir_state_t_bst_pc = DB.fetch "bir_program" "bir_state_t_accessors";
+
 val bir_stmtB_not_assume_never_assumviol =
   store_thm ("bir_stmtB_not_assume_never_assumviol",
   ``!stmtb st obs st'.

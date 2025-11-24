@@ -368,7 +368,7 @@ open bir_inst_liftingHelpersLib;
 
   fun get_block_estmt_labels block = 
     let
-      val (_, _, _, estmt) = dest_bir_block block
+      val (_,_,_, estmt) = dest_bir_block block
     in
       if is_BStmt_Jmp estmt
       then [dest_BStmt_Jmp estmt]
@@ -442,7 +442,7 @@ end;
     let
       val block = List.find (fn block =>
 	let
-	  val (label, _, _, end_statement) = dest_bir_block block
+	  val (label, _,_, end_statement) = dest_bir_block block
           (* TODO: Move these function definitions outside for minimum clutter? *)
 	  (*val label = (snd o dest_eq o concl o EVAL) label;*)
 	  fun is_lbl_in_wps lbl =
@@ -493,7 +493,7 @@ end;
 *)
 	SOME (bl) =>
 	  let
-            val (label, _, _, _) = dest_bir_block bl
+            val (label,_, _, _) = dest_bir_block bl
             val wpsdom1 = label::wpsdom
 
 	    val _ = if (!debug_trace > 1)
@@ -516,7 +516,7 @@ end;
 	      List.filter (
 		fn block =>
 		  let
-		    val (label_el, _, _, _) = dest_bir_block block;
+		    val (label_el,_, _, _) = dest_bir_block block;
 		  in
 		    not (cmp_label label label_el)
 		  end

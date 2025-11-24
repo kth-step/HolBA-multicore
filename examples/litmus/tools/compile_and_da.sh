@@ -2,18 +2,28 @@
 DIR=$(dirname "${BASH_SOURCE[0]}")
 source $DIR/../../../config.env.sh
 
-CROSS=${HOLBA_GCC_RISCV64_CROSS}
-#CROSS=riscv64-elf-
+set -e
+
+case "$1" in
+  RISCV)
+	CROSS=$HOLBA_GCC_RISCV64_CROSS
+	FLAGS="-march=rv64ia"
+	;;
+  AArch64)
+	CROSS=$HOLBA_GCC_ARM8_CROSS
+	FLAGS="-march=armv8.3-a"
+	;;
+  *) echo "Unknown architecture in CROSS=$CROSS" >&2; exit 1 ;;
+esac
+
 AS=${CROSS}as
 OBJDUMP=${CROSS}objdump
-
-AS_FLAGS=-march=rv64ima
 
 TMP_S=$(mktemp /tmp/XXXXXX.s)
 TMP_BIN=${TMP_S}.bin
 TMP_DA=${TMP_S}.da
 
-cat - > $TMP_S && \
-	$AS $AS_FLAGS $TMP_S -o $TMP_BIN && \
-	$OBJDUMP -d $TMP_BIN > $TMP_DA && \
-	printf $TMP_DA
+cat - > $TMP_S
+$AS $FLAGS $TMP_S -o $TMP_BIN
+$OBJDUMP -d $TMP_BIN > $TMP_DA
+printf $TMP_DA

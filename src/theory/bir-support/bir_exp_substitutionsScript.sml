@@ -27,37 +27,29 @@ REPEAT STRIP_TAC >>
 REPEAT CASE_TAC);
 
 val bir_exp_subst_def = Define `
-   (!s n. bir_exp_subst s (BExp_Const n) = (BExp_Const n)) /\
-   (!s aty vty mmap. bir_exp_subst s (BExp_MemConst aty vty mmap) = (BExp_MemConst aty vty mmap)) /\
-   (!s v. bir_exp_subst s (BExp_Den v) = bir_exp_subst_var s v) /\
-   (!s ct e ty.
-      bir_exp_subst s (BExp_Cast ct e ty) =
+   (bir_exp_subst s (BExp_Const n) = (BExp_Const n)) /\
+   (bir_exp_subst s (BExp_MemConst aty vty mmap) = (BExp_MemConst aty vty mmap)) /\
+   (bir_exp_subst s (BExp_Den v) = bir_exp_subst_var s v) /\
+   (bir_exp_subst s (BExp_Cast ct e ty) =
       BExp_Cast ct (bir_exp_subst s e) ty) /\
-   (!s et e.
-      bir_exp_subst s (BExp_UnaryExp et e) =
+   (bir_exp_subst s (BExp_UnaryExp et e) =
       BExp_UnaryExp et (bir_exp_subst s e)) /\
-   (!s et e1 e2.
-      bir_exp_subst s (BExp_BinExp et e1 e2) =
+   (bir_exp_subst s (BExp_BinExp et e1 e2) =
       BExp_BinExp et (bir_exp_subst s e1)
         (bir_exp_subst s e2)) /\
-   (!s pt e1 e2.
-      bir_exp_subst s (BExp_BinPred pt e1 e2) =
+   (bir_exp_subst s (BExp_BinPred pt e1 e2) =
       BExp_BinPred pt (bir_exp_subst s e1)
         (bir_exp_subst s e2)) /\
-   (!s me1 me2.
-      bir_exp_subst s (BExp_MemEq me1 me2) =
+   (bir_exp_subst s (BExp_MemEq me1 me2) =
       BExp_MemEq (bir_exp_subst s me1)
         (bir_exp_subst s me2)) /\
-   (!s c et ef.
-      bir_exp_subst s (BExp_IfThenElse c et ef) =
+   (bir_exp_subst s (BExp_IfThenElse c et ef) =
       BExp_IfThenElse (bir_exp_subst s c) (bir_exp_subst s et)
         (bir_exp_subst s ef)) /\
-   (!s mem_e a_e en ty.
-      bir_exp_subst s (BExp_Load mem_e a_e en ty) =
+   (bir_exp_subst s (BExp_Load mem_e a_e en ty) =
       BExp_Load (bir_exp_subst s mem_e) (bir_exp_subst s a_e) en
         ty) /\
-   (!s mem_e a_e en v_e.
-     bir_exp_subst s (BExp_Store mem_e a_e en v_e) =
+   (bir_exp_subst s (BExp_Store mem_e a_e en v_e) =
      BExp_Store (bir_exp_subst s mem_e) (bir_exp_subst s a_e) en
        (bir_exp_subst s v_e))`;
 

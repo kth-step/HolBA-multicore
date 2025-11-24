@@ -1032,7 +1032,7 @@ REPEAT STRIP_TAC >>
   METIS_TAC[pairTheory.PAIR] >>
 `(ol1 = ol2) /\ (n1 = n2) /\ bir_state_EQ_FOR_VARS vs st1' st2'` by (
   MP_TAC (Q.SPECL [`vs`, `bl.bb_statements`, `st1`, `st2`, `[]`, `0`] bir_vars_of_exec_stmtsB_THM) >>
-  FULL_SIMP_TAC std_ss [bir_vars_of_block_def, UNION_SUBSET, LET_THM]
+  FULL_SIMP_TAC std_ss [bir_vars_of_block_def, UNION_SUBSET, LET_THM,LIST_TO_SET_THM]
 ) >>
 REPEAT BasicProvers.VAR_EQ_TAC >>
 `bir_vars_of_stmtE bl.bb_last_statement SUBSET vs` by (

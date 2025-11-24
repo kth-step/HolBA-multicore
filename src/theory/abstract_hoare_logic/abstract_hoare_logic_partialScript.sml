@@ -154,15 +154,11 @@ subgoal `!l1'. (l1' IN ls1') ==> (abstract_jgmt m l1' ls2 (\s. (m.pc s IN ls1' =
 ) >>
 imp_res_tac abstract_seq_rule_thm >>
 gs [abstract_jgmt_def] >>
-subgoal `s' = ms'` >- (
- (* Both reached by m.weak ms ls2 *)
-  metis_tac [weak_unique_thm]
-) >>
 subgoal `m.pc ms' IN ls2` >- (
  (* Reached by m.weak ms ls2 *)
   metis_tac [weak_pc_in_thm]
 ) >>
-metis_tac []
+metis_tac [weak_unique_thm]
 QED
 
 Definition weak_partial_loop_contract_def:

@@ -27,16 +27,16 @@ export PATH=${POLY_DIR}/bin:$PATH
 export LD_LIBRARY_PATH=${POLY_DIR}/lib:$LD_LIBRARY_PATH
 
 # use a default hol4 version if it is not specified in the environment
-HOL4_VERSION="kananaskis-14"
+HOL4_VERSION="master"
 if [[ ! -z "${HOLBA_HOL4_VERSION}" ]]; then
   HOL4_VERSION=${HOLBA_HOL4_VERSION}
 fi
 
 # HOL4 source and branch
 GIT_URL=https://github.com/HOL-Theorem-Prover/HOL.git
-GIT_IS_TAG=1
+GIT_IS_TAG=0
 
-HOL4_DIR=${HOLBA_OPT_DIR}/hol_k14
+HOL4_DIR=${HOLBA_OPT_DIR}/hol_t2
 
 
 ##################################################################
@@ -103,4 +103,3 @@ do
   cd "${HOL4_DIR}/${dir}"
   ${HOL4_DIR}/bin/Holmake
 done
-

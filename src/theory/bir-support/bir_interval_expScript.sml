@@ -102,8 +102,7 @@ val WI_ELEM_LIST_def = Define `
   (WI_ELEM_LIST b 0 = []) /\
   (WI_ELEM_LIST b (SUC n) = b::(WI_ELEM_LIST (b+1w) n))`;
 
-val WI_ELEM_LIST_compute = save_thm ("WI_ELEM_LIST_compute",
-  CONV_RULE (numLib.SUC_TO_NUMERAL_DEFN_CONV) WI_ELEM_LIST_def);
+val WI_ELEM_LIST_compute = DB.fetch "-" "WI_ELEM_LIST_compute";
 
 val WI_MEM_WI_size = store_thm ("WI_MEM_WI_size",
 ``!sz b (w:'a word).

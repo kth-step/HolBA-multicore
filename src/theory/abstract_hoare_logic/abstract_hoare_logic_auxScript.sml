@@ -699,12 +699,9 @@ Cases_on `n = 0` >- (
   PAT_ASSUM ``weak_model m`` (fn thm => fs [HO_MATCH_MP (fst $ EQ_IMP_RULE (Q.SPEC `m` weak_model_def)) thm]) >>
   qexists_tac `1` >>
   fs [] >>
-  metis_tac [weak_pc_in_thm, pred_setTheory.SUBSET_THM],
-
+  metis_tac [weak_pc_in_thm, pred_setTheory.SUBSET_THM]
+  ,
   rpt strip_tac >>
-  subgoal `n_l' = 0` >- (
-   fs [] 
-  ) >>
   fs [weak_exec_n_def, FUNPOW_OPT_compute]
  ]
 ) >>
@@ -788,9 +785,6 @@ Cases_on `n'' = n'` >- (
  ) >>
  fs [whileTheory.OLEAST_EQ_SOME] >>
  rpt strip_tac >>
- subgoal `n_l = 0` >- (
-  fs []
- ) >>
  fs [weak_exec_n_def, FUNPOW_OPT_compute]
 ) >>
 subgoal `n'' < n'` >- (

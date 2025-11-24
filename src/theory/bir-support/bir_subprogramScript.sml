@@ -364,7 +364,7 @@ Cases_on `prog1` >>
 Cases_on `prog2` >>
 METIS_TAC [bir_vars_of_program_def, BIGUNION_IMAGE_set_SUBSET,
            bir_is_subprogram_BLOCKS_SUBLIST,
-           SUBSET_BIGUNION_I, IMAGE_IN]
+           SUBSET_BIGUNION_I, IMAGE_IN,LIST_TO_SET_THM]
 ); 
 
 val bir_env_vars_are_initialised_SUBPROGRAM =

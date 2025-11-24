@@ -1,22 +1,33 @@
-HOL=../../opt/hol_k14/bin/hol
-POLYC=../../opt/polyml_v5.8.1/bin/polyc
+ALL_LIST=$(shell cat all.lst)
+ALL_JSON=$(patsubst /opt/litmus-tests-riscv/tests/%.litmus,tests/%.json,$(ALL_LIST))
+ALL_RES=$(patsubst /opt/litmus-tests-riscv/tests/%.litmus,tests/%.res,$(ALL_LIST))
 
-SHELL=/bin/bash
+LIFTER=./tools/lifter.out
+EVALUATOR=./eval/evaluator.out
 
-.PHONY: all clean
-all: lift_test run_test
-clean:
-	rm -f lift_test run_test *.o
+all: ${ALL_RES}
+all-json: ${ALL_JSON}
 
-.PHONY: heap
-heap:
-	../../opt/hol_k14/bin/Holmake
 
-%.o: %.sml heap
-	$(HOL) -q $< <<< "val _ = PolyML.export(\"$*\", main)" >/dev/null
+clean: 
+	@rm -f ${ALL_JSON} ${ALL_RES}
 
-lift_test: lift_test.o 
-	$(POLYC) $< -o $@
 
-run_test: run_test.o 
-	$(POLYC) $< -o $@
+${EVALUATOR}: FORCE
+	${MAKE} -C eval
+
+${LIFTER}: FORCE
+	${MAKE} -C tools
+
+tests/%.json: /opt/litmus-tests-riscv/tests/%.litmus ${LIFTER}
+	@mkdir -p $(@D)
+	${LIFTER} $< $@
+
+tests/%.res: tests/%.json ${EVALUATOR}
+	@mkdir -p $(@D)
+	${EVALUATOR} $< $@
+
+FORCE: ;
+
+.PHONY: sample all sample-json all-json FORCE
+.SECONDARY:

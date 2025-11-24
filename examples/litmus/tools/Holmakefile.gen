@@ -1,6 +1,6 @@
 # includes
 # ----------------------------------
-DEPENDENCIES   = ../../../src/tools/exec
+# DEPENDENCIES   = ../../../src/tools/exec
 
 
 # configuration

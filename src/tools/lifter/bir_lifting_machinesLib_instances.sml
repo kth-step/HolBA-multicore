@@ -18,12 +18,89 @@ open bir_lifterSimps;
 (* Function libraries from examples/l3-machine-code: *)
 open arm8_stepLib m0_stepLib riscv_stepLib;
 
-open riscv_step_wrapperLib;
-
 (* Abbreviations used in this file:
  * BMR: BIR machine record. *)
 
 val ERR = mk_HOL_ERR "bir_lifting_machinesLib_instances"
+
+(* TODO: Move more centrally *)
+val eval_rhs = rhs o concl o EVAL
+
+(* Takes a hex-format string instruction and returns a representation of it using
+ * a list with 4 bytes. *)
+val word8_tm = wordsSyntax.mk_word_type (fcpSyntax.mk_numeric_type (Arbnum.fromInt 8))
+
+(* Obtains a padded binary string from a hex instruction. *)
+local
+fun pad_zero' 0   str = str
+  | pad_zero' len str = pad_zero' (len-1) ("0"^str)
+in
+fun hex_to_bin_pad_zero len str =
+  let
+    val str' = (Arbnum.toBinString (Arbnum.fromHexString str))
+  in
+    pad_zero' (len - (size str')) str'
+  end
+end
+
+(* Obtains a list of byts from a hex word. *)
+fun get_byte_word_l hex =
+  let
+    val bin = hex_to_bin_pad_zero 32 hex
+    val byte1 = substring (bin, 0, 8)
+    val byte2 = substring (bin, 8, 8)
+    val byte3 = substring (bin, 16, 8)
+    val byte4 = substring (bin, 24, 8)
+    val byte_to_word8 = (fn byte => (wordsSyntax.mk_wordi (Arbnum.fromBinString byte, 8)))
+  in
+    listSyntax.mk_list ((map byte_to_word8 [byte1, byte2, byte3, byte4]), word8_tm)
+  end
+
+(* Function for lifting an instruction to a custom BIR basic statement list using cheat *)
+fun lift_by_cheat mu_b mu_e pc hex_code is_atomic_tm is_acq_tm is_rel_tm bstmt_list arch =
+  let
+    val bmr_tm =
+      if arch = "riscv"
+      then ``riscv_bmr``
+      else if arch = "arm8"
+      then ``arm8_bmr``
+      else raise ERR "lift_by_cheat" ("Architecture "^arch^" not supported")
+    val pc_word = wordsSyntax.mk_wordi (pc, 64)
+    val pc_imm = bir_immSyntax.gen_mk_Imm pc_word
+    val pc_next_imm = bir_immSyntax.gen_mk_Imm (wordsSyntax.mk_wordii ((Arbnum.toInt pc)+4, 64))
+    val wi_end =
+      bir_interval_expSyntax.mk_WI_end (wordsSyntax.mk_wordii (Arbnum.toInt mu_b, 64),
+                                        wordsSyntax.mk_wordii (Arbnum.toInt mu_e, 64))
+    val byte_instruction = get_byte_word_l hex_code
+    val mc_tags = mk_bir_mc_tags (is_atomic_tm, is_acq_tm, is_rel_tm)
+    val prog =
+      mk_BirProgram_list (block_observe_ty,
+	[mk_bir_block_list (block_observe_ty,
+			    mk_BL_Address_HC (pc_imm, stringSyntax.fromMLstring hex_code),
+                            optionSyntax.mk_some mc_tags,
+			    (map (inst [Type.alpha |-> block_observe_ty]) bstmt_list),
+			    mk_BStmt_Jmp (mk_BLE_Label (mk_BL_Address pc_next_imm))
+	)]
+      )
+    val lifted_tm =
+      mk_bir_is_lifted_inst_prog (bmr_tm,
+                                  pc_imm,
+                                  wi_end,
+                                  pairSyntax.mk_pair (pc_word, byte_instruction),
+                                  prog
+      )
+    val lifted_thm = add_tag (Tag.read "multicore", prove(lifted_tm, cheat))
+  in
+    lifted_thm
+  end
+
+(* Takes a SML "0" or "1" string and converts it into a bool *)
+fun str_to_bool str =
+  if str = "1"
+  then true
+  else if str = "0"
+  then false
+  else raise ERR "str_to_bool" ("String "^str^" is not 0 or 1")
 
 (**************************)
 (* Instantiation for ARM8 *)
@@ -91,7 +168,6 @@ fun bmr_normalise_step_thm (r_step_rel:term) var_name thm =
   val thms' = arm8_step_hex' vn hex_code
 *)
 
-(* TODO: Document this function. *)
 fun bytes_of_hex_code hex_code = let
   val _ = if (String.size hex_code mod 2 = 0)
           then ()
@@ -159,7 +235,7 @@ local
    end;
 
 (* val thm = hd step_thms0  *)
-   fun process_arm8_thm vn pc_mem_thms thm = let
+   fun process_arm8_thm is_multicore vn pc_mem_thms thm = let
      val thm0 = bmr_normalise_step_thm next_state_tm vn thm
      val thm1 = instantiate_arm8_thm thm0
      val thm2 = foldl (fn (pre_thm, thm) => PROVE_HYP pre_thm thm) thm1
@@ -173,15 +249,414 @@ local
    end;
 
 in
-  fun arm8_step_hex' vn hex_code = let
+  fun arm8_step_hex' is_multicore vn hex_code = let
     val pc_mem_thms = prepare_mem_contains_thms vn hex_code;
 
     val step_thms0 = arm8_step_hex hex_code
-    val step_thms1 = List.map (process_arm8_thm vn pc_mem_thms) step_thms0;
+    val step_thms1 = List.map (process_arm8_thm is_multicore vn pc_mem_thms) step_thms0;
   in
     step_thms1
   end
 end;
+
+
+
+(* ARMv8 multicore wrapper *)
+local
+(* TODO: MEM_R usage may not be permissive enough - current implementation seemingly allows to reserve only one address at a time *)
+
+(* BARRIERS *)
+(* Includes dmb sy, dmb ld and dmb st *)
+
+(* Parses the hex-format barrier instruction into its fields. *)
+fun parse_barrier hex_code =
+  let
+    val bin = hex_to_bin_pad_zero 32 hex_code
+    (* Note this starts out at bit 31 using the terminology of the ARMv8 encoding
+     * online manual *)
+    val bits = substring (bin, 0, 20)
+    val crm = substring (bin, 20, 4)
+    val op2 = substring (bin, 24, 3)
+    val rt = substring (bin, 27, 5)
+  in
+    (bits, crm, op2, rt)
+  end
+
+(* Checks if hex-format instruction is an ARMv8 barrier. *)
+fun is_barrier hex_code =
+  let
+    val (bits, crm, op2, rt) = parse_barrier hex_code
+  in
+    if (bits = "11010101000000110011") andalso
+       (rt = "11111")
+    then
+      if (op2 = "101") orelse (* DMB *)
+         (op2 = "110") (* ISB *)
+      then true
+      else raise ERR "is_barrier" ("Barrier instruction "^hex_code^" is unknown barrier type")
+    else false
+  end
+
+(* Gets the barrier bstmts from hex-format instruction. *)
+fun get_barrier_bstmts hex_code =
+  let
+    val (_, crm, op2, _) = parse_barrier hex_code
+  in
+    if (op2 = "101") (* DMB *)
+    then if crm = "1111" (* DMB SY *)
+     then [mk_BStmt_Fence (BM_ReadWrite_tm, BM_ReadWrite_tm)]
+     else if crm = "1110" (* DMB ST *)
+     then [mk_BStmt_Fence (BM_Write_tm, BM_Write_tm)]
+     else if crm = "1101" (* DMB LD *)
+     then [mk_BStmt_Fence (BM_Read_tm, BM_ReadWrite_tm)]
+     else raise ERR "get_barrier_bstmts" ("Barrier instruction "^hex_code^" has unsupported crm bits: "^crm)
+    else if (op2 = "110") (* ISB *)
+    then [mk_BStmt_Fence (BM_Control_tm, BM_Read_tm)]
+    else raise ERR "get_barrier_bstmts" ("Barrier instruction "^hex_code^" has unsupported op2 bits: "^op2)
+  end
+
+fun lift_barrier mu_b mu_e pc hex_code =
+  let
+    val bstmt_list = get_barrier_bstmts hex_code
+  in
+    lift_by_cheat mu_b mu_e pc hex_code F F F bstmt_list "arm8"
+  end
+
+(* EXCLUSIVE AND ORDERED MEMORY INSTRUCTIONS *)
+(* Includes cas, stxr, ldxr, stlr, ldar and aliases *)
+
+fun parse_excl_aqrl hex_code =
+  let
+    val bin = hex_to_bin_pad_zero 32 hex_code
+    (* Note this starts out at bit 31 using the terminology of the ARMv8 encoding
+     * online manual *)
+    val size = substring (bin, 0, 2)
+    val bits1 = substring (bin, 2, 7)
+    val l = substring (bin, 9, 1)
+    val bits2 = substring (bin, 10, 1)
+    val rs = substring (bin, 11, 5)
+    val o0 = substring (bin, 16, 1)
+    val rt2 = substring (bin, 17, 5)
+    val rn = substring (bin, 22, 5)
+    val rt = substring (bin, 27, 5)
+  in
+    (size, bits1, l, bits2, rs, o0, rt2, rn, rt)
+  end
+
+fun is_excl_aqrl hex_code =
+  let
+    val (size, bits1, _, bits2, _, o0, rt2, _, _) = parse_excl_aqrl hex_code
+  in
+    if ((size = "11") orelse (size = "10")) andalso (* acquire-release *)
+       (bits1 = "0010001") andalso
+       (bits2 = "0") andalso
+       (o0 = "1")
+    then true
+    else if ((size = "11") orelse (size = "10")) andalso (* exclusive *)
+            (bits1 = "0010000") andalso
+            (bits2 = "0") andalso
+            (o0 = "0")
+     then true
+    else if ((size = "11") orelse (size = "10")) andalso (* compare-and-set *)
+            (bits1 = "0010001") andalso
+            (bits2 = "1") andalso
+            (rt2 = "11111") (* TODO: Strangely, these bits are fixed for this instruction... *)
+     then true
+    else false
+  end
+
+(* Construct the name of a ARMv8 64-bit-register *)
+fun mk_xreg_var_name bit_code =
+  ("R"^(Arbnum.toString (Arbnum.fromBinString bit_code)))
+
+fun is_arm8_zeroreg reg =
+  (Arbnum.fromBinString reg = (Arbnum.fromInt 31))
+
+fun get_excl_aqrl_bstmts mu_b mu_e hex_code =
+  let
+    val (size, _, l, bits2, rs, o0, rt2, rn, rt) = parse_excl_aqrl hex_code
+
+    (* Distinguishes between 32 and 64-bit *)
+    val is_64bit =
+     if size = "11"
+     then true
+     else if size = "10"
+     then false
+     else raise ERR "get_excl_aqrl_bstmts" ("Unsupported size encoding: "^size^".")
+    (* "01010101..." in hex *)
+    val ones_32 = bconst32 16843009
+    val ones_64 = bconst64 72340172838076673
+    (* Empty memory *)
+    val mem_zero = bden (bvarmem64_8 "MEM_Z")
+    (* Memory holding reserved addresses *)
+    val mem_reserved = bden (bvarmem64_8 "MEM_R")
+    val (al, load_exp, ones, bytes, res_load_exp, cast) =
+     if is_64bit
+     then (3, bload64_le, ones_64, 8, bload32_le, fn v => v)
+     else (2, (fn m => fn a => bucast64 (bload32_le m a)), ones_32, 4, bload64_le, blowcast32)
+
+    val is_cas = str_to_bool bits2
+    val is_excl = not $ str_to_bool o0
+    (* TODO: Can the last conjunct of the below two be removed? *)
+    val is_aq = str_to_bool l andalso (not $ is_arm8_zeroreg rt) andalso (str_to_bool o0 orelse is_cas)
+    val is_rl = str_to_bool o0 andalso ((not $ str_to_bool l) orelse is_cas) 
+
+    (* Rt is the register loaded to or stored from *)
+    val bvar_rt = bvarimm64 $ mk_xreg_var_name rt
+    (* Rn holds the address *)
+    val bexp_rn = if is_arm8_zeroreg rn then bden $ bvarimm64 "SP_EL0" else bden $ bvarimm64 $ mk_xreg_var_name rn
+    (* Rs holds the success flag (for store-exclusive) *)
+    val bvar_rs = bvarimm64 $ mk_xreg_var_name rs
+    (* Temporary register for compare-and-swap *)
+    val bvar_tmp = bvarimm64 "tmp"
+
+    val bir_block_base =
+      if str_to_bool l (* Load exclusive or load acquire *)
+      then
+       [(* 1. Load data value from address in rn, place value into rt *)
+	bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rn))
+       ]@(if is_arm8_zeroreg rt
+	  then []
+	  else
+	    [bassign (bvar_rt, load_exp (bden (bvarmem64_8 "MEM")) bexp_rn)])
+       @(if is_excl
+         then
+	  [(* 2. Set reservation of memory *)
+	   bassign (bvarmem64_8 "MEM_R", bstore_le mem_zero bexp_rn ones)
+	  ]
+         else [])
+      else if (not $ str_to_bool l) (* Store exclusive or store release *)
+      then
+       [(* 1. Store value in rt into address in rn *)
+	bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rn)),
+	bassert (mk_BExp_unchanged_mem_interval_distinct (Bit64_tm, numSyntax.mk_numeral mu_b, numSyntax.mk_numeral mu_e, bexp_rn, numSyntax.term_of_int bytes)),
+	bassign (bvarmem64_8 "MEM",
+                 if is_excl
+                 then
+		  bite (beq (res_load_exp mem_reserved bexp_rn,
+			     ones),
+			(* TODO: Cast from constant in 32-bit case can be avoided with better logic *)
+			bstore_le (bden (bvarmem64_8 "MEM")) bexp_rn (cast (if is_arm8_zeroreg rt then bconstii 64 0 else bden bvar_rt)),
+			bden (bvarmem64_8 "MEM")
+		       )
+                 else
+                  bstore_le (bden (bvarmem64_8 "MEM")) bexp_rn (cast (if is_arm8_zeroreg rt then bconstii 64 0 else bden bvar_rt))
+	)
+	(* 2. Assign code (zero on success, non-zero on failure) to status result register *)
+       ]@(if is_arm8_zeroreg rs orelse not $ is_excl
+	  then []
+	  else
+	    [bassign (bvar_rs,
+                      bite (beq (res_load_exp mem_reserved bexp_rn, ones), bconst64 0, bconst64 1))])
+       @(if is_excl
+         then
+	  [(* 3. Reset reservation of memory *)
+	   bassign (bvarmem64_8 "MEM_R", mem_zero)
+	  ]
+         else [])
+      else if is_cas (* Compare-and-set *)
+      then
+       [bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rn)),
+	bassert (mk_BExp_unchanged_mem_interval_distinct (Bit64_tm, numSyntax.mk_numeral mu_b, numSyntax.mk_numeral mu_e, bexp_rn, numSyntax.term_of_int bytes))]@
+       (* 1. Load from Rn *)
+       [bassign (bvar_tmp, load_exp (bden (bvarmem64_8 "MEM")) bexp_rn)]@
+       (* TODO: Implementation decides whether loaded value should be stored back or not *)
+       (* 2. Store conditionally based on comparison between loaded value and Rs *)
+       [bassign (bvarmem64_8 "MEM",
+                 bstore_le (bden (bvarmem64_8 "MEM")) bexp_rn (cast (bite (beq (bden bvar_tmp, bden $ bvar_rs), if is_arm8_zeroreg rt then bconstii 64 0 else bden bvar_rt, bden bvar_tmp))))]
+      else raise ERR "get_excl_aqrl_bstmts" ("Exclusive or ordered memory instruction "^hex_code^" unsupported.")
+  in
+    (bir_block_base, is_aq, is_rl)
+  end
+;
+
+fun lift_excl_aqrl mu_b mu_e pc hex_code =
+  let
+    val (bstmt_list, is_aq, is_rl) = get_excl_aqrl_bstmts mu_b mu_e hex_code
+  in
+    lift_by_cheat mu_b mu_e pc hex_code F (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list "arm8"
+  end
+
+
+(* ATOMIC INSTRUCTIONS *)
+(* Includes swp, ldadd, ldclr, ldeor, ldset, ldsmax, ldsmin, ldumax and ldumin *)
+
+fun parse_atomic hex_code =
+  let
+    val bin = hex_to_bin_pad_zero 32 hex_code
+    (* Note this starts out at bit 31 using the terminology of the ARMv8 encoding
+     * online manual *)
+    val size = substring (bin, 0, 2)
+    (* TODO: bits1 includes the VR bit of unknown significance *)
+    val bits1 = substring (bin, 2, 6)
+    val a = substring (bin, 8, 1)
+    val r = substring (bin, 9, 1)
+    val bits2 = substring (bin, 10, 1)
+    val rs = substring (bin, 11, 5)
+    val o3 = substring (bin, 16, 1)
+    val opc = substring (bin, 17, 5)
+    val rn = substring (bin, 22, 5)
+    val rt = substring (bin, 27, 5)
+  in
+    (size, bits1, a, r, bits2, rs, o3, opc, rn, rt)
+  end
+
+fun is_atomic hex_code =
+  let
+    val (size, bits1, _, _, bits2, _, o3, opc, _, _) = parse_atomic hex_code
+  in
+    (* Atomic RMW *)
+    if ((size = "11") orelse (size = "10"))
+    then
+     if (bits1 = "111000") andalso
+        (bits2 = "1") andalso
+        (o3 = "0") andalso
+        ((opc = "00000") orelse (* LDADD *)
+         (opc = "00100") orelse (* LDCLR *)
+         (opc = "01000") orelse (* LDEOR *)
+         (opc = "01100") orelse (* LDSET *)
+         (opc = "10000") orelse (* LDSMAX *)
+         (opc = "10100") orelse (* LDSMIN *)
+         (opc = "11000") orelse (* LDUMAX *)
+         (opc = "11100") (* LDUMIN *)
+        )
+     then true
+     (* Atomic swaps *)
+     else if (bits1 = "111000") andalso
+	     (bits2 = "1") andalso
+	     (o3 = "1") andalso
+	     (opc = "00000") (* SWP *)
+     then true
+     else false
+    else false
+  end
+
+fun mk_arm8_atomic_binop bexp_tmp bexp_rs o3 opc =
+ if o3 = "1" (* Swap *)
+ then
+  if opc = "00000" (* SWP *)
+  then bexp_rs
+  else raise ERR "mk_atomic_binop" ("Unsupported opc bits: "^opc)
+ else (* Standard RMW *)
+  if opc = "00000" (* ADD *)
+  then bplus (bexp_tmp, bexp_rs) 
+  else if opc = "00100" (* CLR *)
+  then band (bexp_tmp, bnot bexp_rs)
+  else if opc = "01000" (* EOR *)
+  then bxor (bexp_tmp, bexp_rs)
+  else if opc = "01100" (* SET *)
+  then bor (bexp_tmp, bexp_rs)
+  else if opc = "10000" (* SMAX *)
+  then bite (bslt (bexp_tmp, bexp_rs), bexp_rs, bexp_tmp)
+  else if opc = "10100" (* SMIN *)
+  then bite (bslt (bexp_tmp, bexp_rs), bexp_tmp, bexp_rs)
+  else if opc = "11000" (* UMAX *)
+  then bite (blt (bexp_tmp, bexp_rs), bexp_rs, bexp_tmp)
+  else if opc = "11100" (* UMIN *)
+  then bite (blt (bexp_tmp, bexp_rs), bexp_tmp, bexp_rs)
+  else raise ERR "mk_atomic_binop" ("Unsupported opc bits: "^opc)
+
+fun get_atomic_bstmts mu_b mu_e hex_code =
+  let
+    val (size, _, a, r, _, rs, o3, opc, rn, rt) = parse_atomic hex_code
+
+    (* Distinguishes between 32 and 64-bit *)
+    val is_64bit =
+     if size = "11"
+     then true
+     else if size = "10"
+     then false
+     else raise ERR "get_excl_aqrl_bstmts" ("Unsupported size encoding: "^size^".")
+
+    val bvar_rt = bvarimm64 $ mk_xreg_var_name rt
+    val bexp_rn = if is_arm8_zeroreg rn then bden $ bvarimm64 "SP_EL0" else bden $ bvarimm64 $ mk_xreg_var_name rn
+    val bexp_rs = if is_arm8_zeroreg rs then bconstii 64 0 else bden $ bvarimm64 $ mk_xreg_var_name rs
+    val bvar_tmp = bvarimm64 "tmp"
+    val bexp_tmp = bden $ bvar_tmp
+    val is_aq = (str_to_bool a) andalso (not $ is_arm8_zeroreg rt)
+    val is_rl = str_to_bool r
+    val atomic_op_res = mk_arm8_atomic_binop bexp_tmp bexp_rs o3 opc
+    val (al, load_exp, bytes, cast) =
+     if is_64bit
+     then (3, bload64_le, 8, fn v => v)
+     else (2, (fn m => fn a => bucast64 (bload32_le m a)), 4, blowcast32)
+
+    val bir_block_base =
+     [(* 1. Load data value from address in Rn, place value into temporary register *)
+      bassert (baligned Bit64_tm (numSyntax.term_of_int al, bexp_rn)),
+      bassert (mk_BExp_unchanged_mem_interval_distinct (Bit64_tm, numSyntax.mk_numeral mu_b, numSyntax.mk_numeral mu_e, bexp_rn, numSyntax.term_of_int bytes)),
+      bassign (bvar_tmp, load_exp (bden (bvarmem64_8 "MEM")) bexp_rn),
+      (* 2. Apply binary operation to the loaded value and the value in Rs,
+	    then store the result back to the address in Rn *)
+      bassign (bvarmem64_8 "MEM", bstore_le (bden (bvarmem64_8 "MEM"))
+					     bexp_rn
+					     (cast atomic_op_res))
+     ]
+    (* 3. Place value of temporary register in destination register Rt *)
+    val bir_block_rt = if is_arm8_zeroreg rt then [] else [bassign (bvar_rt, bexp_tmp)]
+  in
+    (bir_block_base@bir_block_rt, is_aq, is_rl)
+  end
+
+fun lift_atomic mu_b mu_e pc hex_code =
+  let
+    val (bstmt_list, is_aq, is_rl) = get_atomic_bstmts mu_b mu_e hex_code
+  in
+    lift_by_cheat mu_b mu_e pc hex_code T (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list "arm8"
+  end
+
+in
+fun arm8_mc_lift_instr (mu_b, mu_e) pc hex_code =
+  if is_barrier hex_code
+  then SOME (lift_barrier mu_b mu_e pc hex_code)
+  else if is_atomic hex_code
+  then SOME (lift_atomic mu_b mu_e pc hex_code)
+  else if is_excl_aqrl hex_code
+  then SOME (lift_excl_aqrl mu_b mu_e pc hex_code)
+  else NONE
+end
+;
+
+local
+ (* TODO: What is this class of instructions called? *)
+ fun get_arm8_eor_fields bin_code =
+  let
+   val sf = substring (bin_code, 0, 1)
+   val opc = substring (bin_code, 1, 7)
+   val shift = substring (bin_code, 8, 2)
+   val n = substring (bin_code, 10, 1)
+   val rm = substring (bin_code, 11, 5)
+   val imm6 = substring (bin_code, 16, 6)
+   val rn = substring (bin_code, 22, 5)
+   val rd = substring (bin_code, 27, 5)
+  in
+   (sf, opc, shift, n, rm, imm6, rn, rd)
+  end
+ ;
+in
+(* This function restores expressions that were simplified to 0, use to capture syntactic
+ * dependencies in the multicore version of BIR *)
+fun arm8_rewrite_step_thms next_thms hex_code =
+ let
+  val bin_code = hex_to_bin_pad_zero 32 hex_code
+  val (sf, opc, shift, n, rm, imm6, rn, rd) = get_arm8_eor_fields bin_code
+ in
+  if opc = "1001010" andalso n = "0" andalso rn = rm
+  then
+   let
+    val rn_word = wordsSyntax.mk_n2w (optionSyntax.dest_some $ eval_rhs $ ASCIInumbersSyntax.mk_fromBinString $ stringLib.fromMLstring rn, “:5”)
+    val xor_rewrite_thm =
+     if sf = "1"
+     then prove(“(0w:word64) = word_xor (ms.REG ^rn_word) (ms.REG ^rn_word)”, blastLib.BBLAST_TAC)
+     else prove(“w2w (0w:word32) = (w2w:word32->word64) $ word_xor (w2w $ ms.REG ^rn_word) (w2w $ ms.REG ^rn_word)”, blastLib.BBLAST_TAC)
+   in
+    map (REWRITE_RULE [xor_rewrite_thm]) next_thms
+   end
+  else next_thms
+ end
+;
+end
+
 
 local
   val addr_ty = fcpLib.index_type (Arbnum.fromInt 64);
@@ -200,8 +675,10 @@ end;
 
 end;
 
-val arm8_state_mem_tm = prim_mk_const{Name="arm8_state_MEM", Thy="arm8"};
+val arm8_state_mem_tm = prim_mk_const {Thy="arm8",
+ Name = TypeBasePure.mk_recordtype_fieldsel {tyname = "arm8_state", fieldname = "MEM"}};
 val arm8_dest_mem = HolKernel.dest_binop arm8_state_mem_tm (ERR "arm8_dest_mem" "");
+
 
 val arm8_REWRS = (
    (type_rws ``:arm8_state``) @
@@ -221,9 +698,10 @@ val arm8_bmr_rec : bmr_rec = {
   bmr_label_thm            = arm8_bmr_label_thm,
   bmr_dest_mem             = arm8_dest_mem,
   bmr_extra_ss             = arm8_extra_ss,
-  bmr_step_hex             = arm8_step_hex',
-  bmr_mc_step_hex          = NONE,
-  bmr_mc_lift_instr        = NONE,
+  bmr_step_hex             = arm8_step_hex' false,
+  bmr_mc_step_hex          = SOME (arm8_step_hex' true),
+  bmr_mc_lift_instr        = SOME arm8_mc_lift_instr,
+  bmr_mc_rewrite           = SOME arm8_rewrite_step_thms,
   bmr_mk_data_mm           = arm8_mk_data_mm,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
   bmr_ihex_param           = SOME (4, true)
@@ -304,9 +782,9 @@ fun m0_mk_data_mm ef mem_loc hex_code =
   end
 end;
 
-val m0_state_mem_tm = prim_mk_const{Name="m0_state_MEM", Thy="m0"};
-val m0_dest_mem = HolKernel.dest_binop m0_state_mem_tm
-                                       (ERR "m0_dest_mem" "");
+val m0_state_mem_tm = prim_mk_const {Thy="m0",
+ Name = TypeBasePure.mk_recordtype_fieldsel {tyname = "m0_state", fieldname = "MEM"}};
+val m0_dest_mem = HolKernel.dest_binop m0_state_mem_tm (ERR "m0_dest_mem" "");
 
 val m0_REWRS = (RName_distinct :: (
    (type_rws ``:m0_state``) @
@@ -434,7 +912,8 @@ in
   bmr_extra_ss             = m0_extra_ss,
   bmr_step_hex             = m0_step_hex' (endian_fl, sel_fl),
   bmr_mc_step_hex          = NONE,
-  bmr_mc_lift_instr           = NONE,
+  bmr_mc_lift_instr        = NONE,
+  bmr_mc_rewrite           = NONE,
   bmr_mk_data_mm           = m0_mk_data_mm endian_fl,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
   bmr_ihex_param           = NONE
@@ -605,7 +1084,8 @@ in
   bmr_extra_ss             = m0_mod_extra_ss,
   bmr_step_hex             = m0_mod_step_hex' (endian_fl, sel_fl),
   bmr_mc_step_hex          = NONE,
-  bmr_mc_lift_instr           = NONE,
+  bmr_mc_lift_instr        = NONE,
+  bmr_mc_rewrite           = NONE,
   bmr_mk_data_mm           = m0_mod_mk_data_mm endian_fl,
   bmr_hex_code_size        = (fn hc => Arbnum.fromInt ((String.size hc) div 2)),
   bmr_ihex_param           = NONE
@@ -773,7 +1253,7 @@ in
   fun riscv_step_hex' is_multicore vn hex_code = let
     val pc_mem_thms = prepare_mem_contains_thms vn hex_code
 
-    val step_thms0 = [(riscv_step_rem_ss_hex ["word arith", "word ground", "word logic", "word shift", "word subtract"]) hex_code]
+    val step_thms0 = [riscv_step_hex hex_code]
 
     val step_thms1 =
       List.map (process_riscv_thm is_multicore vn pc_mem_thms) step_thms0
@@ -782,45 +1262,8 @@ in
   end
 end;
 
-(* RISC-V Multicore wrapper *)
+(* RISC-V multicore wrapper *)
 local
-
-(* Auxiliary function to obtain a padded binary string from a hex instruction. *)
-local
-fun pad_zero' 0   str = str
-  | pad_zero' len str = pad_zero' (len-1) ("0"^str)
-in
-fun hex_to_bin_pad_zero len str =
-  let
-    val str' = (Arbnum.toBinString (Arbnum.fromHexString str))
-  in
-    pad_zero' (len - (size str')) str'
-  end
-end
-
-(* Takes a hex-format string instruction and returns a representation of it using
- * a list with 4 bytes. *)
-val word8_tm = wordsSyntax.mk_word_type (fcpSyntax.mk_numeric_type (Arbnum.fromInt 8))
-
-(* Takes a SML "0" or "1" string and converts it into a HOL4 bool *)
-fun str_to_bool str =
-  if str = "1"
-  then true
-  else if str = "0"
-  then false
-  else raise ERR "str_to_bool" ("String "^str^" is not 0 or 1, and could not be converted to a bool term")
-
-fun get_byte_word_l hex =
-  let
-    val bin = hex_to_bin_pad_zero 32 hex
-    val byte1 = substring (bin, 0, 8)
-    val byte2 = substring (bin, 8, 8)
-    val byte3 = substring (bin, 16, 8)
-    val byte4 = substring (bin, 24, 8)
-    val byte_to_word8 = (fn byte => (wordsSyntax.mk_wordi (Arbnum.fromBinString byte, 8)))
-  in
-    listSyntax.mk_list ((map byte_to_word8 [byte1, byte2, byte3, byte4]), word8_tm)
-  end
 
 (* Parses the hex-format fence instruction into its fields. *)
 fun parse_fence hex_code =
@@ -935,25 +1378,25 @@ fun get_fence_bstmts hex_code =
 	       else BM_Read_tm
 	  else if pw = "1"
 	       then BM_Write_tm
-	       else raise ERR "get_fence_args" ("Fence instruction "^hex_code^" has no predecessor R/W bits set"),
+	       else raise ERR "get_fence_bstmts" ("Fence instruction "^hex_code^" has no predecessor R/W bits set"),
 	  if sr = "1"
 	  then if sw = "1"
 	       then BM_ReadWrite_tm
 	       else BM_Read_tm
 	  else if sw = "1"
 	       then BM_Write_tm
-	       else raise ERR "get_fence_args" ("Fence instruction "^hex_code^" has no successor R/W bits set")
+	       else raise ERR "get_fence_bstmts" ("Fence instruction "^hex_code^" has no successor R/W bits set")
 	    )]
       else if funct3 = "001"
       then [] (* Instruction-fetch fence *)
-      else raise ERR "get_fence_args" ("Fence instruction "^hex_code^" has unknown funct3 bits: "^funct3)
+      else raise ERR "get_fence_bstmts" ("Fence instruction "^hex_code^" has unknown funct3 bits: "^funct3)
     else if (fm = "1000")
     then (* TSO fence *)
       [mk_BStmt_Fence (BM_Read_tm, BM_Read_tm), mk_BStmt_Fence (BM_ReadWrite_tm, BM_Write_tm)]
-    else raise ERR "get_fence_args" ("Fence instruction "^hex_code^" has unknown fm bits: "^fm)
+    else raise ERR "get_fence_bstmts" ("Fence instruction "^hex_code^" has unknown fm bits: "^fm)
   end
 
-(* Construct the name of a RISC-V GPR (see bir_lifting_machinesLib_instances) *)
+(* Construct the name of a RISC-V GPR *)
 fun mk_gpr_var_name bit_code =
   ("x"^(Arbnum.toString (Arbnum.fromBinString bit_code)))
 
@@ -964,25 +1407,25 @@ val rs1 = "00011"
 val rs2 = "00111"
 *)
 
-fun mk_atomic_binop bexp_rd bexp_rs2 funct5 =
+fun mk_atomic_binop bexp_tmp bexp_rs2 funct5 =
   if funct5 = "00001"
   then bexp_rs2
   else if funct5 = "00000"
-  then bplus (bexp_rd, bexp_rs2)
+  then bplus (bexp_tmp, bexp_rs2)
   else if funct5 = "00100"
-  then bxor (bexp_rd, bexp_rs2)
+  then bxor (bexp_tmp, bexp_rs2)
   else if funct5 = "01100"
-  then band (bexp_rd, bexp_rs2)
+  then band (bexp_tmp, bexp_rs2)
   else if funct5 = "01000"
-  then bor (bexp_rd, bexp_rs2)
+  then bor (bexp_tmp, bexp_rs2)
   else if funct5 = "10000"
-  then bite (bslt (bexp_rd, bexp_rs2), bexp_rd, bexp_rs2)
+  then bite (bslt (bexp_tmp, bexp_rs2), bexp_tmp, bexp_rs2)
   else if funct5 = "10100"
-  then bite (bslt (bexp_rd, bexp_rs2), bexp_rs2, bexp_rd)
+  then bite (bslt (bexp_tmp, bexp_rs2), bexp_rs2, bexp_tmp)
   else if funct5 = "11000"
-  then bite (blt (bexp_rd, bexp_rs2), bexp_rd, bexp_rs2)
+  then bite (blt (bexp_tmp, bexp_rs2), bexp_tmp, bexp_rs2)
   else if funct5 = "11100"
-  then bite (blt (bexp_rd, bexp_rs2), bexp_rs2, bexp_rd)
+  then bite (blt (bexp_tmp, bexp_rs2), bexp_rs2, bexp_tmp)
   else  raise ERR "mk_atomic_binop" ("Unsupported funct5 bits: "^funct5)
 
 fun is_zeroreg reg =
@@ -1097,45 +1540,12 @@ fun get_lrsc_bstmts mu_b mu_e hex_code =
   end
 ;
 
-(* Generic function for lifting an instruction to custom BIR basic statement list using cheat *)
-fun lift_by_cheat mu_b mu_e pc hex_code is_atomic_tm is_acq_tm is_rel_tm bstmt_list =
-  let
-    val riscv_bmr_tm = ``riscv_bmr``; (* TODO: Obtain this in a smarter way *)
-    val pc_word = wordsSyntax.mk_wordi (pc, 64)
-    val pc_imm = bir_immSyntax.gen_mk_Imm pc_word
-    val pc_next_imm = bir_immSyntax.gen_mk_Imm (wordsSyntax.mk_wordii ((Arbnum.toInt pc)+4, 64))
-    val wi_end =
-      bir_interval_expSyntax.mk_WI_end (wordsSyntax.mk_wordii (Arbnum.toInt mu_b, 64),
-                                        wordsSyntax.mk_wordii (Arbnum.toInt mu_e, 64))
-    val byte_instruction = get_byte_word_l hex_code
-    val mc_tags = mk_bir_mc_tags (is_atomic_tm, is_acq_tm, is_rel_tm)
-    val prog =
-      mk_BirProgram_list (block_observe_ty,
-	[mk_bir_block_list (block_observe_ty,
-			    mk_BL_Address_HC (pc_imm, stringSyntax.fromMLstring hex_code),
-                            optionSyntax.mk_some mc_tags,
-			    (map (inst [Type.alpha |-> block_observe_ty]) bstmt_list),
-			    mk_BStmt_Jmp (mk_BLE_Label (mk_BL_Address pc_next_imm))
-	)]
-      )
-    val lifted_tm =
-      mk_bir_is_lifted_inst_prog (riscv_bmr_tm,
-                                  pc_imm,
-                                  wi_end,
-                                  pairSyntax.mk_pair (pc_word, byte_instruction),
-                                  prog
-      )
-    val lifted_thm = add_tag (Tag.read "multicore", prove(lifted_tm, cheat))
-  in
-    lifted_thm
-  end
-
 (* Lifts a fence instruction by producing a cheat. *)
 fun lift_fence mu_b mu_e pc hex_code =
   let
     val bstmt_list = get_fence_bstmts hex_code
   in
-    lift_by_cheat mu_b mu_e pc hex_code F F F bstmt_list
+    lift_by_cheat mu_b mu_e pc hex_code F F F bstmt_list "riscv"
   end
 
 (* Lifts an atomic memory operation instruction by producing a cheat. *)
@@ -1143,7 +1553,7 @@ fun lift_amo mu_b mu_e pc hex_code =
   let
     val (bstmt_list, is_aq, is_rl) = get_amo_bstmts mu_b mu_e hex_code
   in
-    lift_by_cheat mu_b mu_e pc hex_code T (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list
+    lift_by_cheat mu_b mu_e pc hex_code T (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list "riscv"
   end
 
 (* Lifts a load-reserve or store-conditional by producing a cheat. *)
@@ -1151,7 +1561,7 @@ fun lift_lrsc mu_b mu_e pc hex_code =
   let
     val (bstmt_list, is_aq, is_rl) = get_lrsc_bstmts mu_b mu_e hex_code
   in
-    lift_by_cheat mu_b mu_e pc hex_code F (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list
+    lift_by_cheat mu_b mu_e pc hex_code F (bitstringSyntax.term_of_bool is_aq) (bitstringSyntax.term_of_bool is_rl) bstmt_list "riscv"
   end
 
 in
@@ -1166,6 +1576,40 @@ fun riscv_mc_lift_instr (mu_b, mu_e) pc hex_code =
   else NONE
 end
 ;
+
+local
+ fun get_riscv_r_type_fields bin_code =
+  let
+   val funct7 = substring (bin_code, 0, 7)
+   val rs2 = substring (bin_code, 7, 5)
+   val rs1 = substring (bin_code, 12, 5)
+   val funct3 = substring (bin_code, 17, 3)
+   val rd = substring (bin_code, 20, 5)
+   val opcode = substring (bin_code, 25, 7)
+  in
+   (funct7, rs2, rs1, funct3, rd, opcode)
+  end
+ ;
+in
+(* This function restores expressions that were simplified to 0, use to capture syntactic
+ * dependencies in the multicore version of BIR *)
+fun riscv_rewrite_step_thms next_thms hex_code =
+ let
+  val bin_code = hex_to_bin_pad_zero 32 hex_code
+  val (funct7, rs2, rs1, funct3, _, opcode) = get_riscv_r_type_fields bin_code
+ in
+  if funct7 = "0000000" andalso funct3 = "100" andalso opcode = "0110011" andalso rs2 = rs1
+  then
+   let
+    val rs_word = wordsSyntax.mk_n2w (optionSyntax.dest_some $ eval_rhs $ ASCIInumbersSyntax.mk_fromBinString $ stringLib.fromMLstring rs1, “:5”)
+    val xor_rewrite_thm = prove(“(0w:word64) = word_xor (ms.c_gpr ms.procID ^rs_word) (ms.c_gpr ms.procID ^rs_word)”, blastLib.BBLAST_TAC)
+   in
+    map (REWRITE_RULE [xor_rewrite_thm]) next_thms
+   end
+  else next_thms
+ end
+;
+end
 
 local
   (* M0 has address type 32, where this is 64. *)
@@ -1192,11 +1636,10 @@ end;
  * arm8_state_MEM. This is since the arm8_state record has an entry
  * called MEM, RISC-V seems to have a corresponding one called MEM8
  * of the same type. *)
-val riscv_state_mem_tm =
-  prim_mk_const{Name="riscv_state_MEM8", Thy="riscv"};
+val riscv_state_mem_tm = prim_mk_const { Thy="riscv",
+ Name = TypeBasePure.mk_recordtype_fieldsel {tyname = "riscv_state", fieldname = "MEM8"}};
 val riscv_dest_mem =
   HolKernel.dest_binop riscv_state_mem_tm (ERR "riscv_dest_mem" "");
-
 
 val riscv_bmr_rec : bmr_rec = {
   bmr_const                =
@@ -1212,6 +1655,7 @@ val riscv_bmr_rec : bmr_rec = {
   bmr_step_hex             = (riscv_step_hex' false),
   bmr_mc_step_hex          = SOME (riscv_step_hex' true),
   bmr_mc_lift_instr        = SOME riscv_mc_lift_instr,
+  bmr_mc_rewrite           = SOME riscv_rewrite_step_thms,
   bmr_mk_data_mm           = riscv_mk_data_mm,
   bmr_hex_code_size        =
     (fn hc => Arbnum.fromInt ((String.size hc) div 2)),

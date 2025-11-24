@@ -8,17 +8,17 @@ functor bir_inst_liftingFunctor (MD : sig val mr : bir_lifting_machinesLib.bmr_r
 (* dependencies *)
 (* ================================================ *)
 open HolKernel boolLib liteLib simpLib Parse bossLib;
-open bir_inst_liftingTheory
-open bir_lifting_machinesTheory
+open bir_inst_liftingTheory;
+open bir_lifting_machinesTheory;
 open bir_lifting_machinesLib bir_lifting_machinesLib_instances;
-open bir_interval_expTheory bir_update_blockTheory
-open bir_exp_liftingLib bir_typing_expSyntax
-open bir_lifter_general_auxTheory
-open bir_programSyntax bir_interval_expSyntax
-open bir_program_labelsTheory
-open bir_immTheory
-open intel_hexLib
-open bir_inst_liftingLibTypes
+open bir_interval_expTheory bir_update_blockTheory;
+open bir_exp_liftingLib bir_typing_expSyntax;
+open bir_lifter_general_auxTheory;
+open bir_programSyntax bir_interval_expSyntax;
+open bir_program_labelsTheory;
+open bir_immTheory;
+open intel_hexLib;
+open bir_inst_liftingLibTypes;
 open bir_inst_liftingHelpersLib;
 open bir_lifterSimps;
 (* ================================================ *)
@@ -809,7 +809,41 @@ fun get_patched_step_hex ms_v hex_code is_multicore =
      val simpset = if is_multicore
                    then std_multicore_ss
                    else std_ss
-     val lf_ms'_thm = (lf_ms'_CONV simpset) lf_ms'_tm handle UNCHANGED => REFL lf_ms'_tm
+
+     (* This prevents control dependencies in the branch condition from being lost in the multicore case *)
+     (* TODO: Move out of compute_eup? *)
+     fun get_lf_ms'_thm_multicore lf_ms'_tm =
+      let
+       val prot_cond = snd $ dest_comb lf_ms'_tm
+
+       (* TODO: Declare in a better place *)
+       val (PROTECTED_COND_tm, mk_PROTECTED_COND, dest_PROTECTED_COND, is_PROTECTED_COND) = HolKernel.syntax_fns3 "bir_lifter_general_aux" "PROTECTED_COND";
+      in
+       (* Detect potential syntactic conditional jumps *)
+       if is_PROTECTED_COND prot_cond
+       then
+	let
+	 val (c, b1, b2) = dest_PROTECTED_COND prot_cond;
+	 val b1_pc_n2w = snd $ dest_comb $ snd $ dest_comb $ fst $ dest_comb b1;
+	 val b2_pc_n2w = snd $ dest_comb $ snd $ dest_comb $ fst $ dest_comb b2;
+	in
+         (* If the branches are equal, prove the theorem in a guided way that doesn't lose
+          * syntactic control dependencies *)
+	 if term_eq b1_pc_n2w b2_pc_n2w
+	 then prove(“bmr_pc_lf (^(fst $ dest_eq $ concl $ #bmr_eval_thm mr))
+		     (^prot_cond) = Imm64 (if (^c) then (^b1_pc_n2w) else (^b2_pc_n2w))”,
+		    SIMP_TAC std_ss [(lf_ms'_CONV simpset) lf_ms'_tm]
+	      )
+	 else lf_ms'_CONV simpset lf_ms'_tm
+	end
+       else lf_ms'_CONV simpset lf_ms'_tm
+      end
+
+     val lf_ms'_thm =
+      if is_multicore
+      then get_lf_ms'_thm_multicore lf_ms'_tm
+      else
+       (lf_ms'_CONV simpset) lf_ms'_tm handle UNCHANGED => REFL lf_ms'_tm
      val res_imm = rhs (concl lf_ms'_thm)
 
      (* There are 3 cases supported:
@@ -1399,6 +1433,12 @@ fun get_patched_step_hex ms_v hex_code is_multicore =
   let
      (* call step lib to generate step theorems, compute mm and label *)
      val (next_thms, mm_tm, label_tm) = mk_inst_lifting_theorems hex_code hex_code_desc is_multicore
+    val next_thms' =
+     if is_multicore
+     then if isSome (#bmr_mc_rewrite mr)
+          then (valOf (#bmr_mc_rewrite mr)) next_thms hex_code
+          else raise (bir_inst_liftingAuxExn (BILED_msg "trying to do multicore lifting without implementation of bmr_mc_rewrite in current bmr_rec"))
+     else next_thms
 
      (* instantiate inst theorem *)
      val inst_lift_thm0 =
@@ -1427,7 +1467,7 @@ fun get_patched_step_hex ms_v hex_code is_multicore =
 
      (* preprocess next-theorems. Merge some, order them, derive conditions,
         assign auxiliary labels, ... *)
-     val sub_block_work_list = preprocess_next_thms label_tm next_thms
+     val sub_block_work_list = preprocess_next_thms label_tm next_thms'
        handle HOL_ERR _ =>
          raise bir_inst_liftingAuxExn (BILED_msg ("preprocessing next theorems failed"));
 

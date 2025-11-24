@@ -3,9 +3,11 @@ sig
     include Abbrev
     type litmus = {arch:string,
 		   name:string,
-		   info:string list,
-		   inits: term list,
+			 filename: string,
+		   regs: term list,
+		   mem: term,
 		   progs: term list,
+			 expected: string,
 		   final: term}
 
     (* Argument: path to herdtools litmus test
@@ -24,101 +26,110 @@ open bir_valuesSyntax bir_immSyntax;
 
 open herdLitmusProgLib herdLitmusInitLib herdLitmusFinalLib;
 open UtilLib;
+open JsonUtil;
+
 
 type litmus = {arch:string,
+			   filename: string,
 	       name:string,
-	       info:string list,
-	       inits: term list,
+	       regs: term list,
+	       mem: term,
 	       progs: term list,
+			   expected: string,
 	       final: term}
+		  
+exception CouldNotParseJsonFile
+	      
+val SOURCE_DIR = valOf (Posix.ProcEnv.getenv ("PWD"))
 
-(* Split the herd litmus test into sections *)
-local
-    fun remove_comments s =
-	let
-	    fun comment_start (x::y::r, acc) = 
-		(case (x,y) of (#"(", #"*") => comment_end (r, acc)
-			     | _ => comment_start (y::r, x::acc))
-	      | comment_start (xs, acc) = List.revAppend (acc, xs)
-	    and comment_end (x::y::r, acc) =
-		(case (x,y) of (#"*", #")") => comment_start (r, acc)
-			     | _ => comment_end (y::r, x::acc))
-	      | comment_end _ = raise Fail "Expected end of comment"
-	in String.implode (comment_start (String.explode s, [])) end
-    fun names [] = raise Fail "Expected arch and testname"
-      | names (x::lines) =
-	case String.tokens Char.isSpace x
-	 of (arch::name::_) => ((arch, name), lines)
-	  | _ => raise Fail "Expected arch and testname"
-    fun info [] = raise Fail "Expected info section"
-      | info (x::r) =
-	if String.isPrefix "{" x then
-	    ([], x::r)
-	else
-	    let val (xs, r2) = info r in (x::xs, r2) end
-    fun init [] = raise Fail "Expected init section"
-      | init (x::r) =
-	if String.isSuffix "}" x then
-	    ([x],r)
-	else
-	    let val (xs, r2) = init r in (x::xs, r2) end
-    fun prog [] = raise Fail "Expected prog and final"
-      | prog (x::r) =
-	if String.isSuffix ";" x then
-	    let val (xs, r2) = prog r in (x::xs, r2) end
-	else
-	    ([], x::r)
-in
-fun split_to_sections text =
+fun parse_litmus text = 
     let
-	val ls1 = String.tokens (eq #"\n") (remove_comments text)
-	val ls1' = map (trim Char.isSpace) ls1
-	val ls1'' = List.filter (fn s => not(s = "")) ls1'
-	val ((arch, name), ls2) = names ls1''
-	val (info_sec, ls3) = info ls2
-	val (init_sec, ls4) = init ls3
-	val (prog_sec, final_sec) = prog ls4
-    in (arch, name, info_sec, String.concat init_sec,
-	String.concat prog_sec, String.concat final_sec) end
-    handle Fail msg => raise Fail ("Failed splitting herd litmus test: " ^ msg)
-end; (* local *)
+	val proc = Unix.execute(SOURCE_DIR ^ "/parser.py", [])
+	val (inStream, outStream) = Unix.streamsOf proc
+    in
+	TextIO.output(outStream, text) before TextIO.closeOut outStream;
+	TextIO.inputAll(inStream) before TextIO.closeIn inStream
+    end
+    
 
+(* compile and disassemble the program, returns the filename of the .da file *)
+fun compile_and_disassemble prog =
+    let
+	val proc = Unix.execute(SOURCE_DIR ^ "/compile_and_da.sh", [])
+	val (inStream, outStream) = Unix.streamsOf proc
+    in
+	TextIO.output(outStream, prog) before TextIO.closeOut outStream;
+	TextIO.inputAll(inStream) before TextIO.closeIn inStream
+    end
 
+fun run_herd filename =
+		let
+	val proc = Unix.execute(SOURCE_DIR ^ "/herd.sh", [filename])
+	val (inStream, outStream) = Unix.streamsOf proc
+		in
+	TextIO.inputAll(inStream) before TextIO.closeIn inStream
+		end
+		  
+fun get_json_data (Json.OK json) = 
+    let
+	val arch = asString $ lookupField json "arch"  
+	val name = asString $ lookupField json "name"  
+	val regs = map asString (asArray $ lookupField json "regs")
+	val decl = map asString (asArray $ lookupField json "decl")
+	val mem = map asString (asArray $ lookupField json "mem")
+	val progs = map asString (asArray $ lookupField json "prog")
+	val final = asString $ lookupField json "final"
+    in (arch, name, regs, decl, mem, progs, final) end
+  | get_json_data (Json.ERROR _) = raise CouldNotParseJsonFile
+		  
 fun regs_of_prog prog =
     let
 	val term_EVAL = rhs o concl o EVAL
-	val bvars = strip_set $ term_EVAL “bir_varset_of_program ^prog”
+	val bvars = strip_set $ term_EVAL “bmc_varset_of_program ^prog”
 	val regs = filter (is_BType_Imm o snd)$ map dest_BVar bvars
 	fun f (x,y) = (fromHOLstring x, size_of_bir_immtype_t $ dest_BType_Imm y)
     in map f regs end;
 
-fun parse text =
+fun parse filename =
     let
+	val text = bir_fileLib.read_from_file filename	
+	val herd_res = run_herd filename
+	val jsontext = parse_litmus text
 	(* Split text into sections *)
-	val (arch, name, info_sec, init_sec, prog_sec, final_sec)
-	    = split_to_sections text
+	val json = Json.parse jsontext
+	val (arch, name, regs, decl, mem, progs, final) = get_json_data json
 	(* Parse the program section, create one bir_program per processes *)
-	val progs = parse_prog prog_sec
+	val progs = parse_prog arch progs 
 	(* Get registers used by each program *)
 	val progs_regs = map regs_of_prog progs
 	(* Parse init section, get initial bir memory and thread environments *)
-	val inits = parse_init init_sec progs_regs
+	val regs = parse_regs arch regs progs_regs
 	(* Parse the constraint, returns a predicate for a set of bir states *)
-	val final = parse_final final_sec
+	val final = parse_final arch final decl
+	val mem = parse_mem mem decl
     in
 	{arch=arch,
+	 filename=filename,
 	 name=name,
-	 info=info_sec,
-	 inits=inits,
+	 regs=regs,
+	 mem=mem,
 	 progs=progs,
+	 expected=herd_res,
 	 final=final}
     end
-(*
-val filename = "../tests/non-mixed-size/BASIC_2_THREAD/MP+po+addr.litmus"
-val prog = hd $ tl progs
-val text = bir_fileLib.read_from_file filename;
-val (arch, name, info_sec, init_sec, prog_sec, final_sec) = split_to_sections text
-val progs = parse_prog prog_sec
-*)
-
 end (* herdLitmusLib *)
+
+(*
+val file = "/opt/litmus-tests-riscv/tests/non-mixed-size/BASIC_2_THREAD/S.litmus"
+val file = "/opt/litmus-tests-riscv/tests/non-mixed-size/BASIC_2_THREAD/SB+fence.rw.rw+po.litmus"
+val text = bir_fileLib.read_from_file file
+val jsontext = parse_litmus text
+(* Split text into sections *)
+val json = Json.parse jsontext
+val (arch, name, regs, decl, mem, progs, final) = get_json_data json
+(* Parse the program section, create one bir_program per processes *)
+val prog = hd (parse_prog arch progs)
+open pred_setLib listSyntax listLib
+val term_EVAL = rhs o concl o EVAL
+val bvars = strip_set $ term_EVAL “bmc_varset_of_program ^prog”
+*)
