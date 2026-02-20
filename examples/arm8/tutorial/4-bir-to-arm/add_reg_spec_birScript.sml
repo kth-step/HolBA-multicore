@@ -25,29 +25,9 @@ open HolBASimps;
 open bir_arm8_backlifterTheory;
 open bslSyntax;
 
-val _ = new_theory "tutorial_bir_to_arm";
+open add_reg_spec_arm8Theory;
 
-(* unsigned comparison *)
-EVAL ``255w <=+ (0w:word8)``;
-(* Signed comparison *)
-EVAL ``255w <= (0w:word8)``;
-
-(* register add *)
-val y_var = ``(m.REG 5w)``;
-val x_var = ``(m.REG 4w)``;
-val ly_var = ``(m.REG 3w)``;
-val lx_var = ``(m.REG 2w)``;
-
-Definition arm8_add_reg_pre_def:
-arm8_add_reg_pre m = (
-  ((^x_var) >= 0w) /\
-  ((^x_var = ^lx_var) /\ (^y_var = ^ly_var)))
-End
-
-Definition arm8_add_reg_post_def:
- arm8_add_reg_post m =
-  ((^x_var + ^y_var) = (^ly_var))
-End
+val _ = new_theory "add_reg_spec_bir";
 
 (* BIR variables *)
 val get_y = bden (bvar "R5" ``(BType_Imm Bit64)``);

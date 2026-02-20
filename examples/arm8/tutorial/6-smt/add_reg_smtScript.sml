@@ -7,16 +7,13 @@ open bir_exp_tautologiesTheory;
 open bir_smtLib;
 open bslSyntax;
 open pretty_exnLib;
-open HolBA_HolSmtLib;
-open bir_smtLib;
 
 (* From examples: *)
-open tutorial_bir_to_armTheory;
+open add_reg_spec_birTheory;
 open add_reg_wpTheory;
 
-val use_holsmt = true;
-
 if !Globals.interactive then let
+  val use_holsmt = true;
   val _ = Parse.current_backend := PPBackEnd.vt100_terminal;
   val _ = Globals.show_tags := true;
   val _ = Globals.linewidth := 100;

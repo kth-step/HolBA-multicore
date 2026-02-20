@@ -21,8 +21,9 @@ open bir_inst_liftingHelpersLib;
 (* ================================================ *)
 
 open bir_prog_add_regTheory;
-open tutorial_bir_to_armTheory add_reg_wpTheory
-     add_reg_smtTheory;
+open add_reg_spec_birTheory;
+open add_reg_wpTheory
+open add_reg_smtTheory;
 
 open bir_wp_interfaceLib;
 
