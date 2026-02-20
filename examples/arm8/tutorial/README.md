@@ -1,4 +1,4 @@
-# The HolBA tutorial
+# HolBA ARMv8 tutorial
 
 ## Overview
 
@@ -10,15 +10,10 @@ The tutorial features verification of three examples:
 
 The different directories contain the different stages of verification (with `3-exec` and `8-symbexec` added in as bonus experiments). `7-composition` contains the theorems stating the final contracts.
 
-## Build system
+n## Building
 
-You may use the following commands:
-
-* `make` to build all tutorials
-* `make {DIRNAME}` to build the directory `{DIRNAME}`, e.g. `make 3-exec`
-* `make cleantutorial` to remove all temporary files
-* `make reverttutorial` to remove and revert all files (warning: all development in the tutorial will be lost!)
-
+Use `Holmake` either in the `examples/arm8/tutorial` directory to build
+all tutorial code, or one of its subdirectories.
 
 ## Working interactively
 
@@ -49,8 +44,3 @@ A lot people are unused to Emacs keyboard bindings for copying and pasting. To b
 <kbd>Alt</kbd>+<kbd>x</kbd>
 
 then write `cua-mode` and press <kbd>Enter</kbd>.
-
-## HolBA-tutorial VM
-
-Using the prepared VM, you don't need to worry about `autoenv.sh` and emacs configurations. The environment is prepared so that you can run `make`, `Holmake`, `rlwrap hol` and `emacs` from a terminal in the HolBA directories as needed. The most relevant HolBA directories are `~/tutorial/HolBA_tutorial/examples/tutorial` and `~/tutorial/HolBA_scamv/src/tools/scamv`.
-

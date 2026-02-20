@@ -1,4 +1,5 @@
 # 4 Contracts and Going From BIR to ARM
+
 We use registers ``4`` and ``5`` to refer to the original values of
 the input parameters, since these registers are never updated. 
 The precondition for our function is:
@@ -50,6 +51,7 @@ bir_add_reg_pre =
 ```
 
 ## Hoare triple
+
 Internally, the tools uses several definitions for Hoare triples (due
 to different needs). The one that we are using here is defined in terms
 of the `weak_triple` from `bin_hoare_logicTheory`:
