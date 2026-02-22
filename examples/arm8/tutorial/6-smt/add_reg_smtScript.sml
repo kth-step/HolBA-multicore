@@ -12,22 +12,6 @@ open pretty_exnLib;
 open add_reg_spec_birTheory;
 open add_reg_wpTheory;
 
-if !Globals.interactive then let
-  val use_holsmt = true;
-  val _ = Parse.current_backend := PPBackEnd.vt100_terminal;
-  val _ = Globals.show_tags := true;
-  val _ = Globals.linewidth := 100;
-  val _ = bir_smt_set_trace use_holsmt 2;
-  val _ = bir_ppLib.install_bir_pretty_printers ();
-  (*
-  val _ = bir_ppLib.remove_bir_pretty_printers ();
-  val _ = bir_smt_set_trace use_holsmt 0;
-  val _ = bir_smt_set_trace use_holsmt 1;
-  val _ = bir_smt_set_trace use_holsmt 3;
-  val _ = bir_smt_set_trace use_holsmt 4;
-  *)
-in () end else ();
-
 val _ = new_theory "add_reg_smt";
 
 (*****************************************************************************)
