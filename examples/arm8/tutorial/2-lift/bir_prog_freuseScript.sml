@@ -1,14 +1,12 @@
-open HolKernel boolLib liteLib simpLib Parse bossLib;
+Theory bir_prog_freuse
 
-open wordsTheory;
+Ancestors words bir_program
 
-open bir_programTheory;
+Libs boolLib liteLib simpLib
 
-val _ = new_theory "bir_prog_freuse";
-
-val freuse_def = Define `
-  freuse = (BirProgram
-[
+Definition freuse_def:
+freuse : 'obs_type bir_program_t =
+(BirProgram [
 (* add times two *)
     <|bb_label := BL_Address (Imm32 0x000w);
       bb_statements :=
@@ -49,9 +47,5 @@ val freuse_def = Define `
     <|bb_label := BL_Address (Imm32 0x104w);
       bb_statements := [];
       bb_last_statement := BStmt_Jmp (BLE_Exp (BExp_Den (BVar "t" (BType_Imm Bit32))))|>;
-]) : 'a bir_program_t
-`;
-
-
-val _ = export_theory();
-
+])
+End

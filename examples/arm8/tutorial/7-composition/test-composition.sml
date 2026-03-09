@@ -4,7 +4,7 @@ val _ = Parse.current_backend := PPBackEnd.vt100_terminal;
 val _ = Globals.show_tags := true;
 
 open add_reg_compositionTheory;
-open tutorial_backliftingTheory;
+open add_reg_propTheory;
 open freuse_compositionTheory;
 open mutrec_compositionTheory;
 
@@ -37,11 +37,11 @@ val _ = print_and_check_thm
 
 val _ = print_and_check_thm
   "HolBA tutorial example (back to ARMv8)"
-  arm_add_reg_contract_thm
+  arm8_cont_add_reg
   ``arm8_cont
       bir_add_reg_progbin
-      (28w:word64)
-      {(72w:word64)}
+      add_reg_init_addr
+      {add_reg_end_addr}
       arm8_add_reg_pre
       arm8_add_reg_post
   ``;

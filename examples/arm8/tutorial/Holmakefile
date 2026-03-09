@@ -1,14 +1,11 @@
 CLINE_OPTIONS = -r
 
-INCLUDES = $(HOLBADIR)/examples/bir/bsl-wp-smt \
-           $(HOLBADIR)/examples/arm8/tutorial/2-lift \
+INCLUDES = $(HOLBADIR)/examples/arm8/tutorial/2-lift \
            $(HOLBADIR)/examples/arm8/tutorial/3-exec \
            $(HOLBADIR)/examples/arm8/tutorial/4-bir-to-arm \
            $(HOLBADIR)/examples/arm8/tutorial/5-wp \
            $(HOLBADIR)/examples/arm8/tutorial/6-smt \
-           $(HOLBADIR)/examples/arm8/tutorial/7-composition \
-           $(HOLBADIR)/examples/riscv/swap \
-           $(HOLBADIR)/examples/riscv/isqrt
+           $(HOLBADIR)/examples/arm8/tutorial/7-composition
 
 all: $(DEFAULT_TARGETS)
 .PHONY: all

@@ -2,7 +2,7 @@
 # cross compiler
 ##########################################################
 
-HOLBA_DIR = ../../..
+HOLBA_DIR = ../../../..
 include $(HOLBA_DIR)/scripts/setup/env_base.mk
 include $(HOLBA_DIR)/scripts/setup/env_check_gcc_arm8.mk
 
@@ -80,6 +80,10 @@ $(ELF_TEST): $(SOURCES_C)
 test: $(ELF_TEST)
 	./$(ELF_TEST)
 
+framac: src/add_reg.acsl src/add_reg.c
+	frama-c -acsl-import src/add_reg.acsl src/add_reg.c -then -wp
+
+
 ##########################################################
 
 clean:
@@ -87,6 +91,4 @@ clean:
 
 ##########################################################
 
-.PHONY: test
-
-
+.PHONY: test framac

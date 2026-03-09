@@ -21,10 +21,13 @@ open bir_exp_to_wordsLib bslSyntax;
 
 (* From examples: *)
 open bir_prog_add_regTheory;
-open tutorial_bir_to_armTheory;
+open add_reg_spec_arm8Theory;
+open add_reg_spec_birTheory;
 
 (* From HOL4: *)
-open finite_mapSyntax pairSyntax pred_setSyntax;
+open finite_mapSyntax;
+open pairSyntax;
+open pred_setSyntax;
 
 val _ = new_theory "add_reg_wp";
 
@@ -41,11 +44,17 @@ val _ = new_theory "add_reg_wp";
  * HT = Hoare triple
 *)
 
-
 (******************************************************************)
 (******************************************************************)
 
 val prog_tm = (lhs o concl) bir_add_reg_prog_def;
+
+val prog_init_addr_tm = (rhs o concl) add_reg_init_addr_def;
+val prog_end_addr_tm = (rhs o concl) add_reg_end_addr_def;
+
+val loop_init_addr_tm = (rhs o concl) add_reg_init_loop_addr_def;
+val loop_end_addr_tm = (rhs o concl) add_reg_end_loop_addr_def;
+
 (****************     (1) bir_add_reg_entry      ******************)
 (* The HT with the WP for the loop entry of the add_reg program is
  * generated and proved here. *)
@@ -57,17 +66,18 @@ val prog_tm = (lhs o concl) bir_add_reg_prog_def;
 val prefix = "add_reg_entry_";
 (* This is the label of the "first block" in HT execution,
  * meaning the block at the beginning of which execution starts.  *)
-val first_block_label_tm = ``BL_Address (Imm64 0x1cw)``; (* 28 *)
+val first_block_label_tm = ``BL_Address (Imm64 ^prog_init_addr_tm)``;
 (* This is the Ending blocks of HT execution: the HT postcondition
  * (on the final state) is predicated on the state when these blocks
  * are reached. *)
-val ending_set =  ``{BL_Address (Imm64 0x40w); BL_Address (Imm64 0x48w)}``; (* 64, 72 *)
+val ending_set_tm =  ``{BL_Address (Imm64 ^loop_end_addr_tm); BL_Address (Imm64 ^prog_end_addr_tm)}``
 (* postcond_tm is the postcondition of the HT to be generated and
  * proved, which is obtained from the contract definitions in
  * tutorial_bir_to_armTheory. *)
-val postcond_tm = ``\l. if (l = BL_Address (Imm64 0x40w))
+val postcond_tm = ``\l. if (l = BL_Address (Imm64 ^loop_end_addr_tm))
                         then bir_add_reg_contract_1_post
                         else bir_exp_false``;
+
 (* defs is a list of theorems - typically definitions - which is
  * used internally in bir_obtain_ht. This always contains the
  * program definition, the postcondition definition, and all other
@@ -92,15 +102,25 @@ val defs = [bir_add_reg_prog_def, bir_add_reg_contract_1_post_def,
  * *)
 val (bir_add_reg_entry_ht, bir_add_reg_entry_wp_tm) =
   bir_obtain_ht prog_tm first_block_label_tm
-                ending_set ending_set_to_sml_list
+                ending_set_tm ending_set_to_sml_list
                 postcond_tm postcond_exp_from_label
                 prefix defs;
+
 (* By creating a definition and saving the HT as a theorem, we 
  * allow them to be exported to later theories. *)
-val bir_add_reg_entry_wp_def =
-  Define `bir_add_reg_entry_wp = ^(bir_add_reg_entry_wp_tm)`;
-val _ = save_thm ("bir_add_reg_entry_ht", bir_add_reg_entry_ht);
 
+Definition bir_add_reg_entry_wp_def:
+ bir_add_reg_entry_wp = ^bir_add_reg_entry_wp_tm
+End
+
+Theorem bir_add_reg_entry_ht:
+ bir_exec_to_labels_triple (bir_add_reg_prog : 'obs_type bir_program_t)
+  ^first_block_label_tm ^ending_set_tm
+  ^bir_add_reg_entry_wp_tm
+  ^postcond_tm
+Proof
+  ACCEPT_TAC bir_add_reg_entry_ht
+QED
 
 (******************************************************************)
 (*                        LOOP VARIANT                            *)
@@ -129,11 +149,13 @@ val _ = save_thm ("bir_add_reg_entry_ht", bir_add_reg_entry_ht);
 (**************    (2)  bir_add_reg_loop_variant     *************)
 (* The WP for the loop content is generated and proved here. This
  * is similar to (2) above. *)
+
 (* 20 -> 24 -> 28 -> 2c -> 30 -> 34 -> 38 -> 3c -> 40 *)
+
 val prefix = "add_reg_loop_variant_";
-val first_block_label_tm = ``BL_Address (Imm64 0x20w)``;
-val ending_set =  ``{BL_Address (Imm64 0x40w); BL_Address (Imm64 0x48w)}``; (* 64, 72 *)
-val postcond_tm = ``\l. if (l = BL_Address (Imm64 0x40w))
+val first_block_label_tm = ``BL_Address (Imm64 ^loop_init_addr_tm)``;
+val ending_set_tm =  ``{BL_Address (Imm64 ^loop_end_addr_tm); BL_Address (Imm64 ^prog_end_addr_tm)}``;
+val postcond_tm = ``\l. if (l = BL_Address (Imm64 ^loop_end_addr_tm))
                          then bir_add_reg_contract_2_post_variant v
                          else bir_exp_false``;
 val defs = [bir_add_reg_prog_def,
@@ -142,26 +164,32 @@ val defs = [bir_add_reg_prog_def,
 
 val (bir_add_reg_loop_variant_ht, bir_add_reg_loop_variant_wp_tm) =
   bir_obtain_ht prog_tm first_block_label_tm
-                ending_set ending_set_to_sml_list
+                ending_set_tm ending_set_to_sml_list
                 postcond_tm postcond_exp_from_label
                 prefix defs;
 
-val bir_add_reg_loop_variant_wp_def = Define `
-  bir_add_reg_loop_variant_wp v =
-    ^(bir_add_reg_loop_variant_wp_tm)
-`;
-val _ = save_thm ("bir_add_reg_loop_variant_ht",
-                  bir_add_reg_loop_variant_ht);
+Definition bir_add_reg_loop_variant_wp_def:
+ bir_add_reg_loop_variant_wp v =
+   ^bir_add_reg_loop_variant_wp_tm
+End
 
+Theorem bir_add_reg_loop_variant_ht:
+ bir_exec_to_labels_triple (bir_add_reg_prog : 'obs_type bir_program_t)
+  ^first_block_label_tm ^ending_set_tm
+  ^bir_add_reg_loop_variant_wp_tm
+  ^postcond_tm
+Proof
+ ACCEPT_TAC bir_add_reg_loop_variant_ht
+QED
 
 (*********   (3)  bir_add_reg_loop_continue_variant     **********)
 (* This WP is for execution which starts at the loop condition and
  * then continues looping. *)
 (* 40 -> 20 *)
 val prefix = "add_reg_loop_continue_variant_";
-val first_block_label_tm = ``BL_Address (Imm64 0x40w)``;
-val ending_set = ``{BL_Address (Imm64 0x20w); BL_Address (Imm64 0x40w); BL_Address (Imm64 0x48w)}``;
-val postcond_tm = ``\l. if (l = BL_Address (Imm64 0x20w))
+val first_block_label_tm = ``BL_Address (Imm64 ^loop_end_addr_tm)``;
+val ending_set_tm = ``{BL_Address (Imm64 ^loop_init_addr_tm); BL_Address (Imm64 ^loop_end_addr_tm); BL_Address (Imm64 ^prog_end_addr_tm)}``;
+val postcond_tm = ``\l. if (l = BL_Address (Imm64 ^loop_init_addr_tm))
                          then bir_add_reg_contract_3_post_variant v
                          else bir_exp_false``;
 val defs = [bir_add_reg_prog_def,
@@ -171,17 +199,23 @@ val defs = [bir_add_reg_prog_def,
 val (bir_add_reg_loop_continue_variant_ht,
      bir_add_reg_loop_continue_variant_wp_tm) =
   bir_obtain_ht prog_tm first_block_label_tm
-                ending_set ending_set_to_sml_list
+                ending_set_tm ending_set_to_sml_list
                 postcond_tm postcond_exp_from_label
                 prefix defs;
 
-val bir_add_reg_loop_continue_variant_wp_def = Define `
-  bir_add_reg_loop_continue_variant_wp v =
-    ^(bir_add_reg_loop_continue_variant_wp_tm)
-`;
-val _ = save_thm ("bir_add_reg_loop_continue_variant_ht",
-                  bir_add_reg_loop_continue_variant_ht);
+Definition bir_add_reg_loop_continue_variant_wp_def:
+ bir_add_reg_loop_continue_variant_wp v =
+  ^bir_add_reg_loop_continue_variant_wp_tm
+End
 
+Theorem bir_add_reg_loop_continue_variant_ht:
+  bir_exec_to_labels_triple (bir_add_reg_prog : 'obs_type bir_program_t)
+  ^first_block_label_tm ^ending_set_tm
+  ^bir_add_reg_loop_continue_variant_wp_tm
+  ^postcond_tm
+Proof
+ ACCEPT_TAC bir_add_reg_loop_continue_variant_ht
+QED
 
 (**************    (4)   bir_add_reg_loop_exit      ***************)
 (* This WP is for execution which starts at the loop condition and
@@ -189,9 +223,9 @@ val _ = save_thm ("bir_add_reg_loop_continue_variant_ht",
  * just SP manipulation and return. *)
 (* 40 -> 48 *)
 val prefix = "add_reg_loop_exit_";
-val first_block_label_tm = ``BL_Address (Imm64 0x40w)``;
-val ending_set = ``{BL_Address (Imm64 0x20w); BL_Address (Imm64 0x48w)}``;
-val postcond_tm = ``\l. if (l = BL_Address (Imm64 0x48w))
+val first_block_label_tm = ``BL_Address (Imm64 ^loop_end_addr_tm)``;
+val ending_set_tm = ``{BL_Address (Imm64 ^loop_init_addr_tm); BL_Address (Imm64 ^prog_end_addr_tm)}``;
+val postcond_tm = ``\l. if (l = BL_Address (Imm64 ^prog_end_addr_tm))
                          then bir_add_reg_contract_4_post
                          else bir_exp_false``;
 val defs = [bir_add_reg_prog_def, bir_add_reg_contract_4_post_def,
@@ -199,15 +233,22 @@ val defs = [bir_add_reg_prog_def, bir_add_reg_contract_4_post_def,
 
 val (bir_add_reg_loop_exit_ht, bir_add_reg_loop_exit_wp_tm) =
   bir_obtain_ht prog_tm first_block_label_tm
-                ending_set ending_set_to_sml_list
+                ending_set_tm ending_set_to_sml_list
                 postcond_tm postcond_exp_from_label
                 prefix defs;
 
-val bir_add_reg_loop_exit_wp_def = Define
-  `bir_add_reg_loop_exit_wp = ^(bir_add_reg_loop_exit_wp_tm)`;
-val _ =
-  save_thm ("bir_add_reg_loop_exit_ht", bir_add_reg_loop_exit_ht);
+Definition bir_add_reg_loop_exit_wp_def:
+ bir_add_reg_loop_exit_wp = ^bir_add_reg_loop_exit_wp_tm
+End
 
+Theorem bir_add_reg_loop_exit_ht:
+  bir_exec_to_labels_triple (bir_add_reg_prog : 'obs_type bir_program_t)
+  ^first_block_label_tm ^ending_set_tm
+  ^bir_add_reg_loop_exit_wp_tm
+  ^postcond_tm
+Proof
+ ACCEPT_TAC bir_add_reg_loop_exit_ht
+QED
 
 (************            SOME EXPERIMENTS            **************)
 (* What about the preamble of the function, where the arguments are
@@ -244,8 +285,6 @@ val bir_add_reg_mem_wp_def = Define `
 `;
 val _ = save_thm ("bir_add_reg_mem_ht", bir_add_reg_mem_ht);
 *)
-
-
 
 (*
 (* The precondition of contract zero *)

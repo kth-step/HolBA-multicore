@@ -1,0 +1,12 @@
+module add_reg:
+
+function add_reg:
+  contract:
+    requires x >= 0;
+    ensures \old(x) + \old(y) == \result;
+    assigns \nothing;
+
+  at loop 1:
+    loop invariant 0 <= lx && x + y == lx + ly;
+    loop assigns lx, ly;
+    loop variant lx;

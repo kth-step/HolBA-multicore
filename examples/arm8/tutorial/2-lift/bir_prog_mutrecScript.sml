@@ -1,15 +1,12 @@
-open HolKernel boolLib liteLib simpLib Parse bossLib;
+Theory bir_prog_mutrec
 
-open wordsTheory;
+Ancestors words bir_program
 
-open bir_programTheory;
+Libs liteLib simpLib
 
-val _ = new_theory "bir_prog_mutrec";
-
-
-val mutrec_def = Define `
-  mutrec = (BirProgram
-[
+Definition mutrec_def:
+mutrec : 'obs_type bir_program_t =
+(BirProgram [
 (* is_even *)
     <|bb_label := BL_Address (Imm32 0x000w);
       bb_statements :=
@@ -60,9 +57,5 @@ val mutrec_def = Define `
                       (BExp_Const (Imm1 0w))
         ];
       bb_last_statement := BStmt_Halt (BExp_Const (Imm32 0x0w))|>
-]) : 'a bir_program_t
-`;
-
-
-val _ = export_theory();
-
+])
+End
