@@ -2,7 +2,7 @@
 max:     file format elf64-littleaarch64
 
 
-Disassembly of section .init:
+Disassembly of section .text:
 
 
 0000000000000718 <max>:
