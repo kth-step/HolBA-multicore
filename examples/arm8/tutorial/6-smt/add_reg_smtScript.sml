@@ -50,7 +50,11 @@ val contract_1_imp_taut_thm = bir_smt_prove_is_taut contract_1_imp
 val contract_1_pre = (lhs o concl) bir_add_reg_contract_1_pre_def;
 val contract_1_imp = bimp (contract_1_pre, contract_1_wp);
 
-Theorem contract_1_imp_taut_thm = bir_smt_prove_is_taut contract_1_imp
+Theorem contract_1_imp_taut_thm:
+ bir_exp_is_taut ^contract_1_imp
+Proof
+ ACCEPT_TAC (bir_smt_prove_is_taut contract_1_imp)
+QED
 
 (*********************************)
 
@@ -68,7 +72,11 @@ val contract_2v_wp  = (lhs o concl o (SPEC contract_2v_freevar))
   bir_add_reg_loop_variant_wp_def;
 val contract_2v_imp = bimp (contract_2v_pre, contract_2v_wp);
 
-Theorem contract_2v_imp_taut_thm = bir_smt_prove_is_taut contract_2v_imp
+Theorem contract_2v_imp_taut_thm:
+ !v. bir_exp_is_taut ^contract_2v_imp
+Proof
+ ACCEPT_TAC (bir_smt_prove_is_taut contract_2v_imp)
+QED
 
 (*********************************)
 
@@ -83,7 +91,11 @@ val contract_3v_wp  = (lhs o concl o (SPEC contract_3v_freevar))
   bir_add_reg_loop_continue_variant_wp_def;
 val contract_3v_imp = bimp (contract_3v_pre, contract_3v_wp);
 
-Theorem contract_3v_imp_taut_thm = bir_smt_prove_is_taut contract_3v_imp
+Theorem contract_3v_imp_taut_thm:
+ !v. bir_exp_is_taut ^contract_3v_imp 
+Proof
+ ACCEPT_TAC (bir_smt_prove_is_taut contract_3v_imp)
+QED
 
 (*********************************)
 
@@ -95,7 +107,11 @@ val contract_4_pre = (lhs o concl) bir_add_reg_contract_4_pre_def;
 val contract_4_wp  = (lhs o concl) bir_add_reg_loop_exit_wp_def;
 val contract_4_imp = bimp (contract_4_pre, contract_4_wp);
 
-Theorem contract_4_imp_taut_thm = bir_smt_prove_is_taut contract_4_imp
+Theorem contract_4_imp_taut_thm:
+ bir_exp_is_taut ^contract_4_imp
+Proof
+ ACCEPT_TAC (bir_smt_prove_is_taut contract_4_imp)
+QED
 
 (*****************************************************************************)
 (* 1.2. Hoare triples containing memories                                    *)
