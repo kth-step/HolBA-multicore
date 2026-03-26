@@ -32,7 +32,6 @@ RUN mkdir /opt/embexp && cd /opt/embexp \
  && GIT_URL_BOX_HTTPS=https://github.com/kth-step/EmbExp-Box.git
 
 RUN git clone https://github.com/herd/herdtools7.git /opt/herdtools7
-RUN git clone https://github.com/litmus-tests/litmus-tests-riscv.git /opt/litmus-tests-riscv
 
 ENV HOLDIR="/opt/hol_t2"
 ENV LC_ALL=C
