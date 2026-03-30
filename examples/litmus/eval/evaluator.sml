@@ -76,6 +76,21 @@ fun final_check check regsMem =
      else if ^check ^regsMem
      then "Ok" else "No"”;
 
+fun trim str =
+    let
+        (* Check if a character is whitespace *)
+        val isSpace = Char.isSpace
+        
+        (* Convert string to a substring for efficient slicing *)
+        val fullSs = Substring.full str
+        
+        (* Trim from the left, then the right *)
+        val trimmedSs = Substring.dropr isSpace (Substring.dropl isSpace fullSs)
+    in
+        (* Convert back to a string *)
+        Substring.string trimmedSs
+    end
+
 fun run_litmus fuel (litmus:litmus) =
    let 
        val arch = if #arch litmus = "RISCV" then ``RISCV`` else ``ARMv8``;
@@ -87,15 +102,17 @@ fun run_litmus fuel (litmus:litmus) =
        val cores = mk_cores (#progs litmus) (#regs litmus) (“LENGTH ^initMemory”);
        (* Initial State *)
        val initialState = mk_pair (cores, initMemory);
+       val timer = Timer.startRealTimer ();
        (* Make promise run *)
        val promisedState = promiseRun arch fuelTerm initialState;
        (* Make local run *)
        val finalState = localRun arch fuelTerm promisedState;
+       val time = Timer.checkRealTimer timer
        (* Get registers and memory *)
        val regsMemory = getRegistersAndMemory finalState;
-       val expected = #expected litmus
+       val expected = trim (#expected litmus)
     in 
-        (final_check (#final litmus) regsMemory, expected)
+        (final_check (#final litmus) regsMemory, expected, Time.toString time)
     end;
 
 
@@ -106,10 +123,9 @@ fun main () =
 	val inputfile  = List.nth (arguments, length-1);
 	val litmus    = get_litmus inputfile;
     val filename  = #filename litmus;
-	val (result, expected) = run_litmus 64 litmus;
-    val res_string = (filename ^ "\t" ^ result ^ "\t" ^ expected ^ "\n")
+	val (result, expected, time) = run_litmus 64 litmus;
     in 
-        print res_string
+        print (filename ^ "\t" ^ result ^ "\t" ^ expected ^ "\t" ^ time ^ "\n")
     end;
 
 val () = (
