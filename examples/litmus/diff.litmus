@@ -1,0 +1,269 @@
+tests/non-mixed-size/HAND/MP+fence.rw.rw+amoswap-rfi-addr.litmus
+RISCV MP+fence.rw.rw+amoswap-rfi-addr
+{
+0:x6=x; 0:x8=y;
+1:x6=y; 1:x8=x;
+}
+ P0          | P1                   ;
+ ori x5,x0,1 | ori x1,x0,2          ;
+ sw x5,0(x6) | amoswap.w x5,x1,(x6) ;
+ fence rw,rw | lw x4,0(x6)          ;
+ ori x7,x0,1 | xor x7,x4,x4         ;
+ sw x7,0(x8) | add x9,x8,x7         ;
+             | lw x10,0(x9)         ;
+exists
+(y=2 /\ 1:x5=1 /\ 1:x10=0)
+---
+tests/non-mixed-size/HAND/MP+fence.rw.rw+data-amoswap-addr.litmus
+RISCV MP+fence.rw.rw+data-amoswap-addr
+{
+0:x6=x; 0:x8=y;
+1:x6=y; 1:x3=z; 1:x8=x;
+}
+ P0          | P1                   ;
+ ori x5,x0,1 | lw x5,0(x6)          ;
+ sw x5,0(x6) | xor x1,x5,x5         ;
+ fence rw,rw | ori x1,x1,1          ;
+ ori x7,x0,1 | amoswap.w x2,x1,(x3) ;
+ sw x7,0(x8) | xor x7,x2,x2         ;
+             | add x9,x8,x7         ;
+             | lw x10,0(x9)         ;
+exists
+(1:x5=1 /\ 1:x10=0)
+---
+tests/non-mixed-size/HAND/ForwardAMO.litmus
+RISCV ForwardAMO
+(* Forbidden, iff local forwarding from AMO is forbidden *)
+{
+0:x6=x; 0:x8=y;
+1:x6=y; 1:x7=x; 1:x9=z;
+}
+ P0          | P1            ;
+ lw x5,0(x6) | lw x5,0(x6)   ;
+ fence rw,rw | ori x3,x0,1   ;
+ ori x7,x0,1 | amoswap.w.rl x1,x3,0(x9) ;
+ sw x7,0(x8) | lw x4,0(x9)   ;
+             | beq x4,x0,LOUT;
+             | sw x3,0(x7)   ; 
+             | LOUT:         ;
+exists
+(0:x5=1 /\ 1:x5=1 /\ 1:x4=1)
+---
+tests/non-mixed-size/HAND/SC-FAIL.litmus
+RISCV SC-FAIL
+(* lr and sc are to different addresses, Forbid *)
+{
+0:x2=x; 0:x3=y;
+}
+ P0               ;
+ ori x6,x0,1      ;
+ lr.w x7,0(x2)    ;
+ sc.w x8,x6,0(x3) ;
+forall (y=0 /\ 0:x8=1)
+---
+tests/non-mixed-size/HAND/LR-SC-diff-loc2.litmus
+RISCV LR-SC-diff-loc2
+"both sc.w succeed even though in some state both lr.w reserve the same footprint"
+{
+0:x6=x; 0:x3=a; 0:x5=b; 0:x9=y;
+1:x6=x; 1:x3=b; 1:x5=a; 1:x9=z;
+}
+ P0                           | P1                           ;
+ lr.w x1,0(x6)    (* R x=0 *) | lr.w x1,0(x6)    (* R x=0 *) ;
+ xor x2,x1,x1                 | xor x2,x1,x1                 ;
+ ori x2,x2,1                  | ori x2,x2,1                  ;
+ sw x2,0(x3)      (* W a=1 *) | sw x2,0(x3)      (* W b=1 *) ;
+ lw x4,0(x5)      (* R b=1 *) | lw x4,0(x5)      (* R a=1 *) ;
+ xor x7,x4,x4                 | xor x7,x4,x4                 ;
+ ori x7,x7,1                  | ori x7,x7,1                  ;
+ sc.w x8,x7,0(x9) (* W y=1 *) | sc.w x8,x7,0(x9) (* W z=1 *) ;
+exists
+(x=0 /\ y=1 /\ z=1 /\ a=1 /\ b=1 /\ 0:x1=0 /\ 0:x4=1 /\ 0:x8=0 /\ 1:x1=0 /\ 1:x4=1 /\ 1:x8=0)
+---
+tests/non-mixed-size/HAND/Andy22.litmus
+RISCV Andy22
+{
+0:x7=A; 0:x8=B;
+1:x7=A; 1:x8=B;
+}
+ P0                    | P1           ;
+ ori x1,x0,1           | lw x3,0(x8)  ;
+ amoswap.w x5,x1,0(x7) | sw x3,0(x7)  ;
+ lw x2,0(x7)           |              ;
+ sw x2,0(x8)           |              ;
+exists
+(0:x5=1 /\ 0:x2=1 /\ 1:x3=1)
+---
+tests/non-mixed-size/HAND/LR-SC-diff-loc1.litmus
+RISCV LR-SC-diff-loc1
+{
+0:x6=x; 0:x9=y;
+1:x6=x; 1:x9=z;
+}
+ P0                           | P1                           ;
+ lr.w x5,0(x6)    (* R x=0 *) | lr.w x5,0(x6)    (* R x=0 *) ;
+ ori x7,x0,1                  | ori x7,x0,1                  ;
+ sc.w x8,x7,0(x9) (* W y=1 *) | sc.w x8,x7,0(x9) (* W z=1 *) ;
+exists
+(x=0 /\ y=1 /\ z=1 /\ 0:x5=0 /\ 0:x8=0 /\ 1:x5=0 /\ 1:x8=0)
+---
+tests/non-mixed-size/HAND/ISA-DEP-SUCCESS-SUCCESS.litmus
+RISCV ISA-DEP-SUCCESS-SUCCESS
+
+(* Double success dependency, on an idea by P. Loewenstein,
+   In case of two chained success dependency, Allow *)
+{
+  uint64_t x;
+  uint64_t y;
+  uint64_t z;
+  uint64_t a;
+  0:s0=x; 0:s1=y; 0:s2=z; 0:s3=a;
+  1:s0=x; 1:s2=z;
+}
+
+
+ P0                     |  P1            ;
+ ld a0,0(s0)            | ld a3,0(s2)    ;
+ lr.d a1,0(s1)          | sd a3,0(s0)    ;
+ sc.d a2,a0,0(s1)       |                ;
+ addi  a2,a2,2          |                ;
+ lr.d a3,0(s3)          |                ;
+ sc.d a4,a2,0(s3)       |                ;
+ addi  a4,a4,2          |                ;
+ sd a4,0(s2)            |                ;
+
+
+exists
+0:a0=2 /\ 0:a4=2 /\ 1:a3=2 /\
+  (0:a2=2 /\ a=2 /\ y=2 \/ 0:a2=3 /\ a=3 /\ y=0)
+\/
+0:a0=3 /\ 0:a4=3 /\ 1:a3=3 /\ a=0 /\
+  (0:a2=2 /\ y=3 \/ 0:a2=3 /\ y=0)
+---
+tests/non-mixed-size/HAND/SWAP-LR-SC.litmus
+RISCV SWAP-LR-SC
+{
+0:x5=x;
+1:x5=x;
+}
+ P0                 | P1                 ;
+ ori x6,x0,1        | ori x6,x0,2        ;
+ lr.w x7,0(x5)      | lr.w x7,0(x5)      ;
+ sc.w x8,x6,0(x5)   | sc.w x8,x6,0(x5)   ;
+
+locations[0:x7;1:x7;]
+filter 0:x8=0 /\ 1:x8=0
+forall
+(x=1 /\ 1:x7=0 /\ 0:x7=2) \/ (0:x7=0 /\ x=2 /\ 1:x7=1)
+---
+tests/non-mixed-size/HAND/SWAP-LR-SC+FULL.litmus
+RISCV SWAP-LR-SC+FULL
+{
+0:x5=x;
+1:x5=x;
+}
+ P0                 | P1                 ;
+ ori x6,x0,1        | ori x6,x0,2        ;
+ lr.w x7,0(x5)      | lr.w x7,0(x5)      ;
+ sc.w x8,x6,0(x5)   | sc.w x8,x6,0(x5)   ;
+
+forall
+(x=1 /\ 1:x7=0 /\ 0:x7=2) \/
+(0:x7=0 /\ x=2 /\ 1:x7=1) \/
+(not (0:x8 = 0) \/ not (1:x8 = 0))
+---
+tests/non-mixed-size/HAND/MP+fence.rw.rw+ctrl-amoswap-rfi-addr.litmus
+RISCV MP+fence.rw.rw+ctrl-amoswap-rfi-addr
+{
+0:x6=x; 0:x8=y;
+1:x6=y; 1:x3=z; 1:x8=x;
+}
+ P0          | P1                   ;
+ ori x5,x0,1 | lw x5,0(x6)          ;
+ sw x5,0(x6) | bne x5,x0,LC00       ;
+ fence rw,rw | LC00:                ;
+ ori x7,x0,1 | ori x1,x0,1          ;
+ sw x7,0(x8) | amoswap.w x2,x1,(x3) ;
+             | lw x4,0(x3)          ;
+             | xor x7,x4,x4         ;
+             | add x9,x8,x7         ;
+             | lw x10,0(x9)         ;
+exists
+(1:x5=1 /\ 1:x10=0)
+---
+tests/non-mixed-size/HAND/ISA03+SB01.litmus
+RISCV ISA03+SB01
+
+(* ISA V2.3, Fig 1.3, spinlock, adapt, test SC restore *)
+
+{
+0:a0=lock; 0:a1=x; 0:a2=y;
+1:a0=lock; 1:a1=x; 1:a2=y;
+}
+ P0                      | P1                      ;
+ li t0,1                 | li t0,1                 ;
+ amoswap.w.aq t0,t0,(a0) | amoswap.w.aq t0,t0,(a0) ;
+ li t1,1                 | li t1,1                 ;
+ sw t1,0(a1)             | sw t1,0(a2)             ;
+ lw t2,0(a2)             | lw t2,0(a1)             ;
+ amoswap.w.rl x0,x0,(a0) | amoswap.w.rl x0,x0,(a0) ;
+
+
+filter (0:t0=0 /\ 1:t0=0)
+~exists (0:t2=0 /\ 1:t2=0)
+---
+tests/non-mixed-size/HAND/ISA03+SIMPLE.litmus
+RISCV ISA03+SIMPLE
+
+(* ISA V2.3, Fig 1.3, spinlock, adapt, test mutual exclusion *)
+
+{
+0:a0=lock; 0:a5=a;
+1:a0=lock; 1:a5=a;
+}
+ P0                      | P1                      ;
+ li t0,1                 | li t0,1                 ;
+ amoswap.w.aq t0,t0,(a0) | amoswap.w.aq t0,t0,(a0) ;
+ lw t1,0(a5)             | lw t1,0(a5)             ;
+ addi t1,t1,1            | addi t1,t1,1            ;
+ sw t1,0(a5)             | sw t1,0(a5)             ;
+ amoswap.w.rl x0,x0,(a0) | amoswap.w.rl x0,x0,(a0) ;
+
+
+filter (0:t0=0 /\ 1:t0=0)
+forall (a=2)
+---
+tests/non-mixed-size/HAND/LR-SC-diff-loc3.litmus
+RISCV LR-SC-diff-loc3
+{
+0:x6=x; 0:x9=y;
+1:x6=y; 1:x9=x;
+}
+ P0                           | P1                           ;
+ lr.w x5,0(x6)    (* R x=0 *) | lr.w x5,0(x6)    (* R y=0 *) ;
+ ori x7,x0,1                  | ori x7,x0,1                  ;
+ sc.w x8,x7,0(x9) (* W y=1 *) | sc.w x8,x7,0(x9) (* W x=1 *) ;
+~exists
+(x=1 /\ y=1 /\ 0:x5=0 /\ 0:x8=0 /\ 1:x5=0 /\ 1:x8=0)
+---
+tests/non-mixed-size/FENCE.TSO/RMW/RR+RR+rmw-fence.tsos.litmus
+RISCV RR+RR+rmw-fence.tsos
+"Rmw Fence.tsodWR Hat Rmw Fence.tsodWR Hat"
+Cycle=Hat Rmw Fence.tsodWR Hat Rmw Fence.tsodWR
+Relax=[Rmw,Fence.tsodWR]
+Safe=Hat
+Generator=diy7 (version 7.51+4(dev))
+Prefetch=0:x=F,0:y=T,1:y=F,1:x=T
+Com=Fr Fr
+Orig=Rmw Fence.tsodWR Hat Rmw Fence.tsodWR Hat
+{
+0:x5=x; 0:x7=1; 0:x9=y;
+1:x5=y; 1:x7=1; 1:x9=x;
+}
+ P0                   | P1                   ;
+ amoswap.w x6,x7,(x5) | amoswap.w x6,x7,(x5) ;
+ fence.tso            | fence.tso            ;
+ lw x8,0(x9)          | lw x8,0(x9)          ;
+exists
+(0:x6=0 /\ 0:x8=0 /\ 1:x6=0 /\ 1:x8=0)
+---

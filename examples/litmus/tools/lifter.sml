@@ -15,8 +15,9 @@ fun main () =
     let
 	val arguments  = CommandLine.arguments ();
 	val length     = List.length arguments;
-	val inputfile  = List.nth (arguments, length-2);
-	val outputfile = List.nth (arguments, length-1)
+	val inputfile  = List.nth (arguments, length-1);
+    val size = String.size inputfile;
+	val outputfile = String.substring(inputfile, 0, size - 7) ^ ".json";
     in
 	case lift_test_and_save inputfile outputfile
 	 of OK      => Unix.exit (Word8.fromInt 0)

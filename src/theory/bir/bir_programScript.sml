@@ -134,7 +134,8 @@ End
 Datatype:
   xclb_t = <|
     xclb_time : num;
-    xclb_view : num |>
+    xclb_view : num;
+    xclb_loc  : bir_val_t |>
 End
 
 Datatype:

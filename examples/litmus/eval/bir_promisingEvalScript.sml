@@ -128,7 +128,8 @@ Definition eval_clstep_read:
                    bst_v_wNew  updated_by MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) v_post;
                    bst_v_CAP   updated_by MAX v_addr;
                    bst_v_Rel   updated_by MAX $ ifView (OrdW_ge ordW OrdW_REL) v_post;
-                   bst_xclb    := if xcl then SOME <| xclb_time := t; xclb_view := v_post |> else s.bst_xclb;
+                   bst_xclb    := if xcl then 
+                   SOME <| xclb_time := t; xclb_view := v_post; xclb_loc := l |> else s.bst_xclb;
                    bst_pc      updated_by bir_pc_next |>
   in
     if is_running ∧ IS_SOME l_opt ∧ IS_SOME v_opt ∧ IS_SOME new_environ_opt ∧ is_latest
@@ -176,7 +177,7 @@ Definition eval_clstep_fulfil_aux_def:
 
     (* xcl_check = xcl ⇒ ts.xclb ≠ none ∧ atomic(M, l, tid, ts.xclb.time, t) *)
     xcl_check = (xcl ⇒ (IS_SOME s.bst_xclb) ∧ 
-      (mem_is_loc M ((THE s.bst_xclb).xclb_time) l ⇒ EVERY (λt'. mem_is_loc M t' l ⇒ mem_is_cid M t' cid) [SUC ((THE s.bst_xclb).xclb_time)..< t]));
+      (THE s.bst_xclb).xclb_loc = l ∧ EVERY (λt'. mem_is_loc M t' l ⇒ mem_is_cid M t' cid) [SUC ((THE s.bst_xclb).xclb_time)..< t]);
 
     (* We must fulfil the earliest promise made to the same location *)
     promise_check = (EVERY (λt'. t' < t ⇒ ¬mem_is_loc M t' l) s.bst_prom);
@@ -268,7 +269,7 @@ Definition eval_clstep_amo_aux_def:
       bst_v_CAP   updated_by MAX v_addr;
       bst_v_wNew  updated_by MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) v_wPost;
       bst_v_rNew  updated_by MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) v_wPost;
-      bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := F |>);
+      bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := T |>);
       bst_pc updated_by bir_pc_next;
       |>
   in
@@ -443,7 +444,7 @@ Definition eval_cstep_seq_amo_def:
       bst_v_CAP   updated_by MAX v_addr;
       bst_v_wNew  updated_by MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) v_wPost;
       bst_v_rNew  updated_by MAX $ ifView (OrdR_ge ordR OrdR_ACQ_PC) v_wPost;
-      bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := F |>);
+      bst_fwdb    updated_by (l =+ <| fwdb_time := t_w; fwdb_view := MAX v_addr v_data; fwdb_xcl := T |>);
       bst_pc updated_by bir_pc_next;
       |>
   in

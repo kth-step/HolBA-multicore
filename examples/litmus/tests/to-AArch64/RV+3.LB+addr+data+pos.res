@@ -1,2 +1,0 @@
-/opt/litmus-tests-riscv/tests/to-AArch64/RV+3.LB+addr+data+pos.litmus	No	No
-

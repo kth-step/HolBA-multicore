@@ -1,2 +1,0 @@
-/opt/litmus-tests-riscv/tests/non-mixed-size/ATOMICS/CO/RWC+fence.rw.rwsxp+pos+X.litmus	No	No
-
