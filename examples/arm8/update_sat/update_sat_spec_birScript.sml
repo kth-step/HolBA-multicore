@@ -195,7 +195,21 @@ Theorem update_sat_arm8_pre_imp_bspec_pre_thm:
    (arm8_update_sat_pre pre_x0 pre_x1 pre_x2 pre_x3)
    (bspec_update_sat_pre pre_x0 pre_x1 pre_x2 pre_x3)
 Proof
- cheat
+ rw [bir_pre_arm8_to_bir_def,arm8_update_sat_pre_def,bspec_update_sat_pre_def] >-
+  (rw [bir_is_bool_exp_REWRS,bir_is_bool_exp_env_REWRS] >>
+   FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_typing_expTheory.type_of_bir_exp_def]) >>
+
+ FULL_SIMP_TAC (std_ss++holBACore_ss) [
+   bir_eval_bin_pred_def,
+   arm8_bmr_rel_EVAL,
+   bir_immTheory.bool2b_def,
+   bir_immTheory.bool2w_def,
+   bir_envTheory.bir_env_read_def,
+   bir_envTheory.bir_env_lookup_def,
+   bir_val_TF_bool2b_DEF
+  ] >>
+
+  rw []
 QED
 
 Theorem update_sat_arm8_post_imp_bspec_post_thm:
@@ -203,7 +217,29 @@ Theorem update_sat_arm8_post_imp_bspec_post_thm:
   (arm8_update_sat_post pre_x0 pre_x1 pre_x2 pre_x3)
   (\l. bspec_update_sat_post pre_x0 pre_x1 pre_x2 pre_x3) ls
 Proof
- cheat
+ once_rewrite_tac [bir_post_bir_to_arm8_def,bspec_update_sat_post_def] >>
+ once_rewrite_tac [bspec_update_sat_post_def] >>
+ once_rewrite_tac [bspec_update_sat_post_def] >>
+
+ Cases_on `bs` >> Cases_on `b0` >>
+
+ FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_envTheory.bir_env_read_def, bir_envTheory.bir_env_check_type_def,
+  bir_envTheory.bir_env_lookup_type_def, bir_envTheory.bir_env_lookup_def,bir_eval_bin_pred_def] >>
+
+ Q.ABBREV_TAC `g = ?z. f "R0" = SOME z /\ BType_Imm Bit64 = type_of_bir_val z` >>
+
+ Cases_on `g` >-
+  (FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_eval_bin_pred_def] >>
+   fs [Abbrev_def] >>
+   Cases_on `z` >> fs [type_of_bir_val_def] >>
+   FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_eval_bin_pred_def,bir_immTheory.bool2b_def,bir_val_true_def] >>
+   FULL_SIMP_TAC (std_ss++holBACore_ss) [bool2w_def] >>
+   FULL_SIMP_TAC (std_ss++holBACore_ss) [bir_exp_immTheory.bir_bin_pred_Equal_REWR] >>
+   once_rewrite_tac [arm8_update_sat_post_def] >>
+   FULL_SIMP_TAC (std_ss++holBACore_ss) [arm8_bmr_rel_EVAL,bir_envTheory.bir_env_read_def, bir_envTheory.bir_env_check_type_def,
+    bir_envTheory.bir_env_lookup_type_def, bir_envTheory.bir_env_lookup_def,bir_eval_bin_pred_def] >>
+   rw [] >> fs [if_bool_1w]) >>
+ FULL_SIMP_TAC (std_ss++holBACore_ss) []
 QED
 
 val _ = export_theory ();
