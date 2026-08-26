@@ -69,8 +69,14 @@ End
 
 Definition arm8_update_sat_post_def:
  arm8_update_sat_post (pre_x0:word64) (pre_x1:word64) (pre_x2:word64) (pre_x3:word64) (st:arm8_state) : bool =
-  (((pre_x0 = (0w : word64)) ==> ((st.REG 0w) = (word_smax pre_x2 (pre_x1 - (1w : word64)) : word64))) /\
-  ((pre_x0 <> (0w : word64)) ==> ((st.REG 0w) = (word_smin pre_x3 (pre_x1 + (1w : word64)) : word64))))
+  (((pre_x0 = (0w : word64)) /\
+  ((pre_x1 - (1w : word64)) < pre_x2) ==> ((st.REG 0w) = pre_x2)) /\
+  ((pre_x0 = (0w : word64)) /\
+  (pre_x2 <= (pre_x1 - (1w : word64))) ==> ((st.REG 0w) = (pre_x1 - (1w : word64)))) /\
+  ((pre_x0 <> (0w : word64)) /\
+  (pre_x3 < (pre_x1 + (1w : word64))) ==> ((st.REG 0w) = pre_x3)) /\
+  ((pre_x0 <> (0w : word64)) /\
+  ((pre_x1 + (1w : word64)) <= pre_x3) ==> ((st.REG 0w) = (pre_x1 + (1w : word64)))))
 End
 
 val _ = export_theory ();

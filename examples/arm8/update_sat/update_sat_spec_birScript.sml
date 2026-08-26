@@ -48,7 +48,27 @@ val _ = new_theory "update_sat_spec_bir";
 
 val bspec_update_sat_pre_tm = bslSyntax.bandl [
   ``BExp_BinPred
-     BIExp_LessThan
+     BIExp_SignedLessThan
+      (BExp_BinExp BIExp_Minus (BExp_UnaryExp BIExp_ChangeSign (BExp_Const (Imm64 2147483647w))) (BExp_Const (Imm64 1w)))
+      (BExp_Const (Imm64 pre_x2))``,
+
+  ``BExp_BinPred
+     BIExp_SignedLessThan
+      (BExp_Const (Imm64 pre_x2))
+      (BExp_Const (Imm64 pre_x3))``,
+
+  ``BExp_BinPred
+     BIExp_SignedLessOrEqual
+      (BExp_Const (Imm64 pre_x2))
+      (BExp_Const (Imm64 pre_x1))``,
+
+  ``BExp_BinPred
+     BIExp_SignedLessOrEqual
+      (BExp_Const (Imm64 pre_x1))
+      (BExp_Const (Imm64 pre_x3))``,
+
+  ``BExp_BinPred
+     BIExp_SignedLessThan
       (BExp_Den (BVar "R3" (BType_Imm Bit64)))
       (BExp_Const (Imm64 2147483647w))``,
 
@@ -78,16 +98,87 @@ Definition bspec_update_sat_pre_def:
   ^bspec_update_sat_pre_tm
 End
 
-val bspec_update_sat_post_tm = bslSyntax.bandl [
-  ``BExp_BinPred
-     BIExp_LessOrEqual
-      (BExp_Const (Imm64 pre_x0))
-      (BExp_Den (BVar "R0" (BType_Imm Bit64)))``,
+val bspec_update_sat_post_or_1_tm = bslSyntax.borl [
+  ``BExp_UnaryExp BIExp_Not
+       (BExp_BinExp BIExp_And
+        (BExp_BinPred BIExp_Equal
+          (BExp_Const (Imm64 pre_x0))
+          (BExp_Const (Imm64 0w)))
+        (BExp_BinPred BIExp_SignedLessThan
+          (BExp_BinExp BIExp_Minus
+            (BExp_Const (Imm64 pre_x1))
+            (BExp_Const (Imm64 1w)))
+          (BExp_Const (Imm64 pre_x2))))``,
 
-  ``BExp_BinPred
-     BIExp_LessOrEqual
-      (BExp_Const (Imm64 pre_x1))
-      (BExp_Den (BVar "R0" (BType_Imm Bit64)))``
+   ``BExp_BinPred BIExp_Equal
+       (BExp_Den (BVar "R0" (BType_Imm Bit64)))
+       (BExp_Const (Imm64 pre_x2))``
+];
+
+val bspec_update_sat_post_or_2_tm = bslSyntax.borl [
+  ``BExp_UnaryExp BIExp_Not
+       (BExp_BinExp BIExp_And
+        (BExp_BinPred BIExp_Equal
+          (BExp_Const (Imm64 pre_x0))
+          (BExp_Const (Imm64 0w)))
+        (BExp_BinPred BIExp_SignedLessOrEqual
+          (BExp_Const (Imm64 pre_x2))
+          (BExp_BinExp BIExp_Minus
+            (BExp_Const (Imm64 pre_x1))
+            (BExp_Const (Imm64 1w)))))``,
+
+   ``BExp_BinPred BIExp_Equal
+       (BExp_Den (BVar "R0" (BType_Imm Bit64)))
+       (BExp_BinExp BIExp_Minus
+            (BExp_Const (Imm64 pre_x1))
+            (BExp_Const (Imm64 1w)))``
+];
+
+val bspec_update_sat_post_or_3_tm = bslSyntax.borl [
+  ``BExp_UnaryExp BIExp_Not
+       (BExp_BinExp BIExp_And
+        (BExp_UnaryExp BIExp_Not
+         (BExp_BinPred BIExp_Equal
+           (BExp_Const (Imm64 pre_x0))
+           (BExp_Const (Imm64 0w))))
+        (BExp_BinPred BIExp_SignedLessThan
+          (BExp_Const (Imm64 pre_x3))
+          (BExp_BinExp BIExp_Plus
+            (BExp_Const (Imm64 pre_x1))
+            (BExp_Const (Imm64 1w)))
+          ))``,
+
+   ``BExp_BinPred BIExp_Equal
+       (BExp_Den (BVar "R0" (BType_Imm Bit64)))
+       (BExp_Const (Imm64 pre_x3))``
+];
+
+val bspec_update_sat_post_or_4_tm = bslSyntax.borl [
+  ``BExp_UnaryExp BIExp_Not
+       (BExp_BinExp BIExp_And
+        (BExp_UnaryExp BIExp_Not
+         (BExp_BinPred BIExp_Equal
+           (BExp_Const (Imm64 pre_x0))
+           (BExp_Const (Imm64 0w))))
+        (BExp_BinPred BIExp_SignedLessOrEqual
+          (BExp_BinExp BIExp_Plus
+            (BExp_Const (Imm64 pre_x1))
+            (BExp_Const (Imm64 1w)))
+          (BExp_Const (Imm64 pre_x3))
+          ))``,
+
+   ``BExp_BinPred BIExp_Equal
+       (BExp_Den (BVar "R0" (BType_Imm Bit64)))
+       (BExp_BinExp BIExp_Plus
+            (BExp_Const (Imm64 pre_x1))
+            (BExp_Const (Imm64 1w)))``
+];
+
+val bspec_update_sat_post_tm = bslSyntax.bandl [
+  bspec_update_sat_post_or_1_tm,
+  bspec_update_sat_post_or_2_tm,
+  bspec_update_sat_post_or_3_tm,
+  bspec_update_sat_post_or_4_tm
 ];
 
 Definition bspec_update_sat_post_def:
