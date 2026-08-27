@@ -40,6 +40,8 @@ open bir_program_varsTheory;
 
 open update_sat_spec_arm8Theory;
 
+open bslSyntax;
+
 val _ = new_theory "update_sat_spec_bir";
 
 (* -------------- *)
@@ -47,50 +49,23 @@ val _ = new_theory "update_sat_spec_bir";
 (* -------------- *)
 
 val bspec_update_sat_pre_tm = bslSyntax.bandl [
-  ``BExp_BinPred
-     BIExp_SignedLessThan
-      (BExp_BinExp BIExp_Minus (BExp_UnaryExp BIExp_ChangeSign (BExp_Const (Imm64 2147483647w))) (BExp_Const (Imm64 1w)))
-      (BExp_Const (Imm64 pre_x2))``,
+  bslt (bminus (bchsign (bconst64 2147483647), bconst64 1), bconst ``pre_x2:word64``),
 
-  ``BExp_BinPred
-     BIExp_SignedLessThan
-      (BExp_Const (Imm64 pre_x2))
-      (BExp_Const (Imm64 pre_x3))``,
+  bslt (bconst ``pre_x2:word64``, bconst ``pre_x3:word64``),
 
-  ``BExp_BinPred
-     BIExp_SignedLessOrEqual
-      (BExp_Const (Imm64 pre_x2))
-      (BExp_Const (Imm64 pre_x1))``,
+  bsle (bconst ``pre_x2:word64``, bconst ``pre_x1:word64``),
 
-  ``BExp_BinPred
-     BIExp_SignedLessOrEqual
-      (BExp_Const (Imm64 pre_x1))
-      (BExp_Const (Imm64 pre_x3))``,
+  bsle (bconst ``pre_x1:word64``, bconst ``pre_x3:word64``),
 
-  ``BExp_BinPred
-     BIExp_SignedLessThan
-      (BExp_Den (BVar "R3" (BType_Imm Bit64)))
-      (BExp_Const (Imm64 2147483647w))``,
+  bslt (bden (bvarimm 64 "R3"), bconst64 2147483647),
 
- ``BExp_BinPred
-    BIExp_Equal
-    (BExp_Den (BVar "R3" (BType_Imm Bit64)))
-    (BExp_Const (Imm64 pre_x3))``,
+  beq (bden (bvarimm 64 "R3"), bconst ``pre_x3:word64``),
 
- ``BExp_BinPred
-    BIExp_Equal
-    (BExp_Den (BVar "R2" (BType_Imm Bit64)))
-    (BExp_Const (Imm64 pre_x2))``,
+  beq (bden (bvarimm 64 "R2"), bconst ``pre_x2:word64``),
 
- ``BExp_BinPred
-    BIExp_Equal
-    (BExp_Den (BVar "R1" (BType_Imm Bit64)))
-    (BExp_Const (Imm64 pre_x1))``,                
+  beq (bden (bvarimm 64 "R1"), bconst ``pre_x1:word64``),
 
- ``BExp_BinPred
-    BIExp_Equal
-    (BExp_Den (BVar "R0" (BType_Imm Bit64)))
-    (BExp_Const (Imm64 pre_x0))``
+  beq (bden (bvarimm 64 "R0"), bconst ``pre_x0:word64``)
 ];
 
 Definition bspec_update_sat_pre_def:
@@ -99,79 +74,33 @@ Definition bspec_update_sat_pre_def:
 End
 
 val bspec_update_sat_post_or_1_tm = bslSyntax.borl [
-  ``BExp_UnaryExp BIExp_Not
-       (BExp_BinExp BIExp_And
-        (BExp_BinPred BIExp_Equal
-          (BExp_Const (Imm64 pre_x0))
-          (BExp_Const (Imm64 0w)))
-        (BExp_BinPred BIExp_SignedLessThan
-          (BExp_BinExp BIExp_Minus
-            (BExp_Const (Imm64 pre_x1))
-            (BExp_Const (Imm64 1w)))
-          (BExp_Const (Imm64 pre_x2))))``,
+  bnot (band (beq (bconst ``pre_x0:word64``, bconst64 0),
+   bslt (bminus (bconst ``pre_x1:word64``, bconst64 1), bconst ``pre_x2:word64``))),
 
-   ``BExp_BinPred BIExp_Equal
-       (BExp_Den (BVar "R0" (BType_Imm Bit64)))
-       (BExp_Const (Imm64 pre_x2))``
+  beq (bden (bvarimm 64 "R0"), bconst ``pre_x2:word64``)
 ];
 
 val bspec_update_sat_post_or_2_tm = bslSyntax.borl [
-  ``BExp_UnaryExp BIExp_Not
-       (BExp_BinExp BIExp_And
-        (BExp_BinPred BIExp_Equal
-          (BExp_Const (Imm64 pre_x0))
-          (BExp_Const (Imm64 0w)))
-        (BExp_BinPred BIExp_SignedLessOrEqual
-          (BExp_Const (Imm64 pre_x2))
-          (BExp_BinExp BIExp_Minus
-            (BExp_Const (Imm64 pre_x1))
-            (BExp_Const (Imm64 1w)))))``,
+  bnot (band (beq (bconst ``pre_x0:word64``, bconst64 0),
+   bsle (bconst ``pre_x2:word64``, bminus (bconst ``pre_x1:word64``, bconst64 1)))),
 
-   ``BExp_BinPred BIExp_Equal
-       (BExp_Den (BVar "R0" (BType_Imm Bit64)))
-       (BExp_BinExp BIExp_Minus
-            (BExp_Const (Imm64 pre_x1))
-            (BExp_Const (Imm64 1w)))``
+  beq (bden (bvarimm 64 "R0"),
+   bminus (bconst ``pre_x1:word64``, bconst64 1))
 ];
 
 val bspec_update_sat_post_or_3_tm = bslSyntax.borl [
-  ``BExp_UnaryExp BIExp_Not
-       (BExp_BinExp BIExp_And
-        (BExp_UnaryExp BIExp_Not
-         (BExp_BinPred BIExp_Equal
-           (BExp_Const (Imm64 pre_x0))
-           (BExp_Const (Imm64 0w))))
-        (BExp_BinPred BIExp_SignedLessThan
-          (BExp_Const (Imm64 pre_x3))
-          (BExp_BinExp BIExp_Plus
-            (BExp_Const (Imm64 pre_x1))
-            (BExp_Const (Imm64 1w)))
-          ))``,
+  bnot (band (bnot (beq (bconst ``pre_x0:word64``, bconst64 0)),
+   bslt (bconst ``pre_x3:word64``, bplus (bconst ``pre_x1:word64``, bconst64 1)))),
 
-   ``BExp_BinPred BIExp_Equal
-       (BExp_Den (BVar "R0" (BType_Imm Bit64)))
-       (BExp_Const (Imm64 pre_x3))``
+   beq (bden (bvarimm 64 "R0"), bconst ``pre_x3:word64``)
 ];
 
 val bspec_update_sat_post_or_4_tm = bslSyntax.borl [
-  ``BExp_UnaryExp BIExp_Not
-       (BExp_BinExp BIExp_And
-        (BExp_UnaryExp BIExp_Not
-         (BExp_BinPred BIExp_Equal
-           (BExp_Const (Imm64 pre_x0))
-           (BExp_Const (Imm64 0w))))
-        (BExp_BinPred BIExp_SignedLessOrEqual
-          (BExp_BinExp BIExp_Plus
-            (BExp_Const (Imm64 pre_x1))
-            (BExp_Const (Imm64 1w)))
-          (BExp_Const (Imm64 pre_x3))
-          ))``,
+  bnot (band (bnot (beq (bconst ``pre_x0:word64``, bconst64 0)),
+   bsle (bplus (bconst ``pre_x1:word64``, bconst64 1), bconst ``pre_x3:word64``))),
 
-   ``BExp_BinPred BIExp_Equal
-       (BExp_Den (BVar "R0" (BType_Imm Bit64)))
-       (BExp_BinExp BIExp_Plus
-            (BExp_Const (Imm64 pre_x1))
-            (BExp_Const (Imm64 1w)))``
+   beq (bden (bvarimm 64 "R0"),
+    bplus (bconst ``pre_x1:word64``, bconst64 1))
 ];
 
 val bspec_update_sat_post_tm = bslSyntax.bandl [

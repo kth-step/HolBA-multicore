@@ -7,7 +7,7 @@
       ((cond == 0 && timer - 1 < min) ==> \result == min) &&
       ((cond == 0 && min <= timer - 1) ==> \result == timer - 1) &&
       ((cond != 0 && max < timer + 1) ==> \result == max) &&
-      ((cond != 0 && \old(timer) + 1 <= max) ==> \result == timer + 1); */
+      ((cond != 0 && timer + 1 <= max) ==> \result == timer + 1); */
 int64_t update_sat(int64_t cond, int64_t timer, int64_t min, int64_t max) {
   int64_t res = timer;
   if (cond) {res += 1;} else {res -= 1;}
