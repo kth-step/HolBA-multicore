@@ -1,0 +1,20 @@
+
+update_sat:     file format elf64-littleaarch64
+
+
+Disassembly of section .text:
+
+
+0000000000000718 <update_sat>:
+ 718:	d1000424 	sub	x4, x1, #0x1
+ 71c:	f100001f 	cmp	x0, #0x0
+ 720:	9a810481 	csinc	x1, x4, x1, eq	// eq = none
+ 724:	eb03003f 	cmp	x1, x3
+ 728:	9a83d023 	csel	x3, x1, x3, le
+ 72c:	eb02007f 	cmp	x3, x2
+ 730:	9a82a060 	csel	x0, x3, x2, ge	// ge = tcont
+ 734:	d65f03c0 	ret
+
+0000000000000738 <main>:
+ 738:	52800040 	mov	w0, #0x2                   	// #2
+ 73c:	d65f03c0 	ret
